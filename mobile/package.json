@@ -8,8 +8,10 @@
     "ios": "expo run:ios",
     "lint": "eslint src --ext .ts,.tsx",
     "test": "jest",
-    "test:unit": "jest --testPathPattern='tests/unit'",
-    "test:integration": "jest --testPathPattern='tests/integration'"
+    "test:unit": "jest --selectProjects unit",
+    "test:integration": "jest --testPathPattern='tests/integration'",
+    "test:screens": "jest --config jest.screens.config.js",
+    "test:screens:watch": "jest --config jest.screens.config.js --watch"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.0.6",
@@ -48,27 +50,69 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@testing-library/jest-native": "^5.4.3",
+    "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^29.5.14",
     "@types/react": "~18.3.12",
     "axios-mock-adapter": "^2.1.0",
+    "jest": "^29.7.0",
     "jest-expo": "~53.0.0",
+    "react-test-renderer": "^18.3.1",
     "typescript": "^5.3.3"
   },
   "jest": {
-    "testEnvironment": "node",
-    "transform": {
-      "^.+\\.(t|j)sx?$": ["babel-jest", { "configFile": "./babel.config.js" }]
-    },
-    "moduleNameMapper": {
-      "^@/(.*)$": "<rootDir>/src/$1",
-      "^expo-secure-store$": "<rootDir>/tests/__mocks__/expo-secure-store.ts",
-      "^expo-constants$": "<rootDir>/tests/__mocks__/expo-constants.ts",
-      "^@react-native-community/netinfo$": "<rootDir>/tests/__mocks__/netinfo.ts",
-      "^.*/navigation/navigationRef$": "<rootDir>/tests/__mocks__/navigationRef.ts",
-      "^react-native$": "<rootDir>/tests/__mocks__/react-native.ts"
-    },
-    "transformIgnorePatterns": [
-      "node_modules/(?!(axios|zustand|@tanstack))"
+    "projects": [
+      {
+        "displayName": "unit",
+        "testEnvironment": "node",
+        "testMatch": [
+          "<rootDir>/tests/unit/**/*.test.ts",
+          "<rootDir>/tests/integration/**/*.test.ts"
+        ],
+        "transform": {
+          "^.+\\.(t|j)sx?$": [
+            "babel-jest",
+            {
+              "configFile": "./babel.config.js"
+            }
+          ]
+        },
+        "moduleNameMapper": {
+          "^@/(.*)$": "<rootDir>/src/$1",
+          "^expo-secure-store$": "<rootDir>/tests/__mocks__/expo-secure-store.ts",
+          "^expo-constants$": "<rootDir>/tests/__mocks__/expo-constants.ts",
+          "^@react-native-community/netinfo$": "<rootDir>/tests/__mocks__/netinfo.ts",
+          "^.*/navigation/navigationRef$": "<rootDir>/tests/__mocks__/navigationRef.ts",
+          "^react-native$": "<rootDir>/tests/__mocks__/react-native.ts"
+        },
+        "transformIgnorePatterns": [
+          "node_modules/(?!(axios|zustand|@tanstack))"
+        ]
+      },
+      {
+        "displayName": "screens",
+        "testEnvironment": "node",
+        "testMatch": [
+          "<rootDir>/tests/screens/**/*.test.tsx"
+        ],
+        "setupFiles": [
+          "<rootDir>/tests/setup.screens.js"
+        ],
+        "transform": {
+          "^.+\\.(t|j)sx?$": [
+            "babel-jest",
+            {
+              "configFile": "./babel.config.js"
+            }
+          ]
+        },
+        "transformIgnorePatterns": [
+          "node_modules/(?!(react-native|@react-native|@react-navigation|expo-linear-gradient|expo-secure-store|expo-location|expo-notifications|expo-task-manager|expo-camera|expo-image-picker|expo-constants|expo-device|expo-haptics|expo-splash-screen|expo-status-bar|lucide-react-native|react-native-svg|react-native-reanimated|react-native-gesture-handler|react-native-safe-area-context|react-native-screens|react-native-maps|@gorhom|socket.io-client|zustand|@tanstack|axios))"
+        ],
+        "moduleNameMapper": {
+          "^@/(.*)$": "<rootDir>/src/$1"
+        }
+      }
     ]
   },
   "private": true
