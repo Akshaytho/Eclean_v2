@@ -13,7 +13,7 @@
 - [x] Fix 4: Add cursor pagination to `getChatHistory`
 - [x] Fix 5: Verify Redis `setex` handles token blacklist expiry — already correct, no change
 - [x] Fix 6: Add `TaskLocationLog` cleanup BullMQ repeatable job (daily 3am)
-- [x] Run `cd backend && npm test` — **47/47 tests pass** ✅
+- [x] Run `cd backend && npm test` — **147/147 tests pass** ✅ (expanded from 47 → 147)
 
 ### Mobile Foundation
 - [x] Create `mobile/` with package.json, app.json, tsconfig.json, babel.config.js
@@ -34,6 +34,13 @@
 - [x] Create `mobile/src/utils/formatMoney.ts`, `timeAgo.ts`, `distance.ts`, `permissions.ts`
 - [x] Create `mobile/src/navigation/navigationRef.ts`
 - [x] Create `mobile/App.tsx` — entry point with all providers
+
+### Sprint 0 — Additional (Session 4)
+- [x] Write integration tests for all untested routes (admin, zones, supervisor, wallet, citizen, notifications, tasks-extended)
+- [x] Fix auth responses: add `expiresIn: 15*60` to register + login
+- [x] Fix `mobile/src/types/index.ts` — full rewrite matching backend schema exactly
+- [x] Fix socketStore AppState listener leak
+- [x] Fix RegisterScreen email regex validation
 
 ### Sprint 0 Verification
 - [x] `cd mobile && npm install` runs without errors (914 packages)
