@@ -10,6 +10,11 @@ env:
   BUYER_EMAIL: maestro-buyer@eclean.test
   PASSWORD: Test@1234
 
+# Need write permission to publish test results
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   # ── Job 1: Jest ────────────────────────────────────────────────────────────
   jest:
@@ -84,33 +89,34 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           npm install -g eas-cli
-          echo "EAS CLI version:"
-          eas --version
-          echo "Building APK..."
-          eas build \
+          echo "EAS CLI: $(eas --version)"
+
+          # Submit build to EAS servers (no --output flag for server builds)
+          BUILD_ID=$(eas build \
             --platform android \
             --profile preview \
             --non-interactive \
-            --output ./eclean-preview.apk \
-            --no-wait
-          echo "Build submitted to EAS. Waiting for completion..."
-          # Wait for the build to finish (poll every 30s for up to 25 mins)
+            --json \
+            2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['id'] if isinstance(d,list) else d.get('id',''))" 2>/dev/null || echo "")
+
+          echo "Build ID: $BUILD_ID"
+
+          # Poll until done (max 25 mins)
           for i in $(seq 1 50); do
             sleep 30
-            STATUS=$(eas build:list --platform android --limit 1 --json 2>/dev/null | python3 -c "import json,sys; builds=json.load(sys.stdin); print(builds[0]['status'] if builds else 'unknown')" 2>/dev/null || echo "unknown")
-            echo "Build status: $STATUS (attempt $i/50)"
+            STATUS=$(eas build:view "$BUILD_ID" --json 2>/dev/null | \
+              python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('status','unknown'))" 2>/dev/null || echo "unknown")
+            echo "[$i/50] Status: $STATUS"
             if [ "$STATUS" = "FINISHED" ]; then
-              echo "Build complete! Downloading APK..."
-              eas build:list --platform android --limit 1 --json 2>/dev/null | \
-                python3 -c "import json,sys; builds=json.load(sys.stdin); print(builds[0]['artifacts']['buildUrl'] if builds else '')" > /tmp/apk_url.txt
-              APK_URL=$(cat /tmp/apk_url.txt)
-              echo "APK URL: $APK_URL"
-              curl -sL "$APK_URL" -o eclean-preview.apk
-              ls -lh eclean-preview.apk
+              APK_URL=$(eas build:view "$BUILD_ID" --json 2>/dev/null | \
+                python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('artifacts',{}).get('buildUrl',''))" 2>/dev/null || echo "")
+              echo "Downloading APK from: $APK_URL"
+              curl -sL "$APK_URL" -o eclean.apk
+              ls -lh eclean.apk
               break
             fi
             if [ "$STATUS" = "ERRORED" ] || [ "$STATUS" = "CANCELLED" ]; then
-              echo "Build failed with status: $STATUS"
+              echo "Build failed: $STATUS"
               exit 1
             fi
           done
@@ -127,9 +133,7 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: |
-            echo "Installing APK..."
-            adb install -r mobile/eclean-preview.apk
-
+            adb install -r mobile/eclean.apk
             mkdir -p maestro-results
 
             maestro test maestro/flows/09_smoke_all_tabs.yaml \
