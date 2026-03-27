@@ -143,25 +143,7 @@ jobs:
           heap-size: 512M
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
-          script: |
-            adb install -r $GITHUB_WORKSPACE/mobile/eclean.apk
-            sleep 3
-            mkdir -p $GITHUB_WORKSPACE/maestro-results
-
-            MAESTRO_FAILED=0
-
-            maestro test $GITHUB_WORKSPACE/maestro/flows/09_smoke_all_tabs.yaml --env WORKER_EMAIL=$WORKER_EMAIL --env BUYER_EMAIL=$BUYER_EMAIL --env PASSWORD=$PASSWORD --format junit --output $GITHUB_WORKSPACE/maestro-results/smoke-worker.xml || MAESTRO_FAILED=1
-
-            maestro test $GITHUB_WORKSPACE/maestro/flows/10_smoke_buyer_tabs.yaml --env WORKER_EMAIL=$WORKER_EMAIL --env BUYER_EMAIL=$BUYER_EMAIL --env PASSWORD=$PASSWORD --format junit --output $GITHUB_WORKSPACE/maestro-results/smoke-buyer.xml || MAESTRO_FAILED=1
-
-            maestro test $GITHUB_WORKSPACE/maestro/flows/01_worker_login.yaml --env WORKER_EMAIL=$WORKER_EMAIL --env PASSWORD=$PASSWORD --format junit --output $GITHUB_WORKSPACE/maestro-results/01-worker-login.xml || MAESTRO_FAILED=1
-
-            maestro test $GITHUB_WORKSPACE/maestro/flows/03_buyer_login_post_task.yaml --env BUYER_EMAIL=$BUYER_EMAIL --env PASSWORD=$PASSWORD --format junit --output $GITHUB_WORKSPACE/maestro-results/03-buyer-post-task.xml || MAESTRO_FAILED=1
-
-            if [ $MAESTRO_FAILED -eq 1 ]; then
-              echo "❌ One or more Maestro flows failed — check maestro-results artifacts"
-              exit 1
-            fi
+          script: bash ${{ github.workspace }}/.github/scripts/run-maestro.sh
 
       - name: Upload Maestro results
         if: always()
@@ -169,7 +151,7 @@ jobs:
         with:
           name: maestro-e2e-results
           path: |
-            ${{ github.workspace }}/maestro-results/
+            maestro-results/
             ~/.maestro/tests/
           retention-days: 14
 

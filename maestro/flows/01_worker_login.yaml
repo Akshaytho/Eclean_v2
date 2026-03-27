@@ -24,5 +24,4 @@ appId: com.eclean.app
 # Worker Home should appear after login
 - assertVisible:
     text: "Worker"
-    timeout: 5000
 - takeScreenshot: "01_worker_login_success"

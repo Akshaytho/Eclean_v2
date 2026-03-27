@@ -19,13 +19,11 @@ appId: com.eclean.app
 # Navigate to Find Work tab
 - assertVisible:
     text: "Home"
-    timeout: 5000
 - tapOn: "Find Work"
 
 # Map + bottom sheet loads
 - assertVisible:
     text: "tasks nearby"
-    timeout: 6000
 
 # Tap first task in list
 - tapOn:
@@ -35,7 +33,6 @@ appId: com.eclean.app
 # Task Detail screen
 - assertVisible:
     text: "Accept"
-    timeout: 4000
 
 # Note: Acceptance only works if worker has no active task
 # Tap Accept
@@ -49,5 +46,4 @@ appId: com.eclean.app
 # Should navigate to Active Task screen
 - assertVisible:
     text: "Start Work"
-    timeout: 6000
 - takeScreenshot: "04_worker_accept_task"

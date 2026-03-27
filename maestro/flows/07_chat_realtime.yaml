@@ -18,7 +18,6 @@ appId: com.eclean.app
 # Go to My Tasks
 - assertVisible:
     text: "Home"
-    timeout: 5000
 - tapOn: "My Tasks"
 
 # Find an active task

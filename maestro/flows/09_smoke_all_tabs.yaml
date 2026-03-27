@@ -18,14 +18,12 @@ appId: com.eclean.app
 # Home tab
 - assertVisible:
     text: "Good morning"
-    timeout: 5000
 - takeScreenshot: "09a_home_tab"
 
 # Find Work tab
 - tapOn: "Find Work"
 - assertVisible:
     text: "tasks nearby"
-    timeout: 6000
 - takeScreenshot: "09b_find_work_tab"
 
 # My Tasks tab

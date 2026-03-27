@@ -19,7 +19,6 @@ appId: com.eclean.app
 # Buyer Home
 - assertVisible:
     text: "Post New Task"
-    timeout: 5000
 
 # Start wizard
 - tapOn: "Post New Task"
@@ -58,5 +57,4 @@ appId: com.eclean.app
 # Task posted alert
 - assertVisible:
     text: "Task Posted"
-    timeout: 8000
 - takeScreenshot: "03_buyer_post_task_success"

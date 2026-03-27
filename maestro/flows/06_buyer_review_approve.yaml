@@ -19,7 +19,6 @@ appId: com.eclean.app
 # Home shows task needing review
 - assertVisible:
     text: "Needs your review"
-    timeout: 5000
 
 # Tap task card
 - tapOn: "Needs your review"
@@ -27,7 +26,6 @@ appId: com.eclean.app
 # Task detail — submitted state
 - assertVisible:
     text: "Submitted"
-    timeout: 4000
 
 # AI score card should show
 - assertVisible:
@@ -41,7 +39,6 @@ appId: com.eclean.app
 # Payment released confirmation
 - assertVisible:
     text: "Approved"
-    timeout: 8000
 - takeScreenshot: "06_buyer_approve_task"
 
 # Rate the worker
@@ -55,5 +52,4 @@ appId: com.eclean.app
 - tapOn: "Submit Rating"
 - assertVisible:
     text: "Thanks"
-    timeout: 3000
 - takeScreenshot: "06b_buyer_rate_worker"
