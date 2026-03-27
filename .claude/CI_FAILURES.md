@@ -137,3 +137,9 @@ CI as passing. Now tracks MAESTRO_FAILED flag across all flows and exits
 with code 1 if any fail, while still running all flows first.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23660328953
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 18:52 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `13deb29` — revert: remove docs/ folder — CI Cinema needs a backend for AI, static HTML not useful
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23661695557
+- **Status:** Unresolved — add fix description when fixed
