@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0A2463"
+      "backgroundColor": "#2E8B57"
     },
     "ios": {
       "supportsTablet": false,
@@ -39,7 +39,11 @@
         "FOREGROUND_SERVICE_LOCATION",
         "POST_NOTIFICATIONS"
       ],
-      "googleServicesFile": "./google-services.json"
+      "config": {
+        "googleMaps": {
+          "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_KEY"
+        }
+      }
     },
     "plugins": [
       [

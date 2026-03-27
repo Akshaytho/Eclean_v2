@@ -6,7 +6,8 @@ import {
 import MapView, { Marker } from 'react-native-maps'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
-import type { NativeStackNavigationProp, RouteProp } from '@react-navigation/native-stack'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import type { RouteProp } from '@react-navigation/native'
 import { ArrowLeft, MapPin, Clock, DollarSign, Briefcase, AlertTriangle } from 'lucide-react-native'
 import * as Haptics from 'expo-haptics'
 
