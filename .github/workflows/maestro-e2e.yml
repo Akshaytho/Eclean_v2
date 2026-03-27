@@ -11,7 +11,7 @@ env:
   PASSWORD: Test@1234
 
 jobs:
-  # ── Job 1: Jest (must pass before Maestro runs) ───────────────────────────
+  # ── Job 1: Jest ────────────────────────────────────────────────────────────
   jest:
     name: Jest Tests
     runs-on: ubuntu-latest
@@ -77,7 +77,6 @@ jobs:
           curl -sf -X POST https://ecleanfuture-production.up.railway.app/api/v1/auth/register \
             -H "Content-Type: application/json" \
             -d "{\"email\":\"$BUYER_EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"CI Buyer\",\"role\":\"BUYER\"}" || true
-          echo "Accounts ready"
 
       - name: Build APK via EAS
         working-directory: mobile
@@ -85,12 +84,36 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           npm install -g eas-cli
+          echo "EAS CLI version:"
+          eas --version
+          echo "Building APK..."
           eas build \
             --platform android \
             --profile preview \
             --non-interactive \
-            --output ./eclean-preview.apk
-          ls -lh eclean-preview.apk
+            --output ./eclean-preview.apk \
+            --no-wait
+          echo "Build submitted to EAS. Waiting for completion..."
+          # Wait for the build to finish (poll every 30s for up to 25 mins)
+          for i in $(seq 1 50); do
+            sleep 30
+            STATUS=$(eas build:list --platform android --limit 1 --json 2>/dev/null | python3 -c "import json,sys; builds=json.load(sys.stdin); print(builds[0]['status'] if builds else 'unknown')" 2>/dev/null || echo "unknown")
+            echo "Build status: $STATUS (attempt $i/50)"
+            if [ "$STATUS" = "FINISHED" ]; then
+              echo "Build complete! Downloading APK..."
+              eas build:list --platform android --limit 1 --json 2>/dev/null | \
+                python3 -c "import json,sys; builds=json.load(sys.stdin); print(builds[0]['artifacts']['buildUrl'] if builds else '')" > /tmp/apk_url.txt
+              APK_URL=$(cat /tmp/apk_url.txt)
+              echo "APK URL: $APK_URL"
+              curl -sL "$APK_URL" -o eclean-preview.apk
+              ls -lh eclean-preview.apk
+              break
+            fi
+            if [ "$STATUS" = "ERRORED" ] || [ "$STATUS" = "CANCELLED" ]; then
+              echo "Build failed with status: $STATUS"
+              exit 1
+            fi
+          done
 
       - name: Run Maestro smoke + flow tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -109,7 +132,6 @@ jobs:
 
             mkdir -p maestro-results
 
-            echo "Running smoke: worker tabs..."
             maestro test maestro/flows/09_smoke_all_tabs.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env BUYER_EMAIL=$BUYER_EMAIL \
@@ -117,7 +139,6 @@ jobs:
               --format junit \
               --output maestro-results/smoke-worker.xml || true
 
-            echo "Running smoke: buyer tabs..."
             maestro test maestro/flows/10_smoke_buyer_tabs.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env BUYER_EMAIL=$BUYER_EMAIL \
@@ -125,14 +146,12 @@ jobs:
               --format junit \
               --output maestro-results/smoke-buyer.xml || true
 
-            echo "Running: worker login..."
             maestro test maestro/flows/01_worker_login.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env PASSWORD=$PASSWORD \
               --format junit \
               --output maestro-results/01-worker-login.xml || true
 
-            echo "Running: buyer post task..."
             maestro test maestro/flows/03_buyer_login_post_task.yaml \
               --env BUYER_EMAIL=$BUYER_EMAIL \
               --env PASSWORD=$PASSWORD \
