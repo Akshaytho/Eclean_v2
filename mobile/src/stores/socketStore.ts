@@ -12,6 +12,7 @@ import { getTokens } from './authStore'
 interface SocketState {
   socket:      Socket | null
   connected:   boolean
+  appStateSub: ReturnType<typeof AppState.addEventListener> | null
   connect:     (accessToken: string) => void
   disconnect:  () => void
   emit:        (event: string, data?: unknown) => void
@@ -20,8 +21,9 @@ interface SocketState {
 }
 
 export const useSocketStore = create<SocketState>((set, get) => ({
-  socket:    null,
-  connected: false,
+  socket:      null,
+  connected:   false,
+  appStateSub: null,
 
   connect: (accessToken: string) => {
     const existing = get().socket
@@ -48,20 +50,20 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       set({ connected: false })
     })
 
-    set({ socket })
-
-    // Re-check connection when app comes to foreground
-    AppState.addEventListener('change', (state) => {
+    const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         const s = get().socket
         if (s && !s.connected) s.connect()
       }
     })
+
+    set({ socket, appStateSub })
   },
 
   disconnect: () => {
     get().socket?.disconnect()
-    set({ socket: null, connected: false })
+    get().appStateSub?.remove()
+    set({ socket: null, connected: false, appStateSub: null })
   },
 
   emit: (event, data) => {

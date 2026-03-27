@@ -80,6 +80,17 @@ export async function createAdminUser(tag: string) {
   return { user, accessToken }
 }
 
+/** Create SUPERVISOR user directly in DB (self-service registration disallows SUPERVISOR role) */
+export async function createSupervisorUser(tag: string) {
+  const email = `test_supervisor_${tag}${DOMAIN}`
+  const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10)
+  const user = await prisma.user.create({
+    data: { email, name: `Test Supervisor ${tag}`, role: 'SUPERVISOR', passwordHash },
+  })
+  const { token: accessToken } = signAccessToken(user.id, 'SUPERVISOR', user.email)
+  return { user, accessToken }
+}
+
 // ── Multipart helper ──────────────────────────────────────────────────────────
 
 /** Build a multipart/form-data Buffer for app.inject() */

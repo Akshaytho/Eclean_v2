@@ -39,7 +39,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const result = await authService.register(request.body)
       reply.setCookie('refreshToken', result.refreshToken, REFRESH_COOKIE_OPTS)
-      return reply.status(201).send({ user: result.user, accessToken: result.accessToken, refreshToken: result.refreshToken })
+      return reply.status(201).send({ user: result.user, accessToken: result.accessToken, refreshToken: result.refreshToken, expiresIn: 15 * 60 })
     },
   )
 
@@ -53,7 +53,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const result = await authService.login(request.body)
       reply.setCookie('refreshToken', result.refreshToken, REFRESH_COOKIE_OPTS)
-      return reply.status(200).send({ user: result.user, accessToken: result.accessToken, refreshToken: result.refreshToken })
+      return reply.status(200).send({ user: result.user, accessToken: result.accessToken, refreshToken: result.refreshToken, expiresIn: 15 * 60 })
     },
   )
 

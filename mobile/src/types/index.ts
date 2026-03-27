@@ -1,5 +1,3 @@
-// TypeScript interfaces matching the backend API responses exactly
-
 export type Role = 'WORKER' | 'BUYER' | 'SUPERVISOR' | 'ADMIN' | 'CITIZEN'
 
 export type TaskStatus =
@@ -7,23 +5,26 @@ export type TaskStatus =
   | 'ACCEPTED'
   | 'IN_PROGRESS'
   | 'SUBMITTED'
-  | 'AI_REVIEW'
+  | 'VERIFIED'
   | 'APPROVED'
   | 'REJECTED'
   | 'DISPUTED'
   | 'CANCELLED'
+  | 'COMPLETED'
 
 export type TaskCategory =
   | 'STREET_CLEANING'
-  | 'PARK_MAINTENANCE'
+  | 'PARK_CLEANING'
   | 'DRAIN_CLEANING'
   | 'GARBAGE_COLLECTION'
   | 'GRAFFITI_REMOVAL'
+  | 'WATER_BODY'
+  | 'PUBLIC_TOILET'
   | 'OTHER'
 
-export type DirtyLevel   = 'LIGHT' | 'MEDIUM' | 'HEAVY' | 'CRITICAL'
-export type TaskUrgency  = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
-export type MediaType    = 'BEFORE' | 'AFTER' | 'PROOF' | 'REFERENCE'
+export type DirtyLevel  = 'LIGHT' | 'MEDIUM' | 'HEAVY' | 'CRITICAL'
+export type TaskUrgency = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL'
+export type MediaType   = 'BEFORE' | 'AFTER' | 'PROOF' | 'REFERENCE'
 export type PayoutStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
 
 export interface User {
@@ -55,20 +56,22 @@ export interface Task {
   locationAddress: string | null
   workWindowStart: string
   workWindowEnd:   string
+  uploadWindowEnd: string
+  timezone:        string
   startedAt:       string | null
   submittedAt:     string | null
   completedAt:     string | null
   cancelledAt:     string | null
+  timeSpentSecs:   number | null
   aiScore:         number | null
-  aiLabel:         string | null
   aiReasoning:     string | null
-  aiRecommendation:string | null
   createdAt:       string
   updatedAt:       string
   // Populated on detail endpoints
   media?:          TaskMedia[]
   worker?:         { id: string; name: string; email: string } | null
   payout?:         Payout | null
+  events?:         TaskEvent[]
 }
 
 export interface TaskMedia {
@@ -76,19 +79,36 @@ export interface TaskMedia {
   taskId:    string
   type:      MediaType
   url:       string
+  publicId:  string | null
+  mimeType:  string | null
+  sizeBytes: number | null
   createdAt: string
 }
 
 export interface Payout {
-  id:               string
-  taskId:           string
-  workerId:         string
-  amountCents:      number
-  workerAmountCents:number
-  platformFeeCents: number
-  status:           PayoutStatus
-  paidAt:           string | null
-  createdAt:        string
+  id:                string
+  taskId:            string
+  workerId:          string
+  buyerId:           string
+  amountCents:       number
+  workerAmountCents: number
+  platformFeeCents:  number
+  currency:          string
+  status:            PayoutStatus
+  razorpayPayoutId:  string | null
+  paidAt:            string | null
+  createdAt:         string
+}
+
+export interface TaskEvent {
+  id:        string
+  taskId:    string
+  actor:     string
+  actorRole: Role
+  from:      TaskStatus
+  to:        TaskStatus
+  note:      string | null
+  createdAt: string
 }
 
 export interface Notification {
@@ -97,7 +117,7 @@ export interface Notification {
   type:      string
   title:     string
   body:      string
-  data:      Record<string, string>
+  data:      Record<string, unknown> | null
   isRead:    boolean
   createdAt: string
 }
@@ -116,47 +136,72 @@ export interface ChatMessage {
 }
 
 export interface Zone {
-  id:         string
-  name:       string
-  city:       string
-  dirtyLevel: DirtyLevel
-  lat:        number | null
-  lng:        number | null
-  radius:     number | null
+  id:             string
+  name:           string
+  city:           string | null
+  dirtyLevel:     DirtyLevel | null
+  lat:            number | null
+  lng:            number | null
+  radiusMeters:   number | null
+  lastInspectedAt:string | null
+  supervisorId:   string | null
+  createdAt:      string
 }
 
 export interface CitizenReport {
-  id:          string
-  reporterId:  string
-  category:    TaskCategory
-  description: string
-  urgency:     TaskUrgency
-  lat:         number
-  lng:         number
-  photoUrl:    string | null
-  status:      'PENDING' | 'REVIEWED' | 'ASSIGNED' | 'RESOLVED'
-  createdAt:   string
+  id:              string
+  reporterId:      string
+  zoneId:          string | null
+  category:        TaskCategory
+  urgency:         TaskUrgency
+  locationLat:     number | null
+  locationLng:     number | null
+  locationAddress: string | null
+  photoUrl:        string | null
+  description:     string
+  status:          'PENDING' | 'REPORTED' | 'REVIEWED' | 'ASSIGNED' | 'CONVERTED_TO_TASK' | 'RESOLVED' | 'REJECTED'
+  linkedTaskId:    string | null
+  createdAt:       string
+  updatedAt:       string
 }
 
 export interface WorkerProfile {
-  userId:        string
-  rating:        number | null
-  completedTasks:number
-  activeTaskId:  string | null
-  totalEarnedCents: number
+  id:              string
+  userId:          string
+  rating:          number
+  completedTasks:  number
+  activeTaskId:    string | null
+  isAvailable:     boolean
+  identityVerified:boolean
+  skills:          string[]
+}
+
+export interface BuyerProfile {
+  id:              string
+  userId:          string
+  companyName:     string | null
+  totalTasksPosted:number
+  totalSpentCents: number
 }
 
 export interface WalletData {
-  availableCents: number
-  pendingCents:   number
-  totalEarnedCents: number
+  pendingCents:        number
+  processingCents:     number
+  availableCents:      number
+  totalEarnedCents:    number
+  completedTasksCount: number
 }
 
-// ─── Offline queue item ───────────────────────────────────────────────────────
+export interface BuyerWalletData {
+  totalSpentCents: number
+  escrowCents:     number
+}
+
+// ─── Offline queue ────────────────────────────────────────────────────────────
 
 export interface OfflineQueueItem {
   id:        string
-  createdAt: number // Date.now()
+  createdAt: number
   endpoint:  string
   method:    string
   body?:     Record<string, unknown>
