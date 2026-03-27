@@ -66,3 +66,9 @@ GitHub Actions:
 Tests: 109/109 passing | TypeScript: 0 errors
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23652429218
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 15:31 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `3e4f00d` — feat: upload APK as artifact so it can be downloaded from Actions tab
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23653845209
+- **Status:** Unresolved — add fix description when fixed
