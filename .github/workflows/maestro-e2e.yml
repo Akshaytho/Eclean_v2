@@ -10,13 +10,12 @@ env:
   BUYER_EMAIL: maestro-buyer@eclean.test
   PASSWORD: Test@1234
 
-# Need write permission to publish test results
 permissions:
   contents: read
   checks: write
 
 jobs:
-  # ── Job 1: Jest ────────────────────────────────────────────────────────────
+  # ── Job 1: Jest (must pass before Maestro runs) ───────────────────────────
   jest:
     name: Jest Tests
     runs-on: ubuntu-latest
@@ -82,8 +81,9 @@ jobs:
           curl -sf -X POST https://ecleanfuture-production.up.railway.app/api/v1/auth/register \
             -H "Content-Type: application/json" \
             -d "{\"email\":\"$BUYER_EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"CI Buyer\",\"role\":\"BUYER\"}" || true
+          echo "Test accounts ready"
 
-      - name: Build APK via EAS
+      - name: Build APK locally via EAS
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -91,35 +91,17 @@ jobs:
           npm install -g eas-cli
           echo "EAS CLI: $(eas --version)"
 
-          # Submit build to EAS servers (no --output flag for server builds)
-          BUILD_ID=$(eas build \
+          # Build locally on this runner (--local flag = no EAS server, runs gradle here)
+          # --output writes the APK directly to the path we specify
+          eas build \
             --platform android \
             --profile preview \
+            --local \
             --non-interactive \
-            --json \
-            2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['id'] if isinstance(d,list) else d.get('id',''))" 2>/dev/null || echo "")
+            --output ./eclean.apk
 
-          echo "Build ID: $BUILD_ID"
-
-          # Poll until done (max 25 mins)
-          for i in $(seq 1 50); do
-            sleep 30
-            STATUS=$(eas build:view "$BUILD_ID" --json 2>/dev/null | \
-              python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('status','unknown'))" 2>/dev/null || echo "unknown")
-            echo "[$i/50] Status: $STATUS"
-            if [ "$STATUS" = "FINISHED" ]; then
-              APK_URL=$(eas build:view "$BUILD_ID" --json 2>/dev/null | \
-                python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('artifacts',{}).get('buildUrl',''))" 2>/dev/null || echo "")
-              echo "Downloading APK from: $APK_URL"
-              curl -sL "$APK_URL" -o eclean.apk
-              ls -lh eclean.apk
-              break
-            fi
-            if [ "$STATUS" = "ERRORED" ] || [ "$STATUS" = "CANCELLED" ]; then
-              echo "Build failed: $STATUS"
-              exit 1
-            fi
-          done
+          ls -lh eclean.apk
+          echo "APK_PATH=$(pwd)/eclean.apk" >> $GITHUB_ENV
 
       - name: Run Maestro smoke + flow tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -133,9 +115,13 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: |
-            adb install -r mobile/eclean.apk
+            echo "Installing APK..."
+            adb install -r "$APK_PATH"
+            adb shell am force-stop com.eclean.app || true
+
             mkdir -p maestro-results
 
+            echo "=== Smoke: all worker tabs ==="
             maestro test maestro/flows/09_smoke_all_tabs.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env BUYER_EMAIL=$BUYER_EMAIL \
@@ -143,6 +129,7 @@ jobs:
               --format junit \
               --output maestro-results/smoke-worker.xml || true
 
+            echo "=== Smoke: all buyer tabs ==="
             maestro test maestro/flows/10_smoke_buyer_tabs.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env BUYER_EMAIL=$BUYER_EMAIL \
@@ -150,12 +137,14 @@ jobs:
               --format junit \
               --output maestro-results/smoke-buyer.xml || true
 
+            echo "=== Flow: worker login ==="
             maestro test maestro/flows/01_worker_login.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env PASSWORD=$PASSWORD \
               --format junit \
               --output maestro-results/01-worker-login.xml || true
 
+            echo "=== Flow: buyer post task ==="
             maestro test maestro/flows/03_buyer_login_post_task.yaml \
               --env BUYER_EMAIL=$BUYER_EMAIL \
               --env PASSWORD=$PASSWORD \
