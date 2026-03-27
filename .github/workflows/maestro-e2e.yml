@@ -82,6 +82,8 @@ jobs:
 
       - name: Generate android/ with expo prebuild
         working-directory: mobile
+        env:
+          NODE_ENV: production
         run: npx expo prebuild --platform android --clean --no-install
 
       - name: Show build.gradle (debug what was generated)
