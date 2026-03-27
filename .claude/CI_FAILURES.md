@@ -127,3 +127,13 @@ patched it, we sed-patch the file after npm install before the build.
 - **Commit:** `473d24f` — fix: correct APK copy path in CI (../../ → ../ from mobile/android)
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23657868292
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 18:17 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `31e6f4e` — fix: remove || true from Maestro flows — CI was silently swallowing failures
+
+All 4 flows had || true meaning a green screen / crash would still show
+CI as passing. Now tracks MAESTRO_FAILED flag across all flows and exits
+with code 1 if any fail, while still running all flows first.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23660328953
+- **Status:** Unresolved — add fix description when fixed
