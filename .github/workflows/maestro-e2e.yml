@@ -117,7 +117,7 @@ jobs:
         working-directory: mobile
         env:
           NODE_ENV: production
-        run: npx expo prebuild --platform android --clean --no-install
+        run: npx expo prebuild --platform android --clean
 
       - name: Show build.gradle (debug what was generated)
         working-directory: mobile/android/app
