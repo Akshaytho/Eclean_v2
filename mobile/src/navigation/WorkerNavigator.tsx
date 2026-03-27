@@ -11,6 +11,9 @@ import { FindWorkScreen }    from '../screens/worker/FindWorkScreen'
 import { MyTasksScreen }     from '../screens/worker/MyTasksScreen'
 import { WalletScreen }      from '../screens/worker/WalletScreen'
 import { ProfileScreen }     from '../screens/shared/ProfileScreen'
+import { TaskDetailScreen }  from '../screens/worker/TaskDetailScreen'
+import { ActiveTaskScreen }  from '../screens/worker/ActiveTaskScreen'
+import { SubmitProofScreen } from '../screens/worker/SubmitProofScreen'
 
 const Tab   = createBottomTabNavigator<WorkerTabParamList>()
 const Stack = createNativeStackNavigator<WorkerStackParamList>()
@@ -51,7 +54,10 @@ function WorkerTabs() {
 export function WorkerNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="WorkerTabs" component={WorkerTabs} />
+      <Stack.Screen name="WorkerTabs"  component={WorkerTabs} />
+      <Stack.Screen name="TaskDetail"  component={TaskDetailScreen}  options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="ActiveTask"  component={ActiveTaskScreen}  options={{ animation: 'slide_from_right', gestureEnabled: false }} />
+      <Stack.Screen name="SubmitProof" component={SubmitProofScreen} options={{ animation: 'slide_from_right' }} />
     </Stack.Navigator>
   )
 }

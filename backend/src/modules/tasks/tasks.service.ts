@@ -110,7 +110,7 @@ export async function createTask(buyerId: string, input: CreateTaskInput) {
 export async function listBuyerTasks(buyerId: string, query: ListTasksQuery) {
   const where: Prisma.TaskWhereInput = {
     buyerId,
-    ...(query.status && { status: query.status }),
+    ...(query.status && { status: { in: query.status } }),
   }
   const [tasks, total] = await Promise.all([
     prisma.task.findMany({
@@ -351,7 +351,7 @@ export async function getWorkerTask(workerId: string, taskId: string) {
 export async function listWorkerTasks(workerId: string, query: ListTasksQuery) {
   const where: Prisma.TaskWhereInput = {
     workerId,
-    ...(query.status && { status: query.status }),
+    ...(query.status && { status: { in: query.status } }),
   }
   const [tasks, total] = await Promise.all([
     prisma.task.findMany({

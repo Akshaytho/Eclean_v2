@@ -41,8 +41,15 @@ export const locationUpdateSchema = z.object({
 })
 
 // ─── Query params ──────────────────────────────────────────────────────────────
+// status accepts a single value OR comma-separated values
+// e.g. status=ACCEPTED or status=ACCEPTED,IN_PROGRESS,SUBMITTED
 export const listTasksQuerySchema = z.object({
-  status: z.nativeEnum(TaskStatus).optional(),
+  status: z.string().optional().transform((val) => {
+    if (!val) return undefined
+    const parts = val.split(',').map((s) => s.trim()).filter(Boolean)
+    const valid = parts.filter((s) => Object.values(TaskStatus).includes(s as TaskStatus))
+    return valid.length > 0 ? valid as TaskStatus[] : undefined
+  }),
   page:   z.coerce.number().int().positive().default(1),
   limit:  z.coerce.number().int().positive().max(100).default(20),
 })
