@@ -5,6 +5,9 @@ appId: com.eclean.app
 ---
 - launchApp:
     clearState: true
+- extendedWaitUntil:
+    visible: "Sign In"
+    timeout: 30000
 - assertVisible: "Sign In"
 
 - tapOn:

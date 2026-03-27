@@ -6,6 +6,9 @@ appId: com.eclean.app
 # App launches and shows login
 - launchApp:
     clearState: true
+- extendedWaitUntil:
+    visible: "Sign In"
+    timeout: 30000
 - assertVisible: "eClean"
 - assertVisible: "Sign In"
 

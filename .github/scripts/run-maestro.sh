@@ -38,7 +38,8 @@ run_flow() {
 # Install APK
 echo "Installing APK..."
 adb install -r "$WORKSPACE/mobile/eclean.apk"
-sleep 5
+echo "Waiting for app to settle on emulator..."
+sleep 15
 
 # Run all flows
 run_flow "09_smoke_all_tabs.yaml"
