@@ -43,3 +43,26 @@ Fix: eas build --local runs gradle on the runner itself, writes APK directly.
 APK path passed via GITHUB_ENV to the emulator runner step.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23653456874
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 15:24 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `8f8573b` — feat: Sprint 3 complete — Buyer Flow + CI/CD + docs
+
+Sprint 3 screens (all per PDF blueprint):
+- BuyerTaskDetailScreen: StatusTimeline, AI score badge, photo grid+fullscreen,
+  reject modal (min 10 chars), socket task:updated+task:photo_added, 30s refetch
+- BuyerTasksScreen: search by title added
+- LiveTrackScreen: worker info overlay, pulsing marker, time on site counter
+- PostTaskScreen: Use My Location GPS button on Step 3
+
+Backend fix:
+- getBuyerTask includes worker {id,name,email}
+
+GitHub Actions:
+- jest-tests.yml: 109 tests on every push
+- maestro-e2e.yml: Android emulator E2E after Jest passes
+- ci-failure-tracker.yml: auto-opens issues on CI failure
+
+Tests: 109/109 passing | TypeScript: 0 errors
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23652429218
+- **Status:** Unresolved — add fix description when fixed
