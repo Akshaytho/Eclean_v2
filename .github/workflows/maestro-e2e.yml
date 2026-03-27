@@ -144,31 +144,17 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: |
-            adb install -r mobile/eclean.apk
+            adb install -r $GITHUB_WORKSPACE/mobile/eclean.apk
             sleep 3
-            mkdir -p maestro-results
+            mkdir -p $GITHUB_WORKSPACE/maestro-results
 
-            maestro test maestro/flows/09_smoke_all_tabs.yaml \
-              --env WORKER_EMAIL=$WORKER_EMAIL \
-              --env BUYER_EMAIL=$BUYER_EMAIL \
-              --env PASSWORD=$PASSWORD \
-              --format junit --output maestro-results/smoke-worker.xml || true
+            maestro test $GITHUB_WORKSPACE/maestro/flows/09_smoke_all_tabs.yaml --env WORKER_EMAIL=$WORKER_EMAIL --env BUYER_EMAIL=$BUYER_EMAIL --env PASSWORD=$PASSWORD --format junit --output $GITHUB_WORKSPACE/maestro-results/smoke-worker.xml || true
 
-            maestro test maestro/flows/10_smoke_buyer_tabs.yaml \
-              --env WORKER_EMAIL=$WORKER_EMAIL \
-              --env BUYER_EMAIL=$BUYER_EMAIL \
-              --env PASSWORD=$PASSWORD \
-              --format junit --output maestro-results/smoke-buyer.xml || true
+            maestro test $GITHUB_WORKSPACE/maestro/flows/10_smoke_buyer_tabs.yaml --env WORKER_EMAIL=$WORKER_EMAIL --env BUYER_EMAIL=$BUYER_EMAIL --env PASSWORD=$PASSWORD --format junit --output $GITHUB_WORKSPACE/maestro-results/smoke-buyer.xml || true
 
-            maestro test maestro/flows/01_worker_login.yaml \
-              --env WORKER_EMAIL=$WORKER_EMAIL \
-              --env PASSWORD=$PASSWORD \
-              --format junit --output maestro-results/01-worker-login.xml || true
+            maestro test $GITHUB_WORKSPACE/maestro/flows/01_worker_login.yaml --env WORKER_EMAIL=$WORKER_EMAIL --env PASSWORD=$PASSWORD --format junit --output $GITHUB_WORKSPACE/maestro-results/01-worker-login.xml || true
 
-            maestro test maestro/flows/03_buyer_login_post_task.yaml \
-              --env BUYER_EMAIL=$BUYER_EMAIL \
-              --env PASSWORD=$PASSWORD \
-              --format junit --output maestro-results/03-buyer-post-task.xml || true
+            maestro test $GITHUB_WORKSPACE/maestro/flows/03_buyer_login_post_task.yaml --env BUYER_EMAIL=$BUYER_EMAIL --env PASSWORD=$PASSWORD --format junit --output $GITHUB_WORKSPACE/maestro-results/03-buyer-post-task.xml || true
 
       - name: Upload Maestro results
         if: always()
@@ -176,7 +162,7 @@ jobs:
         with:
           name: maestro-e2e-results
           path: |
-            maestro-results/
+            ${{ github.workspace }}/maestro-results/
             ~/.maestro/tests/
           retention-days: 14
 
@@ -184,5 +170,5 @@ jobs:
         if: always()
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          files: maestro-results/**/*.xml
+          files: ${{ github.workspace }}/maestro-results/**/*.xml
           check_name: Maestro E2E Results
