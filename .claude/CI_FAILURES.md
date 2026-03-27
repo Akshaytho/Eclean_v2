@@ -196,3 +196,15 @@ APK testing we must run expo export:embed first to generate the bundle,
 then Gradle packages it into the APK.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23665055692
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 20:53 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `d38fa04` — fix: remove --no-install from expo prebuild
+
+Root cause from logcat: 'Cannot find native module ExponentImagePicker'
+expo prebuild --no-install was skipping native module linking.
+Without it, expo-image-picker native bridge was never registered,
+causing app crash before AppRegistry.registerComponent ran,
+leaving splash screen stuck green forever.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23666168335
+- **Status:** Unresolved — add fix description when fixed
