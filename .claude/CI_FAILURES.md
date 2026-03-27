@@ -208,3 +208,14 @@ causing app crash before AppRegistry.registerComponent ran,
 leaving splash screen stuck green forever.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23666168335
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 21:18 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `b8402f3` — fix: add expo-image-picker to app.json plugins
+
+ExponentImagePicker native module not found because expo-image-picker
+was in package.json but not registered in app.json plugins.
+Expo SDK 53 new architecture requires plugins to be declared in
+app.json for proper native module linking during prebuild.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23667125057
+- **Status:** Unresolved — add fix description when fixed
