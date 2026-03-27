@@ -77,7 +77,7 @@ jobs:
           path: |
             mobile/android/app/build
             mobile/android/app/.cxx
-          key: android-build-${{ hashFiles('mobile/android/**', 'mobile/package-lock.json') }}
+          key: android-build-${{ hashFiles('mobile/android/**', 'mobile/package-lock.json', 'mobile/app.json') }}
           restore-keys: android-build-
 
       - name: Install dependencies
