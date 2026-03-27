@@ -1,0 +1,48 @@
+name: Jest Tests (Unit + Screen + Integration)
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  jest:
+    name: Jest Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run unit tests (stores + API functions)
+        run: npx jest tests/unit --no-coverage --ci
+
+      - name: Run screen tests (RTLN component tests)
+        run: npx jest --config jest.screens.config.js --no-coverage --ci
+
+      - name: Run integration tests (live Railway backend)
+        env:
+          TEST_API_URL: https://ecleanfuture-production.up.railway.app/api/v1
+        run: npx jest tests/integration --no-coverage --ci
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-results
+          path: mobile/test-results/
+          retention-days: 7

@@ -1,0 +1,177 @@
+name: Maestro E2E Tests
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  WORKER_EMAIL: maestro-worker@eclean.test
+  BUYER_EMAIL: maestro-buyer@eclean.test
+  PASSWORD: Test@1234
+
+jobs:
+  # ── Job 1: Jest (fast, no device needed) ──────────────────────────────────
+  jest:
+    name: Jest Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Unit tests
+        run: npx jest tests/unit --no-coverage --ci
+
+      - name: Screen tests
+        run: npx jest --config jest.screens.config.js --no-coverage --ci
+
+      - name: Integration tests (live backend)
+        env:
+          TEST_API_URL: https://ecleanfuture-production.up.railway.app/api/v1
+        run: npx jest tests/integration --no-coverage --ci
+
+  # ── Job 2: Maestro E2E on Android Emulator ───────────────────────────────
+  maestro:
+    name: Maestro E2E
+    runs-on: ubuntu-latest
+    needs: jest          # only run if Jest passes
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci --legacy-peer-deps
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | \
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Create test accounts on backend
+        run: |
+          curl -sf -X POST https://ecleanfuture-production.up.railway.app/api/v1/auth/register \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"$WORKER_EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"CI Worker\",\"role\":\"WORKER\"}" || true
+          curl -sf -X POST https://ecleanfuture-production.up.railway.app/api/v1/auth/register \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"$BUYER_EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"CI Buyer\",\"role\":\"BUYER\"}" || true
+          echo "Accounts ready"
+
+      - name: Install EAS CLI + build APK
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npm install -g eas-cli
+          # Build using EAS (requires EXPO_TOKEN secret set in GitHub repo)
+          eas build --platform android --profile preview --non-interactive \
+            --output ./eclean-preview.apk
+        continue-on-error: true   # Fall back to Expo Go if EAS fails
+
+      - name: Run Maestro smoke tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          profile: pixel_4
+          ram-size: 3072M
+          heap-size: 512M
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          script: |
+            # Install APK if EAS build succeeded
+            APK=$(find mobile -name "*.apk" 2>/dev/null | head -1)
+            if [ -n "$APK" ]; then
+              echo "Installing APK: $APK"
+              adb install -r "$APK"
+            else
+              echo "No APK found — skipping install (app must be pre-installed)"
+            fi
+
+            mkdir -p maestro-results
+
+            # Smoke: all worker tabs load without crash
+            maestro test maestro/flows/09_smoke_all_tabs.yaml \
+              --env WORKER_EMAIL=$WORKER_EMAIL \
+              --env BUYER_EMAIL=$BUYER_EMAIL \
+              --env PASSWORD=$PASSWORD \
+              --format junit \
+              --output maestro-results/smoke-worker.xml
+
+            # Smoke: all buyer tabs load without crash
+            maestro test maestro/flows/10_smoke_buyer_tabs.yaml \
+              --env WORKER_EMAIL=$WORKER_EMAIL \
+              --env BUYER_EMAIL=$BUYER_EMAIL \
+              --env PASSWORD=$PASSWORD \
+              --format junit \
+              --output maestro-results/smoke-buyer.xml
+
+            # Login flow
+            maestro test maestro/flows/01_worker_login.yaml \
+              --env WORKER_EMAIL=$WORKER_EMAIL \
+              --env PASSWORD=$PASSWORD \
+              --format junit \
+              --output maestro-results/01-worker-login.xml
+
+            # Register flow
+            maestro test maestro/flows/02_worker_register.yaml \
+              --env PASSWORD=$PASSWORD \
+              --format junit \
+              --output maestro-results/02-worker-register.xml
+
+            # Buyer post task
+            maestro test maestro/flows/03_buyer_login_post_task.yaml \
+              --env BUYER_EMAIL=$BUYER_EMAIL \
+              --env PASSWORD=$PASSWORD \
+              --format junit \
+              --output maestro-results/03-buyer-post-task.xml
+
+      - name: Upload screenshots + results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-e2e-results
+          path: |
+            maestro-results/
+            ~/.maestro/tests/
+          retention-days: 14
+
+      - name: Publish test report
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: maestro-results/**/*.xml
+          check_name: Maestro E2E Results
