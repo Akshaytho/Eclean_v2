@@ -15,7 +15,7 @@ permissions:
   checks: write
 
 jobs:
-  # ── Job 1: Jest (must pass before Maestro runs) ───────────────────────────
+  # ── Job 1: Jest ────────────────────────────────────────────────────────────
   jest:
     name: Jest Tests
     runs-on: ubuntu-latest
@@ -83,25 +83,30 @@ jobs:
             -d "{\"email\":\"$BUYER_EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"CI Buyer\",\"role\":\"BUYER\"}" || true
           echo "Test accounts ready"
 
-      - name: Build APK locally via EAS
+      - name: Build APK (expo prebuild + gradle)
         working-directory: mobile
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          npm install -g eas-cli
-          echo "EAS CLI: $(eas --version)"
-
-          # Build locally on this runner (--local flag = no EAS server, runs gradle here)
-          # --output writes the APK directly to the path we specify
-          eas build \
-            --platform android \
-            --profile preview \
-            --local \
-            --non-interactive \
-            --output ./eclean.apk
-
-          ls -lh eclean.apk
-          echo "APK_PATH=$(pwd)/eclean.apk" >> $GITHUB_ENV
+          # Step 1: Generate native android/ folder
+          npx expo prebuild --platform android --clean --no-install
+          
+          # Step 2: Patch the known RN 0.76 gradle issue
+          # enableBundleCompression was removed in RN 0.76 but prebuild still generates it
+          sed -i 's/enableBundleCompression = false/\/\/ enableBundleCompression removed/' \
+            android/app/build.gradle || true
+          sed -i '/enableBundleCompression/d' \
+            android/app/build.gradle || true
+          
+          # Step 3: Build debug APK (faster than release, no signing needed)
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tail -30
+          
+          # Step 4: Find and copy APK
+          APK=$(find . -name "*.apk" -path "*/debug/*" | head -1)
+          echo "Built APK: $APK"
+          cp "$APK" ../eclean.apk
+          ls -lh ../eclean.apk
+          echo "APK_PATH=$(pwd)/../eclean.apk" >> $GITHUB_ENV
 
       - name: Run Maestro smoke + flow tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -116,8 +121,8 @@ jobs:
           disable-animations: true
           script: |
             echo "Installing APK..."
-            adb install -r "$APK_PATH"
-            adb shell am force-stop com.eclean.app || true
+            adb install -r mobile/eclean.apk
+            sleep 3
 
             mkdir -p maestro-results
 
