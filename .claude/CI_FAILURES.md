@@ -25,3 +25,9 @@
 - **Cause 4:** Wrong `owner` field in app.json
 - **Fix:** Removed `--output`, added `permissions: checks: write`, added projectId, removed owner field
 - Status: Still resolving EAS build polling logic — monitor next run
+
+## ❌ FAILURE: 2026-03-27 14:57 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `d60231c` — fix: remove --output flag from EAS build, add checks:write permission
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23651127621
+- **Status:** Unresolved — add fix description when fixed
