@@ -140,11 +140,21 @@ jobs:
         working-directory: mobile/android
         run: |
           chmod +x gradlew
-          # Run with full output so we can see exactly what fails
+
+          # Create assets dir and bundle JS — required for standalone APK (no Metro)
+          mkdir -p app/src/main/assets
+          cd ..
+          npx expo export:embed \
+            --platform android \
+            --dev false \
+            --entry-file node_modules/expo/AppEntry.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res
+          cd android
+
           ./gradlew assembleDebug --no-daemon --warning-mode=none 2>&1 | grep -E "FAILED|error:|Error:|Exception|BUILD" | head -30
           ./gradlew assembleDebug --no-daemon --warning-mode=none
-          
-          # Find and copy APK
+
           APK=$(find . -name "*.apk" -path "*/debug/*" | head -1)
           echo "APK found: $APK"
           cp "$APK" ../eclean.apk
