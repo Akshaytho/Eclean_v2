@@ -183,3 +183,16 @@ Maestro fixes:
 - These fix: Assertion failed Sign In not visible within 20s
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23664390268
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 20:23 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `f6ef954` — fix: bundle JS into APK before Gradle build
+
+Root cause found via Maestro screenshot: 'Unable to load script.
+index.android.bundle is not packaged correctly.'
+
+assembleDebug skips JS bundling (expects Metro server). For standalone
+APK testing we must run expo export:embed first to generate the bundle,
+then Gradle packages it into the APK.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23665055692
+- **Status:** Unresolved — add fix description when fixed
