@@ -2,6 +2,7 @@
 // Auth on connect via JWT handshake, user rooms, task rooms, GPS relay
 
 import { Server } from 'socket.io'
+import { createAdapter } from '@socket.io/redis-adapter'
 import type { Server as HttpServer } from 'http'
 import type { Role } from '@prisma/client'
 import { verifyToken } from '../lib/jwt'
@@ -31,6 +32,10 @@ export function initSocket(httpServer: HttpServer): Server {
       credentials: true,
     },
   })
+
+  // Redis adapter — enables Socket.io across multiple Railway instances
+  const pubClient = redis.duplicate()
+  io.adapter(createAdapter(redis, pubClient))
 
   // ── JWT auth middleware ──────────────────────────────────────────────────────
   io.use(async (socket, next) => {

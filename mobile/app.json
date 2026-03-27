@@ -1,0 +1,66 @@
+{
+  "expo": {
+    "name": "eClean",
+    "slug": "eclean",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A2463"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.eclean.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "eClean needs your location to show nearby tasks.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "eClean tracks your location during active tasks so buyers can see cleaning progress in real-time.",
+        "NSLocationAlwaysUsageDescription": "eClean tracks your location during active tasks so buyers can see cleaning progress in real-time.",
+        "NSCameraUsageDescription": "eClean needs camera access to take before/after photos of your cleaning work.",
+        "NSPhotoLibraryUsageDescription": "eClean needs photo library access to upload cleaning evidence photos."
+      }
+    },
+    "android": {
+      "package": "com.eclean.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A2463"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ],
+      "googleServicesFile": "./google-services.json"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "eClean tracks your location during active tasks so buyers can see cleaning progress in real-time.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#0A2463"
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "extra": {
+      "apiUrl": "https://ecleanfuture-production.up.railway.app"
+    }
+  }
+}

@@ -1,33 +1,23 @@
-// eClean — Firebase Cloud Messaging (push notifications)
-// Dev mode: logs to console when FIREBASE_SERVICE_ACCOUNT_JSON is not set.
+// eClean — Push notifications via Expo Push API
+// Replaces firebase-admin. Expo handles APNs (iOS) and FCM (Android) transparently.
+// No SDK needed — one fetch call to https://exp.host/--/api/v2/push/send
 
-import * as admin from 'firebase-admin'
-import { env } from '../config/env'
 import { prisma } from './prisma'
 import { logger } from './logger'
 
-// ─── Lazy init ────────────────────────────────────────────────────────────────
+interface ExpoPushMessage {
+  to:    string
+  title: string
+  body:  string
+  data?: Record<string, string>
+  sound?: 'default'
+}
 
-let _initialized = false
-
-function getMessaging(): admin.messaging.Messaging | null {
-  if (!env.FIREBASE_SERVICE_ACCOUNT_JSON) return null
-
-  if (!_initialized) {
-    try {
-      const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON) as admin.ServiceAccount
-      // Guard against re-init across hot-reloads (tsx watch)
-      if (admin.apps.length === 0) {
-        admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
-      }
-      _initialized = true
-    } catch (err) {
-      logger.error({ err }, 'Firebase Admin init failed')
-      return null
-    }
-  }
-
-  return admin.messaging()
+interface ExpoPushTicket {
+  status:  'ok' | 'error'
+  id?:     string
+  message?: string
+  details?: { error?: string }
 }
 
 // ─── sendPush ─────────────────────────────────────────────────────────────────
@@ -38,29 +28,56 @@ export async function sendPush(
   body:   string,
   data?:  Record<string, string>,
 ): Promise<void> {
-  const messaging = getMessaging()
-
-  if (!messaging) {
-    console.log(`[DEV PUSH] userId=${userId} title="${title}" body="${body}"`)
-    return
-  }
-
   const user = await prisma.user.findUnique({
     where:  { id: userId },
     select: { deviceToken: true },
   })
 
-  if (!user?.deviceToken) return
+  if (!user?.deviceToken) {
+    logger.debug({ userId }, 'No device token — skipping push')
+    return
+  }
+
+  // Expo push tokens look like ExponentPushToken[xxxx]
+  // If still a Firebase FCM token (legacy), skip silently — mobile will re-register
+  if (!user.deviceToken.startsWith('ExponentPushToken')) {
+    logger.debug({ userId }, 'Non-Expo token on record — skipping push (will update on next login)')
+    return
+  }
+
+  const message: ExpoPushMessage = {
+    to:    user.deviceToken,
+    title,
+    body,
+    sound: 'default',
+    ...(data && { data }),
+  }
 
   try {
-    await messaging.send({
-      token:        user.deviceToken,
-      notification: { title, body },
-      ...(data && { data }),
+    const res = await fetch('https://exp.host/--/api/v2/push/send', {
+      method:  'POST',
+      headers: {
+        'Accept':       'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
     })
-    logger.debug({ userId }, 'Push notification sent')
+
+    if (!res.ok) {
+      logger.error({ userId, status: res.status }, 'Expo push API HTTP error')
+      return
+    }
+
+    const json = await res.json() as { data: ExpoPushTicket }
+    const ticket = json.data
+
+    if (ticket.status === 'error') {
+      logger.error({ userId, error: ticket.message, details: ticket.details }, 'Expo push ticket error')
+    } else {
+      logger.debug({ userId, ticketId: ticket.id }, 'Push notification sent')
+    }
   } catch (err) {
-    // Log but never throw — push failures must not surface to callers
+    // Never throw — push failures must not surface to callers
     logger.error({ userId, err }, 'sendPush failed')
   }
 }

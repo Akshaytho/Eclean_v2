@@ -1,181 +1,283 @@
-# eClean — Claude Code Master Instructions
+# eClean v2 — Claude Code Master Instructions
 
-> **Auto-update this file when:** new coding rule added, session protocol changes, tech stack changes, production URLs change, or new conventions established.
-
----
-
-## 1. MANDATORY SESSION PROTOCOL
-
-### Every Session START (do this before touching any code):
-```bash
-# 1. Start services
-open -a "Docker Desktop" && sleep 15
-docker compose up -d
-sleep 5
-
-# 2. Start backend (local, port 3000)
-cd backend && npm run dev &
-sleep 5
-```
-Note: Dev frontend on port 3001 (production API) can run separately for manual testing.
-
-### Every Session END (do this before closing):
-```bash
-cd backend && npm test
-```
-Report pass/fail count to user. Fix any failures before closing.
-
-> **Note:** Playwright is now admin-only. Do NOT run the full 81-test suite. If testing admin flows, run only `frontend/e2e/` admin-related specs.
-
-### Mobile (Maestro) Testing — run when changing eclean-mobile code:
-```bash
-# 1. Start Android emulator headlessly
-export ANDROID_HOME=/usr/local/share/android-commandlinetools
-export PATH=$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH
-emulator -avd eclean_test -no-window -no-audio -gpu host -memory 1024 &
-# Wait for boot (~30s from snapshot), then:
-adb reverse tcp:8081 tcp:8081   # Metro
-adb reverse tcp:3000 tcp:3000   # Backend
-
-# 2. Start Metro (mobile JS bundler)
-cd eclean-mobile && npx expo start --port 8081 &
-
-# 3. Install APK (only needed if native code changed — otherwise Metro hot-reloads)
-adb push android/app/build/outputs/apk/debug/app-debug.apk /data/local/tmp/app-debug.apk
-adb shell pm install -r /data/local/tmp/app-debug.apk
-
-# 4. Run Maestro flows (reads screenshots automatically)
-~/.maestro/bin/maestro test .maestro/01-auth.yaml
-~/.maestro/bin/maestro test .maestro/02-worker-flow.yaml
-# etc.
-```
-**IMPORTANT for Maestro tests:** `constants.ts` must use `http://localhost:3000` (not production URL)
-during testing, then restore to `Constants.expoConfig?.extra?.apiUrl` after.
+> **This file is read by Claude at the start of EVERY session. Keep it updated.**
+> **Last updated:** [AUTO-UPDATE ON EVERY SESSION END]
 
 ---
 
-## 2. PROJECT OVERVIEW
+## 1. WHAT IS eCLEAN
 
-**eClean** — AI-powered civic work verification platform.
+eClean is an AI-powered civic work verification platform.
 Workers clean public areas → upload before/after photos → Claude Vision AI verifies → payment auto-releases.
+Think Uber for civic sanitation work. The driver is the worker. The rider is the buyer. GPS tracking and AI scoring replace the rating system.
 
-**Production URLs:**
-| Service | URL |
-|---------|-----|
-| Backend (Railway) | https://ecleanfuture-production.up.railway.app |
-| Frontend (Vercel) | https://eclean-future.vercel.app |
-| Health check | https://ecleanfuture-production.up.railway.app/health |
+**5 roles:** WORKER · BUYER · SUPERVISOR · ADMIN · CITIZEN
 
-**5 roles:** BUYER · WORKER · SUPERVISOR · ADMIN · CITIZEN
+**This repo has 2 codebases:**
+- `backend/` — Fastify + Prisma + PostgreSQL + Redis + BullMQ + Claude Vision + Cloudinary + Razorpay + Socket.io (COMPLETE, PRODUCTION-READY)
+- `mobile/` — React Native + Expo SDK 54 (BEING REBUILT FROM SCRATCH)
 
-**Tech stack:** Fastify + Prisma + PostgreSQL + Redis + BullMQ + Claude Vision + Cloudinary + Razorpay + Socket.io + React + Vite + Zustand + TanStack Query
-
-**Local ports:** Backend :3000 · Frontend :3001 (dev, production API) · Frontend :3002 (Playwright tests, local API) · PostgreSQL :5433 · Redis :6379
+The web admin frontend is in a separate repo. Do NOT create any web frontend code here.
 
 ---
 
-## 3. DOCUMENT MAP
+## 2. MANDATORY SESSION PROTOCOL
 
-> **Auto-update this section when:** a file is added, removed, or changes purpose.
+### Every Session START (do ALL of these before writing any code):
 
-| File | Purpose | Update when |
-|------|---------|-------------|
-| `CLAUDE.md` | This file — master instructions | New rule, protocol change, stack change |
-| `FEATURES.md` | Feature designs, flows, edge cases | Feature changes, user confirms/rejects design |
-| `README.md` | Public GitHub readme | Setup steps change, new team member onboards |
-| `.claude/SPRINT.md` | Current sprint + history | Sprint ends, new sprint starts |
-| `.claude/DECISIONS.md` | Architecture decision records | Major technical decision made |
-| `.claude/STRATEGY.md` | Business strategy, growth plan | Strategic direction changes |
+```
+STEP 1 — Read this file (CLAUDE.md)
+STEP 2 — Read .claude/HANDOFF.md (what was done last session, what's next)
+STEP 3 — Read .claude/SPRINTS.md (full sprint plan with checkboxes)
+STEP 4 — Tell the user: what sprint we're in, what's done, what's next
+STEP 5 — WAIT for user confirmation before writing any code
+```
 
-**Playwright tests** (`frontend/e2e/`):
-- `01-auth.spec.ts` — Login, register, redirects, RBAC
-- `02-buyer-flow.spec.ts` — Post task, review, approve
-- `03-worker-flow.spec.ts` — Find work, accept, submit proof
-- `04-other-roles.spec.ts` — Supervisor, Citizen, Admin
-- `05-edge-cases.spec.ts` — Negative cases, invalid inputs, unauthorized access
+### Every Session END (do ALL of these before closing):
 
-**Maestro mobile tests** (`eclean-mobile/.maestro/`):
-- `01-auth.yaml` — Wrong password error, login, logout, register, forgot password
-- `02-worker-flow.yaml` — Login as worker, find task, accept, active task, wallet
-- `03-buyer-flow.yaml` — Login as buyer, post task, notifications, profile
-- `04-supervisor-flow.yaml` — Login as supervisor, dashboard, notifications, profile
-- `05-citizen-flow.yaml` — Login as citizen, submit report, notifications, profile
-- `06-edge-cases.yaml` — Empty submit, invalid credentials, logout clears state
-
-**Mobile app** (`eclean-mobile/`): React Native Expo SDK 54, all 5 roles, Android APK at `android/app/build/outputs/apk/debug/app-debug.apk`
-
-**Seeded test accounts** (password: `Test@1234`):
-`buyer@eclean.test` · `worker@eclean.test` · `admin@eclean.test` · `citizen@eclean.test` · `supervisor@eclean.test`
+```
+STEP 1 — Update .claude/HANDOFF.md with:
+  - What was completed this session
+  - What is NOT yet done
+  - Any bugs or blockers found
+  - Next steps for next session
+STEP 2 — Update .claude/SPRINTS.md checkboxes (mark completed items)
+STEP 3 — If any backend files were changed, run: cd backend && npm test
+STEP 4 — git add specific files only (NEVER git add . or git add -A)
+STEP 5 — git commit with descriptive message
+STEP 6 — Report to user: what was done, tests pass/fail, what's next
+```
 
 ---
 
-## 4. BEFORE CHANGING ANY FEATURE
+## 3. PRODUCTION RULES — NEVER BREAK THESE
 
-1. Read `FEATURES.md` first — it is the source of truth for all feature designs
-2. If a change conflicts with FEATURES.md, ask the user before proceeding
-3. Never change confirmed UI designs (role cards, auth flow, etc.) just to make tests pass — update the tests to match the design instead
-4. After any feature change, update `FEATURES.md` to reflect it
-
----
-
-## 5. PRODUCTION RULES (never break these)
-
-> **Auto-update this section when:** a new absolute rule is established.
-
-1. **No hardcoded secrets** — all via `process.env`. Never commit `.env` files.
-2. **Money is always integer paise** — ₹10 = `1000`. Never floats. `z.number().int()` on all money fields.
-3. **Every payment uses a DB transaction** — `prisma.$transaction()`. No payment logic outside a transaction.
-4. **CONFIRM-MIGRATION for destructive SQL** — never run `DROP TABLE` / `DROP COLUMN` without user typing `CONFIRM-MIGRATION`.
-5. **Stage specific files only** — never `git add .` or `git add -A`.
-6. **All routes have Zod validation** — every request body, query param, path param.
-7. **Protected routes use `authenticate` middleware** — never manually decode JWT in handlers.
-8. **Never expose sensitive data** — no `passwordHash`, no tokens, no internal IDs in API responses.
-9. **BullMQ jobs are idempotent** — safe to run more than once. Use jobId for deduplication.
-10. **Cloudinary URLs are always HTTPS** — enforce `secure: true` in SDK config.
-11. **Prisma for all queries** — no raw SQL in application code. Exception: parameterized `$queryRaw` for reporting.
-12. **Backend error format is `{ error: { code, message } }`** — never `{ message }` at top level.
+| # | Rule | Why |
+|---|------|-----|
+| 1 | Never `git add .` — stage specific files only | Prevents committing secrets or junk |
+| 2 | Never hardcode secrets — all via `process.env` or Expo constants | Security |
+| 3 | Money is always integer paise — never floats | Financial accuracy |
+| 4 | Every payment uses `prisma.$transaction()` | Prevents partial financial writes |
+| 5 | All routes have Zod validation | No unvalidated input reaches business logic |
+| 6 | Protected routes use `authenticate` middleware | Never manually decode JWT |
+| 7 | Never expose `passwordHash` in API responses | Security |
+| 8 | BullMQ jobs are idempotent — safe to re-run | Reliability |
+| 9 | Tokens in SecureStore on mobile — NEVER AsyncStorage | Encrypted storage |
+| 10 | GPS via Socket.io emit, NOT HTTP POST | Real-time for buyer tracking |
+| 11 | Background location via expo-task-manager | Must work when phone locked |
+| 12 | HANDOFF.md updated before EVERY session close | Continuity between sessions |
 
 ---
 
-## 6. PRE-COMMIT CHECKLIST
+## 4. TECH STACK
 
-> Run before every commit. If any item fails, fix it first.
+### Backend (COMPLETE — do not rewrite)
 
-**TypeScript**
-- [ ] `cd backend && npx tsc --noEmit` — zero errors
-- [ ] `cd frontend && npx tsc --noEmit` — zero errors
+| Layer | Technology |
+|-------|-----------|
+| HTTP API | Fastify 4 |
+| Database | PostgreSQL 16 + Prisma ORM |
+| Cache / Queue | Redis 7 + BullMQ |
+| File Storage | Cloudinary |
+| AI Vision | Anthropic Claude Vision |
+| Payments | Razorpay (India) |
+| Real-time | Socket.io |
+| Push | Expo Push API (being changed from Firebase) |
+| Email | Resend |
+| Auth | JWT + bcrypt + Redis blacklist |
 
-**Tests**
-- [ ] `cd backend && npm test` — all 47 tests pass
-- [ ] `cd frontend && npx playwright test` — all 80 tests pass
+### Mobile (BEING REBUILT)
 
-**Security**
-- [ ] No hardcoded secrets or API keys
-- [ ] No `.env` file staged (`git status` confirms)
-- [ ] Every new route has a Zod schema
-- [ ] Every new protected route has `preHandler: [authenticate]`
-- [ ] No `passwordHash` or tokens in any API response
-
-**Money**
-- [ ] All money fields use `z.number().int().min(0)`
-- [ ] No `parseFloat` on monetary values
-- [ ] Payment state changes wrapped in `prisma.$transaction()`
-
-**Git**
-- [ ] Staged only specific files — never `git add .`
-- [ ] Commit message is descriptive
+| Layer | Technology | Why This Choice |
+|-------|-----------|-----------------|
+| Framework | React Native + Expo SDK 54 | Cross-platform, managed native modules |
+| Navigation | @react-navigation v7 (native-stack + bottom-tabs) | Native transitions, industry standard |
+| Server State | @tanstack/react-query v5 + persist-client | Caching, background refetch, offline persistence |
+| Client State | Zustand v5 | Lightweight, no boilerplate |
+| Maps | react-native-maps | Google Maps Android, Apple Maps iOS, free, native |
+| Real-time | socket.io-client | Matches backend Socket.io |
+| HTTP | Axios | Interceptors for token refresh |
+| Location | expo-location + expo-task-manager | Background GPS tracking |
+| Camera | expo-camera + expo-image-picker | Photo capture |
+| Notifications | expo-notifications | With Expo Push API on backend |
+| Secure Storage | expo-secure-store | Encrypted tokens |
+| Animations | react-native-reanimated | 60fps native animations |
+| Gestures | react-native-gesture-handler | Swipe, long press |
+| Bottom Sheets | @gorhom/bottom-sheet | Uber/Maps-style contextual UI |
+| Icons | lucide-react-native | Consistent icon set |
 
 ---
 
-## 7. KEY CONVENTIONS
+## 5. BACKEND API REFERENCE (for mobile dev)
 
-> **Auto-update this section when:** a new pattern is established or a bug reveals a wrong assumption.
+### Auth
+```
+POST /api/v1/auth/register        — { email, password, name, role }
+POST /api/v1/auth/login           — { email, password }
+POST /api/v1/auth/refresh         — { refreshToken } (body-based for mobile)
+POST /api/v1/auth/logout          — (requires auth)
+GET  /api/v1/auth/me              — (requires auth) returns user + profile
+POST /api/v1/auth/forgot-password — { email }
+POST /api/v1/auth/reset-password  — { token, password }
+```
 
-- **Password requirements:** 8+ chars, 1 uppercase, 1 digit — enforced on both frontend and backend
-- **Auth pages:** use shared design system in `frontend/src/pages/auth/authDesign.tsx`
-- **CORS:** allows `localhost` on any port + any local network IP (`172.x`, `192.168.x`, `10.x`)
-- **Token refresh:** `/auth/refresh` returns no `user` field — preserve existing user from store on refresh
-- **Citizen reports:** backend expects `lat`/`lng` (not `locationLat`/`locationLng`) + required `category` field
-- **Worker tasks open endpoint:** uses `radiusKm` param (not `radius`)
-- **Buyer task list:** includes `worker { id, name, email }` via Prisma `include`
-- **TaskEvent shape:** `{ to, from, action, actor, actorRole, note }` — not `{ event }`
+### Buyer Tasks
+```
+POST /api/v1/buyer/tasks                    — create task
+GET  /api/v1/buyer/tasks?status=&page=&limit= — list buyer tasks
+GET  /api/v1/buyer/tasks/:taskId            — detail with media, logs, events
+POST /api/v1/buyer/tasks/:taskId/approve    — approve + create payout
+POST /api/v1/buyer/tasks/:taskId/reject     — { reason } reject
+POST /api/v1/buyer/tasks/:taskId/cancel     — { reason } cancel
+POST /api/v1/buyer/tasks/:taskId/rate       — { rating: 1-5 }
+GET  /api/v1/buyer/tasks/:taskId/chat       — chat history
+```
+
+### Worker Tasks
+```
+GET  /api/v1/worker/tasks/open?category=&urgency=&lat=&lng=&radiusKm=&page=&limit=
+GET  /api/v1/worker/tasks/:taskId
+GET  /api/v1/worker/my-tasks?status=&page=&limit=
+POST /api/v1/worker/tasks/:taskId/accept
+POST /api/v1/worker/tasks/:taskId/start     — { lat, lng } for geofence
+POST /api/v1/worker/tasks/:taskId/submit
+POST /api/v1/worker/tasks/:taskId/cancel    — { reason }
+POST /api/v1/worker/tasks/:taskId/retry
+POST /api/v1/worker/tasks/:taskId/dispute   — { reason }
+POST /api/v1/worker/tasks/:taskId/location  — { lat, lng, accuracy }
+GET  /api/v1/worker/tasks/:taskId/chat      — chat history
+```
+
+### Media
+```
+POST /api/v1/tasks/:taskId/media   — multipart: file + mediaType (BEFORE|AFTER|PROOF|REFERENCE)
+GET  /api/v1/tasks/:taskId/media   — list media for task
+```
+
+### Notifications
+```
+POST /api/v1/notifications/device-token  — { token } save Expo push token
+GET  /api/v1/notifications?page=         — list + unreadCount
+POST /api/v1/notifications/:id/read
+POST /api/v1/notifications/read-all
+```
+
+### Other
+```
+GET  /api/v1/zones?city=               — list zones
+POST /api/v1/supervisor/dashboard      — supervisor zones + tasks
+PATCH /api/v1/zones/:id/inspect        — { dirtyLevel } mark zone
+POST /api/v1/citizen/reports           — { category, description, urgency, lat, lng, photoUrl }
+GET  /api/v1/citizen/reports           — own reports
+GET  /api/v1/worker/wallet             — earnings breakdown
+GET  /api/v1/worker/payouts?page=      — payout history
+```
+
+### Socket.io Events
+```
+CLIENT EMITS:
+  join_task_room  { taskId }
+  leave_task_room { taskId }
+  worker:gps      { taskId, lat, lng, accuracy }
+  chat:send       { taskId, content }
+
+SERVER EMITS:
+  task:updated      { taskId, status }
+  task:photo_added  { taskId, media }
+  worker:location   { lat, lng, accuracy, timestamp }
+  notification:new  { notification }
+  chat:message      { id, from, content, taskId, timestamp }
+```
+
+---
+
+## 6. FOLDER STRUCTURE
+
+```
+eclean-v2/
+├── CLAUDE.md               ← This file
+├── docker-compose.yml      ← PostgreSQL + Redis for local dev
+├── .claude/
+│   ├── HANDOFF.md          ← Session state — updated every session
+│   ├── SPRINTS.md          ← Sprint plan with checkboxes
+│   └── DECISIONS.md        ← Architecture decisions
+│
+├── backend/                ← COMPLETE — touch only for the 7 fixes in Sprint 0
+│   ├── src/
+│   │   ├── app.ts
+│   │   ├── main.ts
+│   │   ├── config/env.ts
+│   │   ├── lib/           (prisma, redis, jwt, errors, logger, push, email, cloudinary, bullmq)
+│   │   ├── middleware/     (authenticate, authorize, validate, error-handler)
+│   │   ├── modules/       (auth, tasks, media, ai, notifications, payouts, zones, supervisor, citizen, admin)
+│   │   ├── realtime/socket.ts
+│   │   └── jobs/          (ai-verify.job, payout.job)
+│   ├── prisma/schema.prisma
+│   ├── tests/
+│   ├── package.json
+│   └── Dockerfile
+│
+├── mobile/                 ← NEW — being built from scratch
+│   ├── App.tsx
+│   ├── app.json
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── babel.config.js
+│   └── src/
+│       ├── api/            (client, auth, tasks, media, notifications, citizen, zones, payouts)
+│       ├── stores/         (authStore, socketStore, locationStore, activeTaskStore, toastStore)
+│       ├── hooks/          (usePushNotifications, useBackgroundLocation, useOfflineQueue, etc.)
+│       ├── navigation/     (RootNavigator, WorkerNav, BuyerNav, SupervisorNav, CitizenNav)
+│       ├── screens/        (auth/, worker/, buyer/, supervisor/, citizen/, shared/)
+│       ├── components/     (ui/, maps/, task/, layout/)
+│       ├── services/       (backgroundLocation, offlineSync)
+│       ├── constants/      (config, colors, fonts, taskCategories)
+│       ├── types/
+│       └── utils/          (formatMoney, timeAgo, distance, permissions)
+```
+
+---
+
+## 7. SEEDED TEST ACCOUNTS
+
+All passwords: `Test@1234`
+
+| Role | Email |
+|------|-------|
+| BUYER | buyer@eclean.test |
+| WORKER | worker@eclean.test |
+| ADMIN | admin@eclean.test |
+| CITIZEN | citizen@eclean.test |
+| SUPERVISOR | supervisor@eclean.test |
+
+---
+
+## 8. LOCAL DEVELOPMENT
+
+```bash
+# Start databases
+docker-compose up -d
+
+# Start backend (port 3000)
+cd backend && npm run dev
+
+# Start mobile (Expo, port 8081)
+cd mobile && npx expo start
+```
+
+Backend health check: `curl http://localhost:3000/health`
+
+Mobile connects to: `http://localhost:3000` (configured in mobile/src/constants/config.ts)
+
+---
+
+## 9. KEY CONVENTIONS
+
+- Password: 8+ chars, 1 uppercase, 1 digit
+- CORS: allows localhost on any port + local network IPs
+- Token refresh: `/auth/refresh` accepts `{ refreshToken }` in body (no cookies on mobile)
+- Citizen reports: backend expects `lat`/`lng` (not `locationLat`/`locationLng`) + required `category`
+- Worker open tasks: uses `radiusKm` param (not `radius`)
+- Money display: `formatMoney(amountCents, currency)` → "₹60.00"
+- All dates: ISO 8601 strings from API
+- Error format: `{ error: { code, message } }`

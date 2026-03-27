@@ -5,6 +5,7 @@ import { validate } from '../../middleware/validate'
 import {
   reasonSchema,
   locationUpdateSchema,
+  startTaskSchema,
   listTasksQuerySchema,
   openTasksQuerySchema,
   taskIdParamSchema,
@@ -43,9 +44,10 @@ export async function workerRoutes(fastify: FastifyInstance): Promise<void> {
   )
 
   // POST /api/v1/worker/tasks/:taskId/start
+  // Body { lat, lng } is optional — used for geofence check when task has a location
   fastify.post(
     '/tasks/:taskId/start',
-    { preHandler: [...auth, validate({ params: taskIdParamSchema })] },
+    { preHandler: [...auth, validate({ params: taskIdParamSchema, body: startTaskSchema })] },
     ctrl.startTask,
   )
 

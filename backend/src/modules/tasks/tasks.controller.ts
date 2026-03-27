@@ -6,6 +6,7 @@ import type {
   CreateTaskInput,
   ReasonInput,
   LocationUpdateInput,
+  StartTaskInput,
   ListTasksQuery,
   OpenTasksQuery,
   TaskIdParam,
@@ -83,7 +84,7 @@ export async function acceptTask(req: FastifyRequest, reply: FastifyReply): Prom
 
 export async function startTask(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const { taskId } = req.params as TaskIdParam
-  const task = await svc.startTask(req.user.id, taskId)
+  const task = await svc.startTask(req.user.id, taskId, req.body as StartTaskInput | undefined)
   void reply.send({ task })
 }
 
@@ -126,6 +127,9 @@ export async function updateLocation(req: FastifyRequest, reply: FastifyReply): 
 
 export async function getChatHistory(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const { taskId } = req.params as TaskIdParam
+  const query = req.query as { cursor?: string; limit?: string }
+  const limit  = Math.min(parseInt(query.limit ?? '50', 10), 100)
+  const cursor = query.cursor // ISO date string of last fetched message
 
   // Verify caller is buyer or worker on this task
   const task = await prisma.task.findUnique({
@@ -138,11 +142,20 @@ export async function getChatHistory(req: FastifyRequest, reply: FastifyReply): 
   }
 
   const messages = await prisma.chatMessage.findMany({
-    where:   { taskId },
+    where: {
+      taskId,
+      ...(cursor && { createdAt: { lt: new Date(cursor) } }),
+    },
     include: { sender: { select: { id: true, name: true, role: true } } },
-    orderBy: { createdAt: 'asc' },
-    take:    200,
+    orderBy: { createdAt: 'desc' },
+    take:    limit,
   })
 
-  void reply.send({ messages })
+  // Return oldest-first for display; provide nextCursor for older page
+  const ordered = messages.reverse()
+  const nextCursor = messages.length === limit
+    ? messages[0].createdAt.toISOString()
+    : null
+
+  void reply.send({ messages: ordered, nextCursor })
 }

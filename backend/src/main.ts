@@ -5,6 +5,7 @@ import { env } from './config/env'
 import { initSocket } from './realtime/socket'
 import { createAiVerifyWorker } from './jobs/ai-verify.job'
 import { createPayoutWorker } from './jobs/payout.job'
+import { createCleanupWorker, scheduleCleanupJobs } from './jobs/cleanup.job'
 
 if (env.SENTRY_DSN) {
   Sentry.init({
@@ -27,8 +28,10 @@ const start = async (): Promise<void> => {
     app.log.info({ razorpayMode }, 'Razorpay initialised')
 
     // Start BullMQ workers
-    const aiWorker     = createAiVerifyWorker()
-    const payoutWorker = createPayoutWorker()
+    const aiWorker      = createAiVerifyWorker()
+    const payoutWorker  = createPayoutWorker()
+    const cleanupWorker = createCleanupWorker()
+    await scheduleCleanupJobs()
 
     // Attach Socket.io to Fastify's underlying http.Server before listen
     await app.ready()
@@ -40,6 +43,7 @@ const start = async (): Promise<void> => {
     const shutdown = async (): Promise<void> => {
       await aiWorker.close()
       await payoutWorker.close()
+      await cleanupWorker.close()
       await app.close()
       process.exit(0)
     }

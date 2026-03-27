@@ -62,6 +62,17 @@ export const taskIdParamSchema = z.object({
   taskId: z.string().min(1),
 })
 
+// ─── Start task (optional geofence body) ──────────────────────────────────────
+// Uses z.preprocess so null/undefined body (no Content-Type) becomes {} rather
+// than a Zod parse error — the geofence fields are genuinely optional.
+export const startTaskSchema = z.preprocess(
+  (val) => val ?? {},
+  z.object({
+    lat: z.number().min(-90).max(90).optional(),
+    lng: z.number().min(-180).max(180).optional(),
+  }),
+)
+
 // ─── Rating ────────────────────────────────────────────────────────────────────
 export const rateTaskSchema = z.object({
   rating:  z.number().int().min(1).max(5),
@@ -70,10 +81,11 @@ export const rateTaskSchema = z.object({
 })
 
 // ─── Inferred types ────────────────────────────────────────────────────────────
-export type CreateTaskInput   = z.infer<typeof createTaskSchema>
-export type ReasonInput       = z.infer<typeof reasonSchema>
+export type CreateTaskInput     = z.infer<typeof createTaskSchema>
+export type ReasonInput         = z.infer<typeof reasonSchema>
 export type LocationUpdateInput = z.infer<typeof locationUpdateSchema>
-export type ListTasksQuery    = z.infer<typeof listTasksQuerySchema>
-export type OpenTasksQuery    = z.infer<typeof openTasksQuerySchema>
-export type TaskIdParam       = z.infer<typeof taskIdParamSchema>
-export type RateTaskInput     = z.infer<typeof rateTaskSchema>
+export type StartTaskInput      = z.infer<typeof startTaskSchema>
+export type ListTasksQuery      = z.infer<typeof listTasksQuerySchema>
+export type OpenTasksQuery      = z.infer<typeof openTasksQuerySchema>
+export type TaskIdParam         = z.infer<typeof taskIdParamSchema>
+export type RateTaskInput       = z.infer<typeof rateTaskSchema>

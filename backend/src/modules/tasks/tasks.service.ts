@@ -17,7 +17,20 @@ import type {
   ListTasksQuery,
   OpenTasksQuery,
   RateTaskInput,
+  StartTaskInput,
 } from './tasks.schema'
+
+// ─── Haversine distance (km) ──────────────────────────────────────────────────
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLng = ((lng2 - lng1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -403,12 +416,27 @@ export async function acceptTask(workerId: string, taskId: string) {
   }
 }
 
-// ─── WORKER — start (work window enforcement) ─────────────────────────────────
+// ─── WORKER — start (work window + geofence enforcement) ─────────────────────
 
-export async function startTask(workerId: string, taskId: string) {
+export async function startTask(workerId: string, taskId: string, input?: StartTaskInput) {
   const task = await fetchTaskOrThrow(taskId)
   if (task.workerId !== workerId) throw new ForbiddenError('Not your task')
   assertTransition(task.status, 'IN_PROGRESS', 'WORKER')
+
+  // Geofence: if task has a location and worker sent their GPS, enforce 2km radius
+  if (
+    task.locationLat !== null &&
+    task.locationLng !== null &&
+    input?.lat !== undefined &&
+    input?.lng !== undefined
+  ) {
+    const distKm = haversineKm(input.lat, input.lng, task.locationLat, task.locationLng)
+    if (distKm > 2) {
+      throw new BadRequestError(
+        `You must be within 2km of the task location to start. You are ${distKm.toFixed(1)}km away.`,
+      )
+    }
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     const updated = await tx.task.update({
