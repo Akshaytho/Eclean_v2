@@ -94,3 +94,5 @@ All auth screens (Splash, Onboarding, Login, Register, ForgotPassword), all plac
 **Backend Fixes:** 47/47 tests passing. Push.ts Firebase→Expo, Redis adapter, geofence check, cursor pagination, cleanup job, startTaskSchema null-body fix.
 
 **Infrastructure:** Docker VM data cleared. Prisma migrations applied.
+
+<!-- CI trigger: 2026-03-27 -->
