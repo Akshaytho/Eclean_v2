@@ -4,6 +4,42 @@
 
 ---
 
+## Last Session: 2026-03-27 (Session 8 — Maestro E2E Fixes + CI Stability)
+
+### Status: CI STABILIZING 🔄 | MAESTRO FLOWS RUNNING (not yet passing)
+
+### What was completed this session:
+
+**Maestro E2E fixed — 6 issues resolved:**
+1. `react-native-svg` StyleSizeLength C++ — sed patch in workflow
+2. `package-lock.json` lockfile — regenerated with correct version
+3. APK copy path — fixed `../../` → `../`
+4. Maestro flow paths — switched to `$GITHUB_WORKSPACE` absolute paths
+5. `timeout:` property — removed from all 10 flow files (not supported)
+6. `if/fi` shell syntax — replaced inline script with `.github/scripts/run-maestro.sh`
+7. `extendedWaitUntil: 30s` — added to all 4 CI flows (emulator cold start takes 10-15s)
+8. Post-install sleep — increased from 5s to 15s
+
+**App fixes:**
+- `SplashScreen.hideAsync()` + `preventAutoHideAsync()` added to App.tsx
+- `ErrorBoundary` added to App.tsx — shows readable error instead of blank screen
+- `|| true` removed from Maestro CI — was silently swallowing failures
+- `react-dom` version fixed — `^19.0.0` → `^18.3.1`
+
+**Current Maestro status:**
+- APK builds ✅
+- APK installs on emulator ✅  
+- Flows actually running ✅
+- Flows passing ❌ — "Sign In" not visible after 20s (JS bundle slow on cold emulator)
+- Fix pushed: extendedWaitUntil 30s — pending next CI run result
+
+### Next steps:
+- Check if extendedWaitUntil fix gets Maestro flows passing
+- If still failing, check if app is crashing silently on emulator (need logcat)
+- Sprint 4: ProfileScreen, CitizenHomeScreen, SupervisorHomeScreen
+
+---
+
 ## Last Session: 2026-03-27 (Session 7 — CI/CD Fixes)
 
 ### Status: ALL CI GREEN ✅
