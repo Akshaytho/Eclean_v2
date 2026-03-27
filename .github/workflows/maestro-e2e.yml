@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: '20'
 
-      - run: npm ci --legacy-peer-deps
+      - run: npm install --legacy-peer-deps
 
       - name: Unit tests
         run: npx jest tests/unit --no-coverage --ci
@@ -61,7 +61,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: mobile
-        run: npm ci --legacy-peer-deps
+        run: npm install --legacy-peer-deps
 
       - name: Enable KVM
         run: |
