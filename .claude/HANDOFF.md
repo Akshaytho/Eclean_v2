@@ -4,6 +4,30 @@
 
 ---
 
+## Last Session: 2026-03-27 (Session 7 — CI/CD Fixes)
+
+### Status: ALL CI GREEN ✅
+
+### What was completed this session:
+
+**CI/CD fully fixed — all 5 blockers resolved:**
+1. `react-native-svg` StyleSizeLength C++ error — `sed` patch in workflow (unfixed upstream even in 15.15.4)
+2. `package-lock.json` still pinned old version — regenerated with `--package-lock-only`
+3. `react-dom` major version mismatch — `^19.0.0` → `^18.3.1`
+4. `NODE_ENV` missing in `expo prebuild` step — added `NODE_ENV: production`
+5. APK copy path wrong — `../../eclean.apk` → `../eclean.apk`
+6. Maestro flow paths broken in emulator-runner script — switched to `$GITHUB_WORKSPACE` absolute paths
+
+**Final CI status:**
+- Jest: 109/109 tests ✅
+- Maestro E2E: all 22 steps ✅ (APK builds, installs, flows run on emulator)
+
+### Next steps (Sprint 4):
+- Fix Sprint 3 gaps (BuyerTaskDetailScreen, LiveTrackScreen, PostTaskScreen)
+- Build Sprint 4 screens: ProfileScreen, CitizenHomeScreen, CreateReportScreen, SupervisorHomeScreen
+
+---
+
 ## Last Session: 2026-03-27 (Session 6 — Sprint 3 + Testing + CI/CD)
 
 ### Status: SPRINT 3 DONE (with gaps) ✅ | JEST CI GREEN ✅ | MAESTRO CI IN PROGRESS 🔄
