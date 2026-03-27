@@ -31,3 +31,15 @@
 - **Commit:** `d60231c` — fix: remove --output flag from EAS build, add checks:write permission
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23651127621
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 15:19 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `90d3fb0` — fix: use EAS local build so APK is on runner when emulator boots
+
+Emulator boots fine in ~26s on GitHub Actions.
+Problem was APK not present — EAS server build wasn't downloading to runner.
+Fix: eas build --local runs gradle on the runner itself, writes APK directly.
+--output flag works for local builds (not server builds).
+APK path passed via GITHUB_ENV to the emulator runner step.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23653456874
+- **Status:** Unresolved — add fix description when fixed
