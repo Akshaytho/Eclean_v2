@@ -232,3 +232,14 @@ Also keeps expo-image-picker in app.json plugins for proper
 permission handling when it does load.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23668009451
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 21:44 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `39155ac` — fix: include app.json in Android build cache key
+
+When app.json plugins change (like adding expo-image-picker),
+the Android build cache must be invalidated to force a fresh
+native module compilation. Old cache was reusing a build that
+lacked ExponentImagePicker native bridge.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23668086529
+- **Status:** Unresolved — add fix description when fixed
