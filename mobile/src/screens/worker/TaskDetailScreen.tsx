@@ -169,8 +169,8 @@ export function TaskDetailScreen() {
               value={`${new Date(task.workWindowStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${new Date(task.workWindowEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
             />
           )}
-          {task.worker && (
-            <DetailRow icon={<Briefcase size={16} color={COLORS.neutral[500]} />} label="Posted by" value={task.worker.name} />
+          {(task as any).buyer && (
+            <DetailRow icon={<Briefcase size={16} color={COLORS.neutral[500]} />} label="Posted by" value={(task as any).buyer.name} />
           )}
         </View>
       </ScrollView>

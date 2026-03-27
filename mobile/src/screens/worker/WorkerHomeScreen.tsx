@@ -1,219 +1,228 @@
+/**
+ * WorkerHomeScreen
+ * Backend connections:
+ *   GET /api/v1/auth/me               → workerProfile.rating, completedTasks, isAvailable
+ *   GET /api/v1/worker/my-tasks       → active + accepted tasks
+ *   PATCH /api/v1/worker/availability → toggle isAvailable
+ *   GET /api/v1/worker/wallet         → earnings
+ */
 import React from 'react'
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  ActivityIndicator, ScrollView,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  ActivityIndicator, RefreshControl, Switch,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { MapPin, CheckCircle, Star, ChevronRight, Search } from 'lucide-react-native'
-
-import { COLORS } from '../../constants/colors'
-import { payoutsApi } from '../../api/payouts.api'
-import { workerTasksApi } from '../../api/tasks.api'
-import { useAuthStore } from '../../stores/authStore'
-import { formatMoney } from '../../utils/formatMoney'
+import { MapPin, Star, CheckCircle, AlertCircle, Wallet } from 'lucide-react-native'
+import { LinearGradient }  from 'expo-linear-gradient'
+import { ScreenWrapper }   from '../../components/layout/ScreenWrapper'
+import { StatusBadge }     from '../../components/ui/Badge'
+import { COLORS }          from '../../constants/colors'
+import { workerTasksApi }  from '../../api/tasks.api'
+import { authApi }         from '../../api/auth.api'
+import { apiClient }       from '../../api/client'
+import { useAuthStore }    from '../../stores/authStore'
+import { formatMoney }     from '../../utils/formatMoney'
+import { timeAgo }         from '../../utils/timeAgo'
 import type { WorkerStackParamList } from '../../navigation/types'
 
 type Nav = NativeStackNavigationProp<WorkerStackParamList>
 
 export function WorkerHomeScreen() {
   const navigation = useNavigation<Nav>()
-  const user       = useAuthStore((s) => s.user)
+  const { user }   = useAuthStore()
+  const qc         = useQueryClient()
 
-  const { data: wallet, isLoading: walletLoading } = useQuery({
-    queryKey: ['worker', 'wallet'],
-    queryFn:  payoutsApi.getWallet,
+  // Fetch profile for stats + isAvailable
+  const meQuery = useQuery({
+    queryKey: ['me'],
+    queryFn:  authApi.me,
     staleTime: 30_000,
   })
 
-  // Active task: IN_PROGRESS or ACCEPTED
-  const { data: inProgress } = useQuery({
-    queryKey: ['worker', 'tasks', 'active'],
+  // Active tasks
+  const activeQuery = useQuery({
+    queryKey: ['worker-tasks-active'],
     queryFn:  () => workerTasksApi.myTasks({ status: 'IN_PROGRESS', limit: 1 }),
     staleTime: 10_000,
   })
 
-  const { data: accepted } = useQuery({
-    queryKey: ['worker', 'tasks', 'accepted'],
+  // Accepted (not yet started)
+  const acceptedQuery = useQuery({
+    queryKey: ['worker-tasks-accepted'],
     queryFn:  () => workerTasksApi.myTasks({ status: 'ACCEPTED', limit: 1 }),
     staleTime: 10_000,
   })
 
-  const activeTask = inProgress?.tasks[0] ?? accepted?.tasks[0] ?? null
+  // Wallet
+  const walletQuery = useQuery({
+    queryKey: ['wallet'],
+    queryFn:  () => apiClient.get('/worker/wallet').then(r => r.data),
+    staleTime: 30_000,
+  })
 
-  const firstName = user?.name?.split(' ')[0] ?? 'Worker'
+  // Toggle availability
+  const availMutation = useMutation({
+    mutationFn: (isAvailable: boolean) =>
+      apiClient.patch('/worker/availability', { isAvailable }).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['me'] }),
+  })
+
+  const wp          = meQuery.data?.workerProfile
+  const isAvailable = wp?.isAvailable ?? true
+  const activeTask  = activeQuery.data?.tasks?.[0] ?? acceptedQuery.data?.tasks?.[0]
+  const wallet      = walletQuery.data
+
+  const isRefreshing = meQuery.isFetching || activeQuery.isFetching
+
+  const onRefresh = () => {
+    meQuery.refetch()
+    activeQuery.refetch()
+    acceptedQuery.refetch()
+    walletQuery.refetch()
+  }
 
   return (
-    <View style={styles.container}>
-      {/* ── Header ── */}
-      <LinearGradient
-        colors={[COLORS.brand.dark, COLORS.brand.primary]}
-        style={styles.header}
-      >
-        <Text style={styles.greeting}>Hi {firstName} 👋</Text>
-        <Text style={styles.subtitle}>Ready to earn today?</Text>
-
-        {walletLoading ? (
-          <ActivityIndicator color="#fff" style={{ marginTop: 16 }} />
-        ) : (
-          <View style={styles.earningsRow}>
-            <EarningPill
-              label="Available"
-              value={formatMoney(wallet?.availableCents ?? 0, 'INR')}
-            />
-            <EarningPill
-              label="Pending"
-              value={formatMoney(wallet?.pendingCents ?? 0, 'INR')}
-            />
-            <EarningPill
-              label="Total Earned"
-              value={formatMoney(wallet?.totalEarnedCents ?? 0, 'INR')}
-            />
-          </View>
-        )}
-      </LinearGradient>
-
+    <ScreenWrapper>
       <ScrollView
-        style={styles.body}
-        contentContainerStyle={styles.bodyContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={COLORS.brand.primary} />
+        }
       >
-        {/* ── Active Task Card ── */}
-        {activeTask && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Active Task</Text>
-            <TouchableOpacity
-              style={styles.activeTaskCard}
-              onPress={() => navigation.navigate('ActiveTask', { taskId: activeTask.id })}
-              activeOpacity={0.85}
-            >
-              <View style={styles.activeTaskLeft}>
-                <View style={[
-                  styles.statusDot,
-                  { backgroundColor: activeTask.status === 'IN_PROGRESS' ? COLORS.status.success : COLORS.status.warning },
-                ]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.activeTaskTitle} numberOfLines={1}>{activeTask.title}</Text>
-                  <Text style={styles.activeTaskStatus}>
-                    {activeTask.status === 'IN_PROGRESS' ? 'In Progress' : 'Accepted — tap to start'}
-                  </Text>
-                </View>
-              </View>
-              <ChevronRight size={20} color={COLORS.neutral[400]} />
-            </TouchableOpacity>
+        {/* ── Gradient header ── */}
+        <LinearGradient colors={[COLORS.brand.primary, COLORS.brand.dark]} style={s.header}>
+          <View style={s.headerTop}>
+            <View>
+              <Text style={s.greeting}>Good morning, {user?.name?.split(' ')[0]} 👋</Text>
+              <Text style={s.headerSub}>Ready to clean today?</Text>
+            </View>
+            {/* Online / Busy toggle */}
+            <View style={s.toggleBox}>
+              <Text style={s.toggleLabel}>{isAvailable ? 'Online' : 'Busy'}</Text>
+              <Switch
+                value={isAvailable}
+                onValueChange={(val) => availMutation.mutate(val)}
+                trackColor={{ false: COLORS.neutral[400], true: '#86EFAC' }}
+                thumbColor={isAvailable ? '#16A34A' : '#fff'}
+                disabled={availMutation.isPending}
+              />
+            </View>
           </View>
+
+          {/* Earnings row */}
+          <View style={s.earningsRow}>
+            <View style={s.earningItem}>
+              <Text style={s.earningVal}>
+                {wallet ? formatMoney(wallet.availableCents) : '—'}
+              </Text>
+              <Text style={s.earningLbl}>Available</Text>
+            </View>
+            <View style={s.earningDivider} />
+            <View style={s.earningItem}>
+              <Text style={s.earningVal}>
+                {wallet ? formatMoney(wallet.pendingCents) : '—'}
+              </Text>
+              <Text style={s.earningLbl}>Pending</Text>
+            </View>
+            <View style={s.earningDivider} />
+            <View style={s.earningItem}>
+              <Text style={s.earningVal}>{wp?.completedTasks ?? 0}</Text>
+              <Text style={s.earningLbl}>Completed</Text>
+            </View>
+          </View>
+        </LinearGradient>
+
+        {/* ── Active task card ── */}
+        {activeTask && (
+          <TouchableOpacity
+            style={s.activeCard}
+            onPress={() => navigation.navigate('ActiveTask', { taskId: activeTask.id })}
+            activeOpacity={0.85}
+          >
+            <View style={s.activeCardHeader}>
+              <View style={[s.activeDot, { backgroundColor: activeTask.status === 'IN_PROGRESS' ? COLORS.brand.primary : '#D97706' }]} />
+              <Text style={s.activeCardLabel}>
+                {activeTask.status === 'IN_PROGRESS' ? 'ACTIVE TASK' : 'ACCEPTED — Tap to start'}
+              </Text>
+            </View>
+            <Text style={s.activeCardTitle} numberOfLines={1}>{activeTask.title}</Text>
+            <View style={s.activeCardMeta}>
+              <Text style={s.activeCardPrice}>{formatMoney(activeTask.rateCents)}</Text>
+              <StatusBadge status={activeTask.status} small />
+            </View>
+          </TouchableOpacity>
         )}
 
-        {/* ── Stats ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Stats</Text>
-          <View style={styles.statsRow}>
-            <StatCard
-              icon={<CheckCircle size={22} color={COLORS.brand.primary} />}
-              value={String(wallet?.completedTasksCount ?? 0)}
-              label="Completed"
-            />
-            <StatCard
-              icon={<MapPin size={22} color={COLORS.status.info} />}
-              value={activeTask ? '1' : '0'}
-              label="Active"
-            />
-            <StatCard
-              icon={<Star size={22} color={COLORS.status.warning} />}
-              value="—"
-              label="Rating"
-            />
-          </View>
+        {/* ── Quick stats ── */}
+        <View style={s.statsRow}>
+          <StatCard
+            icon={<Star size={20} color="#F59E0B" />}
+            label="Rating"
+            value={wp?.rating ? wp.rating.toFixed(1) : '—'}
+          />
+          <StatCard
+            icon={<CheckCircle size={20} color={COLORS.brand.primary} />}
+            label="Done"
+            value={String(wp?.completedTasks ?? 0)}
+          />
+          <StatCard
+            icon={<Wallet size={20} color="#8B5CF6" />}
+            label="Earned"
+            value={wallet ? `₹${Math.floor(wallet.totalEarnedCents / 100)}` : '—'}
+          />
         </View>
 
-        {/* ── CTA ── */}
+        {/* ── Find Work CTA ── */}
         <TouchableOpacity
-          style={styles.findWorkBtn}
-          onPress={() => navigation.navigate('WorkerTabs', { screen: 'FindWork' } as never)}
+          style={s.findWorkBtn}
+          onPress={() => navigation.navigate('WorkerTabs' as any)}
           activeOpacity={0.85}
         >
-          <Search size={20} color="#fff" style={{ marginRight: 8 }} />
-          <Text style={styles.findWorkBtnText}>Find Work Near Me</Text>
+          <MapPin size={20} color="#fff" />
+          <Text style={s.findWorkText}>Find Work Near Me</Text>
         </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+    </ScreenWrapper>
   )
 }
 
-function EarningPill({ label, value }: { label: string; value: string }) {
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <View style={styles.pill}>
-      <Text style={styles.pillValue}>{value}</Text>
-      <Text style={styles.pillLabel}>{label}</Text>
-    </View>
-  )
-}
-
-function StatCard({ icon, value, label }: { icon: React.ReactNode; value: string; label: string }) {
-  return (
-    <View style={styles.statCard}>
+    <View style={s.statCard}>
       {icon}
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={s.statVal}>{value}</Text>
+      <Text style={s.statLbl}>{label}</Text>
     </View>
   )
 }
 
-const styles = StyleSheet.create({
-  container:       { flex: 1, backgroundColor: COLORS.background },
-  header:          { paddingTop: 56, paddingBottom: 28, paddingHorizontal: 24 },
-  greeting:        { fontSize: 26, fontWeight: '700', color: '#fff' },
-  subtitle:        { fontSize: 14, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
-  earningsRow:     { flexDirection: 'row', marginTop: 20, gap: 8 },
-  pill:            { flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, padding: 12, alignItems: 'center' },
-  pillValue:       { fontSize: 15, fontWeight: '700', color: '#fff' },
-  pillLabel:       { fontSize: 10, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
-  body:            { flex: 1 },
-  bodyContent:     { padding: 20, paddingBottom: 40 },
-  section:         { marginBottom: 24 },
-  sectionTitle:    { fontSize: 16, fontWeight: '700', color: COLORS.neutral[900], marginBottom: 12 },
-  activeTaskCard:  {
-    backgroundColor: COLORS.surface,
-    borderRadius: 14,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  activeTaskLeft:  { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  statusDot:       { width: 10, height: 10, borderRadius: 5 },
-  activeTaskTitle: { fontSize: 15, fontWeight: '600', color: COLORS.neutral[900] },
-  activeTaskStatus:{ fontSize: 12, color: COLORS.neutral[500], marginTop: 2 },
-  statsRow:        { flexDirection: 'row', gap: 12 },
-  statCard:        {
-    flex: 1,
-    backgroundColor: COLORS.surface,
-    borderRadius: 14,
-    padding: 16,
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  statValue:       { fontSize: 20, fontWeight: '700', color: COLORS.neutral[900] },
-  statLabel:       { fontSize: 11, color: COLORS.neutral[500] },
-  findWorkBtn:     {
-    backgroundColor: COLORS.brand.primary,
-    borderRadius: 14,
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  findWorkBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+const s = StyleSheet.create({
+  header:        { paddingTop: 56, paddingBottom: 24, paddingHorizontal: 20 },
+  headerTop:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  greeting:      { fontSize: 20, fontWeight: '700', color: '#fff' },
+  headerSub:     { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  toggleBox:     { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
+  toggleLabel:   { fontSize: 13, fontWeight: '700', color: '#fff' },
+  earningsRow:   { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 14, padding: 16 },
+  earningItem:   { flex: 1, alignItems: 'center' },
+  earningVal:    { fontSize: 17, fontWeight: '800', color: '#fff' },
+  earningLbl:    { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  earningDivider:{ width: 1, backgroundColor: 'rgba(255,255,255,0.2)', marginHorizontal: 8 },
+  activeCard:    { margin: 16, backgroundColor: COLORS.surface, borderRadius: 16, padding: 16, borderWidth: 2, borderColor: COLORS.brand.primary, elevation: 3, shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8 },
+  activeCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  activeDot:     { width: 8, height: 8, borderRadius: 4 },
+  activeCardLabel:{ fontSize: 11, fontWeight: '700', color: COLORS.neutral[500], letterSpacing: 0.5 },
+  activeCardTitle:{ fontSize: 16, fontWeight: '700', color: COLORS.neutral[900], marginBottom: 8 },
+  activeCardMeta:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  activeCardPrice:{ fontSize: 18, fontWeight: '800', color: COLORS.brand.primary },
+  statsRow:      { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginBottom: 16 },
+  statCard:      { flex: 1, backgroundColor: COLORS.surface, borderRadius: 14, padding: 14, alignItems: 'center', gap: 4, borderWidth: 1, borderColor: COLORS.border },
+  statVal:       { fontSize: 17, fontWeight: '800', color: COLORS.neutral[900] },
+  statLbl:       { fontSize: 11, color: COLORS.neutral[500] },
+  findWorkBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: COLORS.brand.primary, borderRadius: 14, paddingVertical: 16, marginHorizontal: 16 },
+  findWorkText:  { fontSize: 16, fontWeight: '700', color: '#fff' },
 })

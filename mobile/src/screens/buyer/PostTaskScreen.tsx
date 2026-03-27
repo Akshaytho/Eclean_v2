@@ -209,8 +209,16 @@ export function PostTaskScreen() {
                   <Text style={[s.optionText, form.dirtyLevel === level && { color: DIRTY_LEVELS[level].color }]}>
                     {DIRTY_LEVELS[level].label}
                   </Text>
+                  <Text style={[s.optionPrice, form.dirtyLevel === level && { color: DIRTY_LEVELS[level].color }]}>
+                    ₹{DIRTY_LEVELS[level].priceCents / 100}
+                  </Text>
                 </TouchableOpacity>
               ))}
+            </View>
+            {/* Live pricing preview */}
+            <View style={s.pricingPreview}>
+              <Text style={s.pricingLabel}>Estimated cost:</Text>
+              <Text style={s.pricingValue}>₹{DIRTY_LEVELS[form.dirtyLevel]?.priceCents / 100}</Text>
             </View>
 
             <Text style={s.fieldLabel}>Urgency</Text>
@@ -274,6 +282,8 @@ export function PostTaskScreen() {
               <SummaryRow label="Condition" value={DIRTY_LEVELS[form.dirtyLevel]?.label + ' dirty'} />
               <SummaryRow label="Urgency"   value={form.urgency} />
               {form.address ? <SummaryRow label="Location" value={form.address} /> : null}
+              <SummaryRow label="Work Window" value="07:00 – 11:30 AM" />
+              <SummaryRow label="Upload By"   value="12:00 PM" />
               <View style={s.divider} />
               <View style={s.priceRow}>
                 <Text style={s.priceLabel}>You pay</Text>
@@ -351,7 +361,11 @@ const s = StyleSheet.create({
   optionChipActive: { borderColor: COLORS.brand.primary, backgroundColor: COLORS.brand.tint },
   optionText: { fontSize: 13, fontWeight: '600', color: COLORS.neutral[600] },
   optionTextActive: { color: COLORS.brand.primary },
-  hint:     { fontSize: 12, color: COLORS.neutral[400], marginTop: 8 },
+  hint:         { fontSize: 12, color: COLORS.neutral[400], marginTop: 8 },
+  optionPrice:  { fontSize: 11, fontWeight: '700', marginTop: 2 },
+  pricingPreview:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.brand.tint, borderRadius: 10, padding: 12, marginTop: 10 },
+  pricingLabel: { fontSize: 13, color: COLORS.brand.primary, fontWeight: '600' },
+  pricingValue: { fontSize: 20, fontWeight: '800', color: COLORS.brand.primary },
   gpsBtn:   { backgroundColor: COLORS.brand.tint, borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.brand.primary, marginBottom: 16 },
   gpsBtnText:{ fontSize: 15, fontWeight: '700', color: COLORS.brand.primary },
   gpsConfirm:{ fontSize: 12, color: '#16A34A', fontWeight: '600', marginTop: 6 },

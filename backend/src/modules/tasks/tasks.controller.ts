@@ -159,3 +159,12 @@ export async function getChatHistory(req: FastifyRequest, reply: FastifyReply): 
 
   void reply.send({ messages: ordered, nextCursor })
 }
+
+export async function updateAvailability(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const { isAvailable } = req.body as { isAvailable: boolean }
+  await prisma.workerProfile.update({
+    where: { userId: req.user.id },
+    data:  { isAvailable },
+  })
+  void reply.send({ isAvailable })
+}

@@ -12,6 +12,7 @@ import { ScreenWrapper }  from '../../components/layout/ScreenWrapper'
 import { StatusBadge }    from '../../components/ui/Badge'
 import { COLORS }         from '../../constants/colors'
 import { buyerTasksApi }  from '../../api/tasks.api'
+import { authApi }         from '../../api/auth.api'
 import { useAuthStore }   from '../../stores/authStore'
 import { formatMoney }    from '../../utils/formatMoney'
 import { timeAgo }        from '../../utils/timeAgo'
@@ -28,6 +29,13 @@ export function BuyerHomeScreen() {
     queryFn:  () => buyerTasksApi.listTasks({ status: 'OPEN,ACCEPTED,IN_PROGRESS,SUBMITTED,VERIFIED', page: 1, limit: 5 }),
     staleTime: 15_000,
   })
+
+  const meQuery = useQuery({
+    queryKey: ['me'],
+    queryFn:  authApi.me,
+    staleTime: 60_000,
+  })
+  const totalSpent = meQuery.data?.buyerProfile?.totalSpentCents ?? 0
 
   const tasks  = activeQuery.data?.tasks ?? []
   const active = tasks.filter(t => ['ACCEPTED', 'IN_PROGRESS'].includes(t.status))
@@ -59,7 +67,7 @@ export function BuyerHomeScreen() {
         <View style={s.statsRow}>
           <StatCard label="Active"  value={active.length}  color={COLORS.brand.primary} />
           <StatCard label="Review"  value={pending.length} color="#D97706" />
-          <StatCard label="Total"   value={activeQuery.data?.total ?? 0} color={COLORS.neutral[500]} />
+          <StatCard label="Spent"   value={totalSpent} color="#8B5CF6" isRupees />
         </View>
 
         {/* Active tasks */}
@@ -106,10 +114,10 @@ export function BuyerHomeScreen() {
   )
 }
 
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+function StatCard({ label, value, color, isRupees }: { label: string; value: number; color: string; isRupees?: boolean }) {
   return (
     <View style={s.statCard}>
-      <Text style={[s.statValue, { color }]}>{value}</Text>
+      <Text style={[s.statValue, { color }]}>{isRupees ? `₹${Math.floor(value/100)}` : value}</Text>
       <Text style={s.statLabel}>{label}</Text>
     </View>
   )

@@ -1,13 +1,15 @@
 import React from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bell, CheckCheck } from 'lucide-react-native'
+import { Bell, CheckCheck, ChevronRight } from 'lucide-react-native'
+import { useNavigation } from '@react-navigation/native'
 import { ScreenWrapper }       from '../../components/layout/ScreenWrapper'
 import { COLORS }              from '../../constants/colors'
 import { notificationsApi }    from '../../api/notifications.api'
 import { timeAgo }             from '../../utils/timeAgo'
 
 export function NotificationsScreen() {
+  const navigation = useNavigation()
   const qc = useQueryClient()
 
   const query = useQuery({
@@ -59,7 +61,15 @@ export function NotificationsScreen() {
             renderItem={({ item: n }) => (
               <TouchableOpacity
                 style={[s.item, !n.isRead && s.itemUnread]}
-                onPress={() => { if (!n.isRead) markOneMutation.mutate(n.id) }}
+                onPress={() => {
+                  if (!n.isRead) markOneMutation.mutate(n.id)
+                  // Navigate to relevant screen based on notification data
+                  const taskId = (n.data as any)?.taskId
+                  if (taskId) {
+                    try { (navigation as any).navigate('BuyerTaskDetail', { taskId }) } catch {}
+                    try { (navigation as any).navigate('ActiveTask', { taskId }) } catch {}
+                  }
+                }}
                 activeOpacity={0.8}
               >
                 {!n.isRead && <View style={s.unreadDot} />}

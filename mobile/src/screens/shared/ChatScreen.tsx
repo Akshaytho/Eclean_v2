@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TextInput,
   TouchableOpacity, KeyboardAvoidingView, Platform,
 } from 'react-native'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import { useRoute } from '@react-navigation/native'
 import { ChevronLeft, Send } from 'lucide-react-native'
@@ -10,6 +11,7 @@ import { COLORS }         from '../../constants/colors'
 import { useSocketStore } from '../../stores/socketStore'
 import { useAuthStore }   from '../../stores/authStore'
 import type { ChatMessage } from '../../types'
+import { apiClient }       from '../../api/client'
 
 export function ChatScreen() {
   const navigation = useNavigation()
@@ -20,6 +22,30 @@ export function ChatScreen() {
   const { user }                          = useAuthStore()
   const { socket, emit, joinTask, leaveTask } = useSocketStore()
   const [messages, setMessages] = useState<ChatMessage[]>([])
+
+  // Load chat history on mount
+  // Backend: GET /buyer/tasks/:taskId/chat or /worker/tasks/:taskId/chat
+  const historyQuery = useQuery({
+    queryKey: ['chat-history', taskId],
+    queryFn:  async () => {
+      // Try buyer route first, fallback to worker route
+      try {
+        const r = await apiClient.get(`/buyer/tasks/${taskId}/chat`, { params: { limit: 50 } })
+        return r.data.messages ?? []
+      } catch {
+        const r = await apiClient.get(`/worker/tasks/${taskId}/chat`, { params: { limit: 50 } })
+        return r.data.messages ?? []
+      }
+    },
+    staleTime: Infinity,
+  })
+
+  useEffect(() => {
+    if (historyQuery.data && historyQuery.data.length > 0) {
+      setMessages(historyQuery.data)
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 100)
+    }
+  }, [historyQuery.data])
   const [text,     setText]     = useState('')
   const listRef = useRef<FlatList>(null)
 

@@ -86,6 +86,13 @@ export async function workerRoutes(fastify: FastifyInstance): Promise<void> {
     ctrl.updateLocation,
   )
 
+
+  // PATCH /api/v1/worker/availability — toggle online/busy status
+  fastify.patch(
+    '/availability',
+    { preHandler: auth },
+    ctrl.updateAvailability,
+  )
   // GET /api/v1/worker/tasks/:taskId/chat
   fastify.get(
     '/tasks/:taskId/chat',

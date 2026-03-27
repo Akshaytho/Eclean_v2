@@ -27,11 +27,32 @@ export type TaskUrgency = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL'
 export type MediaType   = 'BEFORE' | 'AFTER' | 'PROOF' | 'REFERENCE'
 export type PayoutStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
 
+export interface WorkerProfile {
+  id:               string
+  userId:           string
+  activeTaskId:     string | null
+  skills:           string[]
+  rating:           number
+  completedTasks:   number
+  isAvailable:      boolean
+  identityVerified: boolean
+}
+
+export interface BuyerProfile {
+  id:               string
+  userId:           string
+  companyName:      string | null
+  totalTasksPosted: number
+  totalSpentCents:  number
+}
+
 export interface User {
-  id:    string
-  email: string
-  name:  string
-  role:  Role
+  id:             string
+  email:          string
+  name:           string
+  role:           Role
+  workerProfile?: WorkerProfile | null
+  buyerProfile?:  BuyerProfile  | null
 }
 
 export interface AuthTokens {

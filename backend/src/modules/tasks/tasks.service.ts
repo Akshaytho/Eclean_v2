@@ -118,7 +118,7 @@ export async function listBuyerTasks(buyerId: string, query: ListTasksQuery) {
       orderBy: { createdAt: 'desc' },
       skip:    (query.page - 1) * query.limit,
       take:    query.limit,
-      include: { worker: { select: { id: true, name: true, email: true } } },
+      include: { worker: { select: { id: true, name: true, email: true } }, buyer: { select: { id: true, name: true } } },
     }),
     prisma.task.count({ where }),
   ])
@@ -338,7 +338,7 @@ export async function getOpenTasks(query: OpenTasksQuery) {
 export async function getWorkerTask(workerId: string, taskId: string) {
   const task = await prisma.task.findUnique({
     where:   { id: taskId },
-    include: { media: true, locationLogs: true, events: true },
+    include: { media: true, locationLogs: true, events: true, buyer: { select: { id: true, name: true } } },
   })
   if (!task) throw new NotFoundError('Task not found')
   // Worker can view open tasks or their own tasks
