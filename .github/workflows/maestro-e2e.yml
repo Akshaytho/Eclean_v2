@@ -122,8 +122,8 @@ jobs:
           # Find and copy APK
           APK=$(find . -name "*.apk" -path "*/debug/*" | head -1)
           echo "APK found: $APK"
-          cp "$APK" ../../eclean.apk
-          ls -lh ../../eclean.apk
+          cp "$APK" ../eclean.apk
+          ls -lh ../eclean.apk
 
       - name: Upload APK artifact (download from Actions tab → install on phone)
         uses: actions/upload-artifact@v4
