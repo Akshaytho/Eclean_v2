@@ -110,9 +110,13 @@ jobs:
 
       - name: Generate android/ with expo prebuild
         working-directory: mobile
-        env:
-          NODE_ENV: production
-        run: npx expo prebuild --platform android --clean
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Verify native module linking
+        working-directory: mobile
+        run: |
+          echo "=== Autolinking resolution ==="
+          node -e "const { findModulesAsync } = require('./node_modules/expo-modules-autolinking/build/autolinking'); const path = require('path'); findModulesAsync({ platform: 'android', searchPaths: [path.resolve('./node_modules')] }).then(mods => { console.log('Modules:', Object.keys(mods).join(', ')); }).catch(e => console.error(e.message));" 2>&1
 
       - name: Show build.gradle (debug what was generated)
         working-directory: mobile/android/app
