@@ -267,3 +267,16 @@ native modules from expo prebuild are properly linked.
 Gradle cache (dependencies only) is kept — that still saves ~2-3 mins.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23668945753
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 22:39 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `9883db2` — fix: remove NODE_ENV=production from prebuild + add --no-install
+
+NODE_ENV=production was causing expo prebuild to skip dev dependencies
+during its internal npm install, preventing expo-linear-gradient and
+other modules from being found by autolinking.
+
+Using --no-install since npm install already ran in a dedicated step.
+Added verify step to confirm all 19 modules are linked before build.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23669826138
+- **Status:** Unresolved — add fix description when fixed
