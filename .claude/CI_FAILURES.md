@@ -254,3 +254,16 @@ ExponentImagePicker native module was never present in the APK.
 v2 forces a clean rebuild that correctly includes all native modules.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23668156538
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 22:11 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `efabcef` — fix: remove Android build cache — causes stale native module linking
+
+Caching .cxx compiled output causes Expo native modules like
+ExpoLinearGradient and ExponentImagePicker to be missing from
+the final APK. Every build must compile fresh to ensure all
+native modules from expo prebuild are properly linked.
+
+Gradle cache (dependencies only) is kept — that still saves ~2-3 mins.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23668945753
+- **Status:** Unresolved — add fix description when fixed
