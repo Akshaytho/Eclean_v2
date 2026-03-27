@@ -91,3 +91,13 @@ react-native-maps codegen was SKIPPED causing 'cannot find symbol' errors.
 1.14.0 is compatible with RN 0.76.x without codegen issues.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23654848923
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 16:20 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `9f13801` — fix: resolve all CI build issues from Maestro E2E log
+
+- bump react-native-svg 15.8.0 → 15.15.4 (fixes yoga::StyleSizeLength C++ error on RN 0.76)
+- fix react-dom 19.0.0 → 18.3.1 (align with react 18.3.1 peer dep)
+- add NODE_ENV=production to expo prebuild step (fixes expo-constants warning)
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23655793799
+- **Status:** Unresolved — add fix description when fixed
