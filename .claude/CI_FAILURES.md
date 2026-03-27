@@ -143,3 +143,14 @@ with code 1 if any fail, while still running all flows first.
 - **Commit:** `13deb29` — revert: remove docs/ folder — CI Cinema needs a backend for AI, static HTML not useful
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23661695557
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 19:28 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `0f32671` — fix: resolve all Maestro flow failures
+
+1. Remove timeout: property from all 10 flow files (not supported by Maestro)
+2. Replace inline script with .github/scripts/run-maestro.sh — emulator-runner
+   runs each script line as separate subprocess so if/fi and variables break
+3. Fix upload path from absolute github.workspace to relative maestro-results/
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23663059551
+- **Status:** Unresolved — add fix description when fixed
