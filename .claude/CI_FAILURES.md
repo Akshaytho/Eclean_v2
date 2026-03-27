@@ -154,3 +154,14 @@ with code 1 if any fail, while still running all flows first.
 3. Fix upload path from absolute github.workspace to relative maestro-results/
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23663059551
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 19:55 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `1f593d1` — fix: add extendedWaitUntil 30s to Maestro flows + increase post-install sleep
+
+All 4 flows were failing with 'Sign In not visible' because Maestro was
+asserting immediately after launchApp — JS bundle takes 10-15s to load
+on cold emulator. Added extendedWaitUntil timeout:30000 and increased
+post-install sleep from 5s to 15s.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23664065499
+- **Status:** Unresolved — add fix description when fixed
