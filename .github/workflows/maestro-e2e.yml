@@ -151,8 +151,8 @@ jobs:
             --assets-dest android/app/src/main/res
           cd android
 
-          ./gradlew assembleDebug --no-daemon --warning-mode=none 2>&1 | grep -E "FAILED|error:|Error:|Exception|BUILD" | head -30
-          ./gradlew assembleDebug --no-daemon --warning-mode=none
+          ./gradlew assembleDebug --no-daemon --no-build-cache --warning-mode=none 2>&1 | grep -E "FAILED|error:|Error:|Exception|BUILD" | head -30
+          ./gradlew assembleDebug --no-daemon --no-build-cache --warning-mode=none
 
           APK=$(find . -name "*.apk" -path "*/debug/*" | head -1)
           echo "APK found: $APK"
