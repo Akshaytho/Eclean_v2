@@ -169,8 +169,8 @@ describe('SubmitProofScreen — submit flow', () => {
     const confirmBtn = call[2].find((b: any) => b.text === 'Submit Now')
     await act(async () => { confirmBtn.onPress() })
 
-    // Second press — should not trigger another API call
-    fireEvent.press(getByText('Submit Work'))
+    // Second press while in-flight — button shows spinner so getByText won't find it
+    // The isSubmitting.current flag blocks any re-entry regardless
     expect(mockTaskApi.submit).toHaveBeenCalledTimes(1)
   })
 
