@@ -111,3 +111,13 @@ had 15.8.0 pinned despite package.json bump. Regenerated with
 --package-lock-only to resolve the StyleSizeLength C++ build error.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23656353695
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 16:56 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `fe49ca9` — fix: patch react-native-svg StyleSizeLength in CI (not fixed upstream even in 15.15.4)
+
+react-native-svg still uses yoga::StyleSizeLength in all versions including
+15.15.4. RN 0.76 renamed it to yoga::StyleLength. Since upstream hasn't
+patched it, we sed-patch the file after npm install before the build.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23656942708
+- **Status:** Unresolved — add fix description when fixed
