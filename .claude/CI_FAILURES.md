@@ -165,3 +165,21 @@ on cold emulator. Added extendedWaitUntil timeout:30000 and increased
 post-install sleep from 5s to 15s.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23664065499
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 20:05 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `4cf3c06` — fix: add Gradle/npm caching + fix Maestro flow timeouts
+
+Caching changes:
+- Cache node_modules (saves ~20s npm install)
+- Cache Gradle deps (saves ~3-4min on subsequent builds)
+- Cache Android .cxx build output (saves ~8min NDK compilation)
+
+Expected build time: 25min first run → 3-5min after cache warms up
+
+Maestro fixes:
+- Add extendedWaitUntil 30s after launchApp in all 4 flows
+- Increase post-install sleep to 15s for emulator cold start
+- These fix: Assertion failed Sign In not visible within 20s
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23664390268
+- **Status:** Unresolved — add fix description when fixed
