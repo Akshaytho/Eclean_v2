@@ -71,14 +71,9 @@ jobs:
           key: gradle-${{ hashFiles('mobile/android/**/*.gradle*') }}
           restore-keys: gradle-
 
-      - name: Cache Android build
-        uses: actions/cache@v4
-        with:
-          path: |
-            mobile/android/app/build
-            mobile/android/app/.cxx
-          key: android-build-v2-${{ hashFiles('mobile/android/**', 'mobile/package-lock.json', 'mobile/app.json') }}
-          restore-keys: android-build-v2-
+      # Note: Android build cache intentionally disabled
+      # Caching .cxx causes stale native module linking (missing ExpoLinearGradient, ExponentImagePicker etc)
+      # Each build must compile fresh to ensure all native modules are properly linked
 
       - name: Install dependencies
         working-directory: mobile
