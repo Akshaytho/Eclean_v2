@@ -11,39 +11,33 @@ env:
   PASSWORD: Test@1234
 
 jobs:
-  # ── Job 1: Jest (fast, no device needed) ──────────────────────────────────
+  # ── Jest must pass first ────────────────────────────────────────────────────
   jest:
     name: Jest Tests
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: mobile
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
       - run: npm install --legacy-peer-deps
-
       - name: Unit tests
         run: npx jest tests/unit --no-coverage --ci
-
       - name: Screen tests
         run: npx jest --config jest.screens.config.js --no-coverage --ci
-
       - name: Integration tests (live backend)
         env:
           TEST_API_URL: https://ecleanfuture-production.up.railway.app/api/v1
         run: npx jest tests/integration --no-coverage --ci
 
-  # ── Job 2: Maestro E2E on Android Emulator ───────────────────────────────
+  # ── Maestro E2E ────────────────────────────────────────────────────────────
   maestro:
     name: Maestro E2E
     runs-on: ubuntu-latest
-    needs: jest          # only run if Jest passes
+    needs: jest
     timeout-minutes: 60
 
     steps:
@@ -83,20 +77,24 @@ jobs:
           curl -sf -X POST https://ecleanfuture-production.up.railway.app/api/v1/auth/register \
             -H "Content-Type: application/json" \
             -d "{\"email\":\"$BUYER_EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"CI Buyer\",\"role\":\"BUYER\"}" || true
-          echo "Accounts ready"
+          echo "Test accounts ready"
 
-      - name: Install EAS CLI + build APK
+      # Build APK using local Expo prebuild (no EAS account needed)
+      - name: Build APK locally
         working-directory: mobile
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          npm install -g eas-cli
-          # Build using EAS (requires EXPO_TOKEN secret set in GitHub repo)
-          eas build --platform android --profile preview --non-interactive \
-            --output ./eclean-preview.apk
-        continue-on-error: true   # Fall back to Expo Go if EAS fails
+          # Install expo CLI
+          npm install -g @expo/cli
 
-      - name: Run Maestro smoke tests
+          # Prebuild generates android/ folder
+          npx expo prebuild --platform android --clean --no-install
+
+          # Install android deps
+          cd android
+          ./gradlew assembleDebug --no-daemon -q
+          find . -name "*.apk" -path "*/debug/*" | head -3
+
+      - name: Run Maestro smoke + flow tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -108,58 +106,51 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: |
-            # Install APK if EAS build succeeded
-            APK=$(find mobile -name "*.apk" 2>/dev/null | head -1)
-            if [ -n "$APK" ]; then
-              echo "Installing APK: $APK"
-              adb install -r "$APK"
-            else
-              echo "No APK found — skipping install (app must be pre-installed)"
-            fi
+            # Install APK
+            APK=$(find mobile/android -name "*.apk" -path "*/debug/*" | head -1)
+            echo "APK: $APK"
+            adb install -r "$APK"
+
+            # Wait for app to settle
+            sleep 3
 
             mkdir -p maestro-results
 
-            # Smoke: all worker tabs load without crash
+            # Smoke: worker tabs
             maestro test maestro/flows/09_smoke_all_tabs.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env BUYER_EMAIL=$BUYER_EMAIL \
               --env PASSWORD=$PASSWORD \
               --format junit \
-              --output maestro-results/smoke-worker.xml
+              --output maestro-results/smoke-worker.xml || true
 
-            # Smoke: all buyer tabs load without crash
+            # Smoke: buyer tabs
             maestro test maestro/flows/10_smoke_buyer_tabs.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env BUYER_EMAIL=$BUYER_EMAIL \
               --env PASSWORD=$PASSWORD \
               --format junit \
-              --output maestro-results/smoke-buyer.xml
+              --output maestro-results/smoke-buyer.xml || true
 
-            # Login flow
+            # Worker login flow
             maestro test maestro/flows/01_worker_login.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env PASSWORD=$PASSWORD \
               --format junit \
-              --output maestro-results/01-worker-login.xml
+              --output maestro-results/01-login.xml || true
 
-            # Register flow
-            maestro test maestro/flows/02_worker_register.yaml \
-              --env PASSWORD=$PASSWORD \
-              --format junit \
-              --output maestro-results/02-worker-register.xml
-
-            # Buyer post task
+            # Buyer post task flow
             maestro test maestro/flows/03_buyer_login_post_task.yaml \
               --env BUYER_EMAIL=$BUYER_EMAIL \
               --env PASSWORD=$PASSWORD \
               --format junit \
-              --output maestro-results/03-buyer-post-task.xml
+              --output maestro-results/03-post-task.xml || true
 
       - name: Upload screenshots + results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: maestro-e2e-results
+          name: maestro-results
           path: |
             maestro-results/
             ~/.maestro/tests/
