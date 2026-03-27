@@ -1,0 +1,62 @@
+# FLOW 3: Buyer Login → Post Task (4-step wizard)
+# Tests: buyer login → home screen → tap Post Task → complete wizard → task created
+
+appId: com.eclean.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Sign In"
+
+# Login as buyer
+- tapOn:
+    text: "Email"
+- inputText: "${BUYER_EMAIL}"
+- tapOn:
+    text: "Password"
+- inputText: "${PASSWORD}"
+- tapOn: "Sign In"
+
+# Buyer Home
+- assertVisible:
+    text: "Post New Task"
+    timeout: 5000
+
+# Start wizard
+- tapOn: "Post New Task"
+- assertVisible: "What needs cleaning?"
+
+# Step 1: Category
+- tapOn: "Drain Cleaning"
+- tapOn: "Continue"
+
+# Step 2: Details
+- assertVisible: "Describe the task"
+- tapOn:
+    text: "Task Title"
+- inputText: "Test drain cleaning task"
+- tapOn:
+    text: "Description"
+- inputText: "Blocked storm drain near bus stop needs immediate attention"
+- tapOn: "Heavy"
+- tapOn: "High"
+- tapOn: "Continue"
+
+# Step 3: Location
+- assertVisible: "Where is it?"
+- tapOn:
+    text: "Address"
+- inputText: "MG Road, Hyderabad"
+- tapOn: "Continue"
+
+# Step 4: Confirm
+- assertVisible: "Review & Confirm"
+- assertVisible: "Test drain cleaning task"
+- assertVisible: "Post Task"
+- tapOn:
+    id: ".*Post Task.*"
+
+# Task posted alert
+- assertVisible:
+    text: "Task Posted"
+    timeout: 8000
+- takeScreenshot: "03_buyer_post_task_success"

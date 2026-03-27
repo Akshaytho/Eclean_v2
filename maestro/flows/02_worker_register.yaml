@@ -1,0 +1,35 @@
+# FLOW 2: New Worker Registration
+# Tests: register screen → pick Worker role → fill form → reach Worker Home
+
+appId: com.eclean.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Sign In"
+
+# Go to register
+- tapOn: "Register"
+- assertVisible: "Create Account"
+
+# Pick Worker role (default but verify)
+- tapOn: "Worker"
+
+# Fill form
+- tapOn:
+    text: "Full Name"
+- inputText: "Maestro Test Worker"
+- tapOn:
+    text: "Email"
+- inputText: "maestro-${timestamp}@eclean.test"
+- tapOn:
+    text: "Password"
+- inputText: "${PASSWORD}"
+
+# Submit
+- tapOn: "Create Account"
+
+# Should reach Worker Home
+- assertVisible:
+    text: "Good morning"
+    timeout: 5000
+- takeScreenshot: "02_worker_register_success"

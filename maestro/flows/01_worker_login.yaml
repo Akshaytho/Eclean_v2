@@ -1,0 +1,28 @@
+# FLOW 1: Worker Login
+# Tests: app launches → login screen visible → enter credentials → reach Worker Home
+
+appId: com.eclean.app
+---
+# App launches and shows login
+- launchApp:
+    clearState: true
+- assertVisible: "eClean"
+- assertVisible: "Sign In"
+
+# Fill credentials
+- tapOn:
+    text: "Email"
+- inputText: "${WORKER_EMAIL}"
+- tapOn:
+    text: "Password"
+- inputText: "${PASSWORD}"
+
+# Submit
+- tapOn:
+    text: "Sign In"
+
+# Worker Home should appear after login
+- assertVisible:
+    text: "Worker"
+    timeout: 5000
+- takeScreenshot: "01_worker_login_success"

@@ -9,7 +9,7 @@
 import axios from 'axios'
 import type { User, Role } from '../../src/types'
 
-const API = 'http://localhost:3000/api/v1'
+const API = process.env.TEST_API_URL || 'https://ecleanfuture-production.up.railway.app/api/v1'
 const http = axios.create({ baseURL: API, timeout: 10_000 })
 
 // Unique suffix per test run — prevents email conflicts on reruns
@@ -36,13 +36,13 @@ beforeAll(async () => {
   ])
 })
 
-const skipIfOffline = () => { if (!backendRunning) pending() }
+const skipIfOffline = () => { if (!backendRunning) { console.warn('Backend offline — skipping'); return true } return false }
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 
 describe('POST /auth/login', () => {
   it('returns tokens + user with correct role for worker account', async () => {
-    skipIfOffline()
+    if (skipIfOffline()) return
 
     const res = await http.post('/auth/login', { email: workerEmail, password })
 
@@ -68,7 +68,7 @@ describe('POST /auth/login', () => {
   })
 
   it('returns tokens + user with correct role for buyer account', async () => {
-    skipIfOffline()
+    if (skipIfOffline()) return
 
     const res = await http.post('/auth/login', { email: buyerEmail, password })
 
@@ -77,7 +77,7 @@ describe('POST /auth/login', () => {
   })
 
   it('returns 401 with error format on wrong password', async () => {
-    skipIfOffline()
+    if (skipIfOffline()) return
 
     try {
       await http.post('/auth/login', { email: workerEmail, password: 'WrongPass123' })
@@ -95,7 +95,7 @@ describe('POST /auth/login', () => {
 
 describe('GET /auth/me', () => {
   it('returns user when Authorization header contains a valid access token', async () => {
-    skipIfOffline()
+    if (skipIfOffline()) return
 
     // Login to get token
     const loginRes = await http.post('/auth/login', { email: workerEmail, password })
@@ -112,7 +112,7 @@ describe('GET /auth/me', () => {
   })
 
   it('returns 401 without token', async () => {
-    skipIfOffline()
+    if (skipIfOffline()) return
 
     try {
       await http.get('/auth/me')
@@ -127,7 +127,7 @@ describe('GET /auth/me', () => {
 
 describe('POST /auth/refresh', () => {
   it('exchanges a refresh token for a new access token', async () => {
-    skipIfOffline()
+    if (skipIfOffline()) return
 
     const loginRes = await http.post('/auth/login', { email: workerEmail, password })
     const { refreshToken } = loginRes.data

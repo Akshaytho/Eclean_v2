@@ -1,0 +1,43 @@
+# FLOW 10: Smoke Test — All Buyer Tabs Navigate Without Crash
+
+appId: com.eclean.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Sign In"
+
+- tapOn:
+    text: "Email"
+- inputText: "${BUYER_EMAIL}"
+- tapOn:
+    text: "Password"
+- inputText: "${PASSWORD}"
+- tapOn: "Sign In"
+
+# Home
+- assertVisible:
+    text: "Post New Task"
+    timeout: 5000
+- takeScreenshot: "10a_buyer_home"
+
+# Post Task tab
+- tapOn: "Post Task"
+- assertVisible: "What needs cleaning?"
+- takeScreenshot: "10b_post_task"
+
+# Back + My Tasks tab
+- tapOn:
+    id: ".*back.*|.*chevron.*"
+- tapOn: "My Tasks"
+- assertVisible: "Active"
+- takeScreenshot: "10c_buyer_tasks"
+
+# Alerts tab
+- tapOn: "Alerts"
+- assertVisible: "Notifications"
+- takeScreenshot: "10d_notifications"
+
+# Profile tab
+- tapOn: "Profile"
+- assertVisible: "Log Out"
+- takeScreenshot: "10e_buyer_profile"

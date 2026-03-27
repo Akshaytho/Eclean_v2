@@ -1,0 +1,75 @@
+# FLOW 5: Worker Active Task — Start, Upload Photos, Submit
+# Tests: accepted task → start → upload photos → review → submit
+# NOTE: Run after flow 04 (worker has accepted task)
+
+appId: com.eclean.app
+---
+- launchApp:
+    clearState: false
+- assertVisible: "Sign In"
+
+# Worker login
+- tapOn:
+    text: "Email"
+- inputText: "${WORKER_EMAIL}"
+- tapOn:
+    text: "Password"
+- inputText: "${PASSWORD}"
+- tapOn: "Sign In"
+
+# Active task banner should be on Home
+- assertVisible:
+    text: "ACTIVE TASK"
+    timeout: 5000
+
+# Tap banner → ActiveTask screen
+- tapOn: "ACTIVE TASK"
+- assertVisible: "Start Work"
+
+# Start the task
+- tapOn: "Start Work"
+- assertVisible:
+    text: "Before"
+    timeout: 5000
+
+# Upload Before photo (picks from library)
+- tapOn: "Before"
+- assertVisible: "Add Photo"
+- tapOn: "Photo Library"
+# Select first photo in library
+- tapOn:
+    index: 0
+    timeout: 3000
+
+# Upload After photo
+- tapOn: "After"
+- tapOn: "Photo Library"
+- tapOn:
+    index: 0
+    timeout: 3000
+
+# Upload Proof photo
+- tapOn: "Proof"
+- tapOn: "Photo Library"
+- tapOn:
+    index: 0
+    timeout: 3000
+
+# All 3 uploaded — submit button shows "Review & Submit"
+- assertVisible:
+    text: "Review & Submit"
+    timeout: 4000
+
+- tapOn: "Review & Submit"
+- assertVisible: "Submit Work"
+
+# Submit
+- tapOn: "Submit Work"
+- assertVisible: "Submit Work"
+- tapOn: "Submit Now"
+
+# Success
+- assertVisible:
+    text: "Submitted"
+    timeout: 10000
+- takeScreenshot: "05_worker_submit_task"

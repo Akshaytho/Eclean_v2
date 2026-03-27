@@ -1,0 +1,44 @@
+# FLOW 9: Smoke Test — All Worker Tabs Navigate Without Crash
+# Tests: every bottom tab renders without crashing
+
+appId: com.eclean.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Sign In"
+
+- tapOn:
+    text: "Email"
+- inputText: "${WORKER_EMAIL}"
+- tapOn:
+    text: "Password"
+- inputText: "${PASSWORD}"
+- tapOn: "Sign In"
+
+# Home tab
+- assertVisible:
+    text: "Good morning"
+    timeout: 5000
+- takeScreenshot: "09a_home_tab"
+
+# Find Work tab
+- tapOn: "Find Work"
+- assertVisible:
+    text: "tasks nearby"
+    timeout: 6000
+- takeScreenshot: "09b_find_work_tab"
+
+# My Tasks tab
+- tapOn: "My Tasks"
+- assertVisible: "Active"
+- takeScreenshot: "09c_my_tasks_tab"
+
+# Wallet tab
+- tapOn: "Wallet"
+- assertVisible: "Available Balance"
+- takeScreenshot: "09d_wallet_tab"
+
+# Profile tab
+- tapOn: "Profile"
+- assertVisible: "Log Out"
+- takeScreenshot: "09e_profile_tab"

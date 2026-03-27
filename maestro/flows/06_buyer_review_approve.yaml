@@ -1,0 +1,59 @@
+# FLOW 6: Buyer Reviews and Approves Work → Payment Released
+# Tests: buyer login → task shows SUBMITTED → view AI score → approve → payout
+
+appId: com.eclean.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Sign In"
+
+# Buyer login
+- tapOn:
+    text: "Email"
+- inputText: "${BUYER_EMAIL}"
+- tapOn:
+    text: "Password"
+- inputText: "${PASSWORD}"
+- tapOn: "Sign In"
+
+# Home shows task needing review
+- assertVisible:
+    text: "Needs your review"
+    timeout: 5000
+
+# Tap task card
+- tapOn: "Needs your review"
+
+# Task detail — submitted state
+- assertVisible:
+    text: "Submitted"
+    timeout: 4000
+
+# AI score card should show
+- assertVisible:
+    text: "AI Verification Score"
+
+# Approve
+- tapOn: "Approve & Pay"
+- assertVisible: "Approve Work?"
+- tapOn: "Approve & Pay"
+
+# Payment released confirmation
+- assertVisible:
+    text: "Approved"
+    timeout: 8000
+- takeScreenshot: "06_buyer_approve_task"
+
+# Rate the worker
+- tapOn: "Rate Worker"
+- assertVisible: "Rate the Worker"
+
+# Tap 5 stars
+- tapOn:
+    index: 4
+
+- tapOn: "Submit Rating"
+- assertVisible:
+    text: "Thanks"
+    timeout: 3000
+- takeScreenshot: "06b_buyer_rate_worker"

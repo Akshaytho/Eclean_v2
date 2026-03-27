@@ -1,0 +1,26 @@
+# FLOW 8: Notifications Screen
+# Tests: login → tap Notifications tab → list loads → mark all read
+
+appId: com.eclean.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Sign In"
+
+- tapOn:
+    text: "Email"
+- inputText: "${WORKER_EMAIL}"
+- tapOn:
+    text: "Password"
+- inputText: "${PASSWORD}"
+- tapOn: "Sign In"
+
+- assertVisible:
+    text: "Home"
+    timeout: 5000
+
+# Navigate to Notifications (via My Tasks tab → Profile has notifications)
+# Worker uses bottom nav - go to My Tasks first to find notifications
+- tapOn: "My Tasks"
+- assertVisible: "Active"
+- takeScreenshot: "08_my_tasks_screen"

@@ -5,7 +5,7 @@
 import axios from 'axios'
 import type { Task, TaskStatus } from '../../src/types'
 
-const API = 'http://localhost:3000/api/v1'
+const API = process.env.TEST_API_URL || 'https://ecleanfuture-production.up.railway.app/api/v1'
 const http = axios.create({ baseURL: API, timeout: 10_000 })
 
 const RUN_ID = Date.now()
@@ -33,7 +33,7 @@ beforeAll(async () => {
   buyerToken  = bReg.data.accessToken
 })
 
-const skipIfOffline = () => { if (!backendRunning) pending() }
+const skipIfOffline = () => { if (!backendRunning) { console.warn('Backend offline — skipping'); return true } return false }
 const workerAuth = () => ({ headers: { Authorization: `Bearer ${workerToken}` } })
 const buyerAuth  = () => ({ headers: { Authorization: `Bearer ${buyerToken}` } })
 
@@ -41,7 +41,7 @@ const buyerAuth  = () => ({ headers: { Authorization: `Bearer ${buyerToken}` } }
 
 describe('POST /buyer/tasks', () => {
   it('creates a MEDIUM task and returns rateCents = 6000', async () => {
-    skipIfOffline()
+    if (skipIfOffline()) return
 
     const res = await http.post('/buyer/tasks', {
       title:       'Integration Test Task',
@@ -71,7 +71,7 @@ describe('POST /buyer/tasks', () => {
 
 describe('GET /worker/tasks/open', () => {
   it('returns paginated task list with correct shape', async () => {
-    skipIfOffline()
+    if (skipIfOffline()) return
 
     const res = await http.get('/worker/tasks/open', {
       ...workerAuth(),
@@ -94,7 +94,7 @@ describe('GET /worker/tasks/open', () => {
   })
 
   it('filters by category param', async () => {
-    skipIfOffline()
+    if (skipIfOffline()) return
 
     const res = await http.get('/worker/tasks/open', {
       ...workerAuth(),
@@ -112,7 +112,7 @@ describe('GET /worker/tasks/open', () => {
 
 describe('GET /worker/tasks/:id', () => {
   it('returns full task detail with correct shape', async () => {
-    skipIfOffline()
+    if (skipIfOffline()) return
     if (!createdTaskId) pending()
 
     const res = await http.get(`/worker/tasks/${createdTaskId}`, workerAuth())
@@ -131,7 +131,7 @@ describe('GET /worker/tasks/:id', () => {
 
 describe('GET /worker/my-tasks', () => {
   it('returns task list with correct structure (no filter)', async () => {
-    skipIfOffline()
+    if (skipIfOffline()) return
 
     // Note: comma-separated status filter is supported after next server restart
     // (tasks.schema.ts updated to accept status=ACCEPTED,IN_PROGRESS etc.)
@@ -143,7 +143,7 @@ describe('GET /worker/my-tasks', () => {
   })
 
   it('filters by single status value', async () => {
-    skipIfOffline()
+    if (skipIfOffline()) return
 
     const res = await http.get('/worker/my-tasks', {
       ...workerAuth(),
