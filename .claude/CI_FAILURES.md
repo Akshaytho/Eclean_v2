@@ -243,3 +243,14 @@ native module compilation. Old cache was reusing a build that
 lacked ExponentImagePicker native bridge.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23668086529
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 21:47 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `ed5d6a9` — fix: bust Android build cache (v2) — stale .cxx missing ExponentImagePicker
+
+The cached .cxx folder was compiled before expo-image-picker was
+properly linked. Every run was restoring this stale cache, so
+ExponentImagePicker native module was never present in the APK.
+v2 forces a clean rebuild that correctly includes all native modules.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23668156538
+- **Status:** Unresolved — add fix description when fixed
