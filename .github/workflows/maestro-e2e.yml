@@ -11,7 +11,7 @@ env:
   PASSWORD: Test@1234
 
 jobs:
-  # ── Jest must pass first ────────────────────────────────────────────────────
+  # ── Job 1: Jest (must pass before Maestro runs) ───────────────────────────
   jest:
     name: Jest Tests
     runs-on: ubuntu-latest
@@ -33,7 +33,7 @@ jobs:
           TEST_API_URL: https://ecleanfuture-production.up.railway.app/api/v1
         run: npx jest tests/integration --no-coverage --ci
 
-  # ── Maestro E2E ────────────────────────────────────────────────────────────
+  # ── Job 2: Maestro E2E ─────────────────────────────────────────────────────
   maestro:
     name: Maestro E2E
     runs-on: ubuntu-latest
@@ -77,22 +77,20 @@ jobs:
           curl -sf -X POST https://ecleanfuture-production.up.railway.app/api/v1/auth/register \
             -H "Content-Type: application/json" \
             -d "{\"email\":\"$BUYER_EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"CI Buyer\",\"role\":\"BUYER\"}" || true
-          echo "Test accounts ready"
+          echo "Accounts ready"
 
-      # Build APK using local Expo prebuild (no EAS account needed)
-      - name: Build APK locally
+      - name: Build APK via EAS
         working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          # Install expo CLI
-          npm install -g @expo/cli
-
-          # Prebuild generates android/ folder
-          npx expo prebuild --platform android --clean --no-install
-
-          # Install android deps
-          cd android
-          ./gradlew assembleDebug --no-daemon -q
-          find . -name "*.apk" -path "*/debug/*" | head -3
+          npm install -g eas-cli
+          eas build \
+            --platform android \
+            --profile preview \
+            --non-interactive \
+            --output ./eclean-preview.apk
+          ls -lh eclean-preview.apk
 
       - name: Run Maestro smoke + flow tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -106,17 +104,12 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: |
-            # Install APK
-            APK=$(find mobile/android -name "*.apk" -path "*/debug/*" | head -1)
-            echo "APK: $APK"
-            adb install -r "$APK"
-
-            # Wait for app to settle
-            sleep 3
+            echo "Installing APK..."
+            adb install -r mobile/eclean-preview.apk
 
             mkdir -p maestro-results
 
-            # Smoke: worker tabs
+            echo "Running smoke: worker tabs..."
             maestro test maestro/flows/09_smoke_all_tabs.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env BUYER_EMAIL=$BUYER_EMAIL \
@@ -124,7 +117,7 @@ jobs:
               --format junit \
               --output maestro-results/smoke-worker.xml || true
 
-            # Smoke: buyer tabs
+            echo "Running smoke: buyer tabs..."
             maestro test maestro/flows/10_smoke_buyer_tabs.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env BUYER_EMAIL=$BUYER_EMAIL \
@@ -132,25 +125,25 @@ jobs:
               --format junit \
               --output maestro-results/smoke-buyer.xml || true
 
-            # Worker login flow
+            echo "Running: worker login..."
             maestro test maestro/flows/01_worker_login.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env PASSWORD=$PASSWORD \
               --format junit \
-              --output maestro-results/01-login.xml || true
+              --output maestro-results/01-worker-login.xml || true
 
-            # Buyer post task flow
+            echo "Running: buyer post task..."
             maestro test maestro/flows/03_buyer_login_post_task.yaml \
               --env BUYER_EMAIL=$BUYER_EMAIL \
               --env PASSWORD=$PASSWORD \
               --format junit \
-              --output maestro-results/03-post-task.xml || true
+              --output maestro-results/03-buyer-post-task.xml || true
 
       - name: Upload screenshots + results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: maestro-results
+          name: maestro-e2e-results
           path: |
             maestro-results/
             ~/.maestro/tests/
