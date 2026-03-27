@@ -128,7 +128,7 @@ export async function listBuyerTasks(buyerId: string, query: ListTasksQuery) {
 export async function getBuyerTask(buyerId: string, taskId: string) {
   const task = await prisma.task.findUnique({
     where:   { id: taskId },
-    include: { media: true, locationLogs: true, events: true, payout: true },
+    include: { media: true, locationLogs: true, events: true, payout: true, worker: { select: { id: true, name: true, email: true } } },
   })
   if (!task) throw new NotFoundError('Task not found')
   if (task.buyerId !== buyerId) throw new ForbiddenError('Not your task')

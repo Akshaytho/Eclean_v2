@@ -10,6 +10,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { COLORS }        from '../../constants/colors'
+import * as Location from 'expo-location'
 import { buyerTasksApi } from '../../api/tasks.api'
 import { DIRTY_LEVELS, URGENCY_LEVELS } from '../../constants/taskCategories'
 import type { BuyerStackParamList } from '../../navigation/types'
@@ -52,6 +53,32 @@ export function PostTaskScreen() {
   const qc         = useQueryClient()
   const [step, setStep] = useState(0)
   const [form, setForm] = useState<FormState>(INITIAL)
+  const [gpsLoading, setGpsLoading] = useState(false)
+
+  const useMyLocation = async () => {
+    setGpsLoading(true)
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert('Permission denied', 'Enable location in Settings to use this feature.')
+        return
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+      set('lat', loc.coords.latitude)
+      set('lng', loc.coords.longitude)
+      // Reverse geocode to get address
+      const geo = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude })
+      if (geo[0]) {
+        const g = geo[0]
+        const addr = [g.street, g.district, g.city, g.region].filter(Boolean).join(', ')
+        set('address', addr)
+      }
+    } catch {
+      Alert.alert('Error', 'Could not get your location. Please enter address manually.')
+    } finally {
+      setGpsLoading(false)
+    }
+  }
 
   const set = (key: keyof FormState, val: any) => setForm(f => ({ ...f, [key]: val }))
 
@@ -209,7 +236,19 @@ export function PostTaskScreen() {
             <Text style={s.stepTitle}>Where is it?</Text>
             <Text style={s.stepSub}>Location helps workers find your task faster</Text>
 
-            <Text style={s.fieldLabel}>Address</Text>
+            <TouchableOpacity
+              style={s.gpsBtn}
+              onPress={useMyLocation}
+              disabled={gpsLoading}
+              activeOpacity={0.8}
+            >
+              {gpsLoading
+                ? <ActivityIndicator size="small" color={COLORS.brand.primary} />
+                : <Text style={s.gpsBtnText}>📍 Use My Location</Text>
+              }
+            </TouchableOpacity>
+
+            <Text style={s.fieldLabel}>Or enter address manually</Text>
             <TextInput
               style={s.textInput}
               placeholder="e.g. MG Road, near Bus Stop 12, Hyderabad"
@@ -217,7 +256,10 @@ export function PostTaskScreen() {
               onChangeText={v => set('address', v)}
               placeholderTextColor={COLORS.neutral[400]}
             />
-            <Text style={s.hint}>You can skip this and workers will contact you for location</Text>
+            {form.lat && form.lng && (
+              <Text style={s.gpsConfirm}>✅ GPS coordinates captured ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})</Text>
+            )}
+            <Text style={s.hint}>Location is optional — you can skip this step</Text>
           </View>
         )}
 
@@ -310,6 +352,9 @@ const s = StyleSheet.create({
   optionText: { fontSize: 13, fontWeight: '600', color: COLORS.neutral[600] },
   optionTextActive: { color: COLORS.brand.primary },
   hint:     { fontSize: 12, color: COLORS.neutral[400], marginTop: 8 },
+  gpsBtn:   { backgroundColor: COLORS.brand.tint, borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.brand.primary, marginBottom: 16 },
+  gpsBtnText:{ fontSize: 15, fontWeight: '700', color: COLORS.brand.primary },
+  gpsConfirm:{ fontSize: 12, color: '#16A34A', fontWeight: '600', marginTop: 6 },
   summaryCard: { backgroundColor: COLORS.surface, borderRadius: 16, padding: 20, gap: 12, borderWidth: 1, borderColor: COLORS.border },
   summaryRow:  { flexDirection: 'row', justifyContent: 'space-between' },
   summaryLabel:{ fontSize: 13, color: COLORS.neutral[500] },

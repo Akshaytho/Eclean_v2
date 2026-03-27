@@ -1,0 +1,81 @@
+name: CI Failure Tracker
+
+on:
+  workflow_run:
+    workflows: ["Jest Tests (Unit + Screen + Integration)", "Maestro E2E Tests"]
+    types: [completed]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Record failure in CI_FAILURES.md
+        run: |
+          mkdir -p .claude
+          WORKFLOW="${{ github.event.workflow_run.name }}"
+          RUN_URL="${{ github.event.workflow_run.html_url }}"
+          COMMIT="${{ github.event.workflow_run.head_sha }}"
+          MSG="${{ github.event.workflow_run.head_commit.message }}"
+          DATE=$(date -u '+%Y-%m-%d %H:%M UTC')
+
+          cat >> .claude/CI_FAILURES.md << ENTRY
+
+          ## ❌ FAILURE: $DATE
+          - **Workflow:** $WORKFLOW
+          - **Commit:** \`${COMMIT:0:7}\` — $MSG
+          - **Run:** $RUN_URL
+          - **Status:** Unresolved — add fix description when fixed
+          ENTRY
+
+          git config user.email "ci@eclean.app"
+          git config user.name "eClean CI"
+          git add .claude/CI_FAILURES.md
+          git commit -m "ci: record failure in $WORKFLOW [skip ci]" || true
+          git push || true
+
+      - name: Open GitHub Issue for failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflow = context.payload.workflow_run.name;
+            const runUrl = context.payload.workflow_run.html_url;
+            const commit = context.payload.workflow_run.head_sha.slice(0, 7);
+            const msg = context.payload.workflow_run.head_commit.message;
+
+            // Check if issue already open for this workflow
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['ci-failure']
+            });
+
+            const existing = issues.data.find(i => i.title.includes(workflow));
+            if (existing) {
+              // Add comment to existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `## New failure\n- Commit: \`${commit}\` — ${msg}\n- Run: ${runUrl}`
+              });
+            } else {
+              // Open new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🔴 CI Failure: ${workflow}`,
+                body: `## CI is failing\n\n- **Workflow:** ${workflow}\n- **Commit:** \`${commit}\` — ${msg}\n- **Run:** ${runUrl}\n\n## Steps to fix\n1. Click the run link above\n2. Check which step failed\n3. Fix the code\n4. Push — CI will close this issue automatically when it passes`,
+                labels: ['ci-failure', 'bug']
+              });
+            }
