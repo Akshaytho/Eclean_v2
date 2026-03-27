@@ -15,7 +15,6 @@ permissions:
   checks: write
 
 jobs:
-  # ── Job 1: Jest ────────────────────────────────────────────────────────────
   jest:
     name: Jest Tests
     runs-on: ubuntu-latest
@@ -37,7 +36,6 @@ jobs:
           TEST_API_URL: https://ecleanfuture-production.up.railway.app/api/v1
         run: npx jest tests/integration --no-coverage --ci
 
-  # ── Job 2: Maestro E2E ─────────────────────────────────────────────────────
   maestro:
     name: Maestro E2E
     runs-on: ubuntu-latest
@@ -73,7 +71,7 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
 
-      - name: Create test accounts on backend
+      - name: Create test accounts
         run: |
           curl -sf -X POST https://ecleanfuture-production.up.railway.app/api/v1/auth/register \
             -H "Content-Type: application/json" \
@@ -81,34 +79,43 @@ jobs:
           curl -sf -X POST https://ecleanfuture-production.up.railway.app/api/v1/auth/register \
             -H "Content-Type: application/json" \
             -d "{\"email\":\"$BUYER_EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"CI Buyer\",\"role\":\"BUYER\"}" || true
-          echo "Test accounts ready"
 
-      - name: Build APK (expo prebuild + gradle)
+      - name: Generate android/ with expo prebuild
         working-directory: mobile
-        run: |
-          # Step 1: Generate native android/ folder
-          npx expo prebuild --platform android --clean --no-install
-          
-          # Step 2: Patch the known RN 0.76 gradle issue
-          # enableBundleCompression was removed in RN 0.76 but prebuild still generates it
-          sed -i 's/enableBundleCompression = false/\/\/ enableBundleCompression removed/' \
-            android/app/build.gradle || true
-          sed -i '/enableBundleCompression/d' \
-            android/app/build.gradle || true
-          
-          # Step 3: Build debug APK (faster than release, no signing needed)
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tail -30
-          
-          # Step 4: Find and copy APK
-          APK=$(find . -name "*.apk" -path "*/debug/*" | head -1)
-          echo "Built APK: $APK"
-          cp "$APK" ../eclean.apk
-          ls -lh ../eclean.apk
-          echo "APK_PATH=$(pwd)/../eclean.apk" >> $GITHUB_ENV
+        run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Upload APK (download from Actions tab to test on your phone)
+      - name: Show build.gradle (debug what was generated)
+        working-directory: mobile/android/app
+        run: |
+          echo "=== build.gradle line 10-25 ==="
+          sed -n '10,25p' build.gradle
+
+      - name: Patch RN 0.76 build.gradle issues
+        working-directory: mobile/android
+        run: |
+          # Remove enableBundleCompression which was removed in RN 0.76
+          sed -i '/enableBundleCompression/d' app/build.gradle
+          echo "Patched enableBundleCompression"
+
+          # Show patched area
+          echo "=== app/build.gradle after patch ==="
+          cat app/build.gradle | head -30
+
+      - name: Build debug APK
+        working-directory: mobile/android
+        run: |
+          chmod +x gradlew
+          # Run with full output so we can see exactly what fails
+          ./gradlew assembleDebug --no-daemon --warning-mode=none 2>&1 | grep -E "FAILED|error:|Error:|Exception|BUILD" | head -30
+          ./gradlew assembleDebug --no-daemon --warning-mode=none
+          
+          # Find and copy APK
+          APK=$(find . -name "*.apk" -path "*/debug/*" | head -1)
+          echo "APK found: $APK"
+          cp "$APK" ../../eclean.apk
+          ls -lh ../../eclean.apk
+
+      - name: Upload APK artifact (download from Actions tab → install on phone)
         uses: actions/upload-artifact@v4
         with:
           name: eclean-debug-apk
@@ -127,43 +134,33 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: |
-            echo "Installing APK..."
             adb install -r mobile/eclean.apk
             sleep 3
-
             mkdir -p maestro-results
 
-            echo "=== Smoke: all worker tabs ==="
             maestro test maestro/flows/09_smoke_all_tabs.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env BUYER_EMAIL=$BUYER_EMAIL \
               --env PASSWORD=$PASSWORD \
-              --format junit \
-              --output maestro-results/smoke-worker.xml || true
+              --format junit --output maestro-results/smoke-worker.xml || true
 
-            echo "=== Smoke: all buyer tabs ==="
             maestro test maestro/flows/10_smoke_buyer_tabs.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env BUYER_EMAIL=$BUYER_EMAIL \
               --env PASSWORD=$PASSWORD \
-              --format junit \
-              --output maestro-results/smoke-buyer.xml || true
+              --format junit --output maestro-results/smoke-buyer.xml || true
 
-            echo "=== Flow: worker login ==="
             maestro test maestro/flows/01_worker_login.yaml \
               --env WORKER_EMAIL=$WORKER_EMAIL \
               --env PASSWORD=$PASSWORD \
-              --format junit \
-              --output maestro-results/01-worker-login.xml || true
+              --format junit --output maestro-results/01-worker-login.xml || true
 
-            echo "=== Flow: buyer post task ==="
             maestro test maestro/flows/03_buyer_login_post_task.yaml \
               --env BUYER_EMAIL=$BUYER_EMAIL \
               --env PASSWORD=$PASSWORD \
-              --format junit \
-              --output maestro-results/03-buyer-post-task.xml || true
+              --format junit --output maestro-results/03-buyer-post-task.xml || true
 
-      - name: Upload screenshots + results
+      - name: Upload Maestro results
         if: always()
         uses: actions/upload-artifact@v4
         with:
