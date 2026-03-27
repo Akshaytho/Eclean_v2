@@ -78,3 +78,16 @@ Tests: 109/109 passing | TypeScript: 0 errors
 - **Commit:** `22620f0` — fix: show full gradle error, split build steps for debugging
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23654206549
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 15:58 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `fdd0bd1` — fix: remove expo-camera (unused, breaks build) + pin react-native-maps@1.14.0
+
+expo-camera causes compileDebugKotlin failure with RN 0.76.9 due to
+barcodescanner/BarCodeScannerResult symbol not found.
+We only use expo-image-picker for photos — expo-camera was never called.
+
+react-native-maps codegen was SKIPPED causing 'cannot find symbol' errors.
+1.14.0 is compatible with RN 0.76.x without codegen issues.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23654848923
+- **Status:** Unresolved — add fix description when fixed
