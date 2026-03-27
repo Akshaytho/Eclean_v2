@@ -280,3 +280,16 @@ Using --no-install since npm install already ran in a dedicated step.
 Added verify step to confirm all 19 modules are linked before build.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23669826138
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 23:05 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `455a547` — fix: add --no-build-cache to Gradle — stale AAR for expo-linear-gradient
+
+Root cause confirmed from CI logs: expo-linear-gradient tasks all showed
+UP-TO-DATE meaning Gradle's internal build cache was restoring a stale
+AAR that didn't register LinearGradientModule as a ViewManager.
+
+--no-build-cache forces Gradle to recompile all library modules fresh,
+ensuring expo-linear-gradient's ViewManager is properly registered.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23670550156
+- **Status:** Unresolved — add fix description when fixed
