@@ -1,0 +1,336 @@
+// eClean — Prisma Schema
+// Sprint 1: Complete schema — all enums, models, indexes
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  BUYER
+  WORKER
+  SUPERVISOR
+  ADMIN
+  CITIZEN
+}
+
+enum TaskStatus {
+  OPEN
+  ACCEPTED
+  IN_PROGRESS
+  SUBMITTED
+  APPROVED
+  VERIFIED    // reserved for future admin manual verification flow
+  REJECTED
+  DISPUTED
+  CANCELLED
+  COMPLETED   // set by payout.job.ts after Razorpay confirms settlement
+}
+
+enum TaskCategory {
+  STREET_CLEANING
+  PARK_CLEANING
+  DRAIN_CLEANING
+  GARBAGE_COLLECTION
+  GRAFFITI_REMOVAL
+  WATER_BODY
+  PUBLIC_TOILET
+  OTHER
+}
+
+enum DirtyLevel {
+  LIGHT
+  MEDIUM
+  HEAVY
+  CRITICAL
+}
+
+enum TaskUrgency {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+  CRITICAL
+}
+
+enum MediaType {
+  BEFORE
+  AFTER
+  PROOF
+  REFERENCE
+  REPORT
+  PROFILE
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED   // was PAID — renamed for Sprint 4 payout job compatibility
+  FAILED
+}
+
+enum ReportStatus {
+  PENDING
+  REPORTED
+  REVIEWED
+  ASSIGNED
+  CONVERTED_TO_TASK
+  RESOLVED
+  REJECTED
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_STARTED
+  TASK_SUBMITTED
+  TASK_VERIFIED
+  TASK_REJECTED
+  TASK_DISPUTED
+  PAYMENT_RECEIVED
+  WITHDRAWAL_PROCESSED
+  REPORT_UPDATED
+  CITIZEN_REPORT_CREATED
+  TASK_FLAGGED
+  ZONE_INSPECTED
+  IDENTITY_VERIFIED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id               String  @id @default(uuid())
+  email            String  @unique
+  phone            String? @unique
+  passwordHash     String
+  name             String
+  role             Role
+  isActive         Boolean @default(true)
+  isEmailVerified  Boolean @default(false)
+  emailVerifyToken String? @unique
+  deviceToken      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workerProfile   WorkerProfile?
+  buyerProfile    BuyerProfile?
+  tasksAsBuyer    Task[]          @relation("TaskBuyer")
+  tasksAsWorker   Task[]          @relation("TaskWorker")
+  payoutsAsWorker Payout[]        @relation("PayoutWorker")
+  payoutsAsBuyer  Payout[]        @relation("PayoutBuyer")
+  notifications   Notification[]
+  citizenReports  CitizenReport[]
+  supervisedZones Zone[]
+  locationLogs    TaskLocationLog[] @relation("WorkerLocationLogs")
+  chatMessages    ChatMessage[]     @relation("ChatSender")
+}
+
+model WorkerProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  activeTaskId     String?  @unique
+  skills           String[]
+  rating           Float    @default(0)
+  completedTasks   Int      @default(0)
+  isAvailable      Boolean  @default(true)
+  identityVerified Boolean  @default(false)
+
+  user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeTask Task? @relation("WorkerActiveTask", fields: [activeTaskId], references: [id])
+}
+
+model BuyerProfile {
+  id               String @id @default(uuid())
+  userId           String @unique
+  companyName      String?
+  totalTasksPosted Int    @default(0)
+  totalSpentCents  Int    @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Zone {
+  id              String      @id @default(uuid())
+  name            String
+  city            String?
+  lat             Float?
+  lng             Float?
+  radiusMeters    Int?
+  polygon         Json?
+  dirtyLevel      DirtyLevel?
+  lastInspectedAt DateTime?
+  supervisorId    String?
+  createdAt       DateTime    @default(now())
+
+  supervisor     User?           @relation(fields: [supervisorId], references: [id])
+  tasks          Task[]
+  citizenReports CitizenReport[]
+}
+
+model Task {
+  id                 String      @id @default(uuid())
+  title              String
+  description        String
+  category           TaskCategory
+  status             TaskStatus  @default(OPEN)
+  urgency            TaskUrgency @default(MEDIUM)
+  dirtyLevel         DirtyLevel
+  rateCents          Int
+  currency           String      @default("INR")
+  buyerId            String
+  workerId           String?
+  zoneId             String?
+  locationLat        Float?
+  locationLng        Float?
+  locationAddress    String?
+  workWindowStart    String      @default("07:00")
+  workWindowEnd      String      @default("11:30")
+  uploadWindowEnd    String      @default("12:00")
+  timezone           String      @default("Asia/Kolkata")
+  aiScore            Float?
+  aiReasoning        String?
+  rejectionReason    String?
+  cancellationReason String?
+  startedAt          DateTime?
+  submittedAt        DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  timeSpentSecs      Int?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  buyer          User           @relation("TaskBuyer", fields: [buyerId], references: [id])
+  worker         User?          @relation("TaskWorker", fields: [workerId], references: [id])
+  zone           Zone?          @relation(fields: [zoneId], references: [id])
+  workerActiveIn WorkerProfile? @relation("WorkerActiveTask")
+  media          TaskMedia[]
+  payout         Payout?
+  events         TaskEvent[]
+  locationLogs   TaskLocationLog[]
+  chatMessages   ChatMessage[]
+
+  @@index([status])
+  @@index([buyerId])
+  @@index([workerId])
+  @@index([zoneId])
+  @@index([status, category])
+  @@index([status, locationLat, locationLng])
+}
+
+model TaskMedia {
+  id        String    @id @default(uuid())
+  taskId    String
+  url       String
+  publicId  String?
+  mimeType  String?
+  sizeBytes Int?
+  type      MediaType
+  createdAt DateTime  @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model Payout {
+  id                String       @id @default(uuid())
+  taskId            String       @unique
+  workerId          String
+  buyerId           String
+  amountCents       Int
+  platformFeeCents  Int
+  workerAmountCents Int
+  currency          String       @default("INR")
+  status            PayoutStatus @default(PENDING)
+  razorpayPayoutId  String?
+  paidAt            DateTime?
+  createdAt         DateTime     @default(now())
+
+  task   Task @relation(fields: [taskId], references: [id])
+  worker User @relation("PayoutWorker", fields: [workerId], references: [id])
+  buyer  User @relation("PayoutBuyer", fields: [buyerId], references: [id])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model CitizenReport {
+  id              String       @id @default(uuid())
+  reporterId      String
+  zoneId          String?
+  category        TaskCategory @default(OTHER)
+  urgency         TaskUrgency  @default(MEDIUM)
+  locationLat     Float?
+  locationLng     Float?
+  locationAddress String?
+  photoUrl        String?
+  description     String
+  status          ReportStatus @default(PENDING)
+  linkedTaskId    String?      @map("taskId")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  reporter User  @relation(fields: [reporterId], references: [id])
+  zone     Zone? @relation(fields: [zoneId], references: [id])
+}
+
+model TaskEvent {
+  id        String     @id @default(uuid())
+  taskId    String
+  actor     String
+  actorRole Role
+  action    String?
+  from      TaskStatus
+  to        TaskStatus
+  note      String?
+  createdAt DateTime   @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model TaskLocationLog {
+  id        String   @id @default(uuid())
+  taskId    String
+  workerId  String
+  lat       Float
+  lng       Float
+  accuracy  Float?
+  createdAt DateTime @default(now())
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  worker User @relation("WorkerLocationLogs", fields: [workerId], references: [id])
+
+  @@index([taskId])
+}
+
+model ChatMessage {
+  id         String   @id @default(uuid())
+  taskId     String
+  senderId   String
+  senderRole Role
+  content    String
+  createdAt  DateTime @default(now())
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sender User @relation("ChatSender", fields: [senderId], references: [id])
+
+  @@index([taskId])
+}
