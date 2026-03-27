@@ -101,3 +101,13 @@ react-native-maps codegen was SKIPPED causing 'cannot find symbol' errors.
 - add NODE_ENV=production to expo prebuild step (fixes expo-constants warning)
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23655793799
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 16:34 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `e93bb14` — fix: regenerate package-lock.json with react-native-svg 15.15.4
+
+CI uses npm install which respects the lockfile — old lockfile still
+had 15.8.0 pinned despite package.json bump. Regenerated with
+--package-lock-only to resolve the StyleSizeLength C++ build error.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23656353695
+- **Status:** Unresolved — add fix description when fixed
