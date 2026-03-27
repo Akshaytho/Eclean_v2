@@ -14,9 +14,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { RouteProp } from '@react-navigation/native'
-import * as ImagePicker from 'expo-image-picker'
 import * as Haptics from 'expo-haptics'
 import { Camera, CheckCircle, Wifi, WifiOff, Play, X } from 'lucide-react-native'
+
+// Lazy import to prevent native module crash on startup
+let ImagePicker: typeof import('expo-image-picker') | null = null
+const getImagePicker = async () => {
+  if (!ImagePicker) {
+    ImagePicker = await import('expo-image-picker')
+  }
+  return ImagePicker
+}
 
 import { COLORS } from '../../constants/colors'
 import { workerTasksApi } from '../../api/tasks.api'
@@ -196,13 +204,14 @@ export function ActiveTaskScreen() {
       {
         text: 'Camera',
         onPress: async () => {
-          const perm = await ImagePicker.requestCameraPermissionsAsync()
+          const IP = await getImagePicker()
+          const perm = await IP.requestCameraPermissionsAsync()
           if (!perm.granted) {
             Alert.alert('Permission needed', 'Camera access is required.')
             return
           }
-          const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          const result = await IP.launchCameraAsync({
+            mediaTypes: IP.MediaTypeOptions.Images,
             quality:    0.8,
           })
           if (!result.canceled) uploadPhoto(type, result.assets[0].uri)
@@ -211,8 +220,9 @@ export function ActiveTaskScreen() {
       {
         text: 'Gallery',
         onPress: async () => {
-          const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          const IP = await getImagePicker()
+          const result = await IP.launchImageLibraryAsync({
+            mediaTypes: IP.MediaTypeOptions.Images,
             quality:    0.8,
           })
           if (!result.canceled) uploadPhoto(type, result.assets[0].uri)
