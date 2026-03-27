@@ -80,6 +80,14 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"email\":\"$BUYER_EMAIL\",\"password\":\"$PASSWORD\",\"name\":\"CI Buyer\",\"role\":\"BUYER\"}" || true
 
+      - name: Patch react-native-svg for RN 0.76 (StyleSizeLength → StyleLength)
+        working-directory: mobile
+        run: |
+          FILE="node_modules/react-native-svg/common/cpp/react/renderer/components/rnsvg/RNSVGLayoutableShadowNode.cpp"
+          sed -i 's/yoga::StyleSizeLength/yoga::StyleLength/g' "$FILE"
+          echo "Patched:"
+          grep -n "StyleLength\|StyleSizeLength" "$FILE"
+
       - name: Generate android/ with expo prebuild
         working-directory: mobile
         env:
