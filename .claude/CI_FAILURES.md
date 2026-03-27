@@ -219,3 +219,16 @@ Expo SDK 53 new architecture requires plugins to be declared in
 app.json for proper native module linking during prebuild.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23667125057
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 21:43 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `feea39f` — fix: lazy load expo-image-picker to prevent startup crash
+
+ExponentImagePicker native module causes 'main' not registered crash
+on app startup. Dynamic import ensures the module loads only when
+the camera feature is actually used, not at app boot time.
+
+Also keeps expo-image-picker in app.json plugins for proper
+permission handling when it does load.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23668009451
+- **Status:** Unresolved — add fix description when fixed
