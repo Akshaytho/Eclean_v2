@@ -121,3 +121,9 @@ react-native-svg still uses yoga::StyleSizeLength in all versions including
 patched it, we sed-patch the file after npm install before the build.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23656942708
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-27 17:16 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `473d24f` — fix: correct APK copy path in CI (../../ → ../ from mobile/android)
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23657868292
+- **Status:** Unresolved — add fix description when fixed
