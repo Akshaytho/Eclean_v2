@@ -106,7 +106,7 @@
 |---|--------|----------|---------|----------|
 | P1 | [ ] | 🟡 | FlatList not used everywhere — long lists cause memory issues | Replace all `ScrollView + map()` in task lists, notifications, wallet with `FlatList` |
 | P2 | [ ] | 🟡 | Images not compressed before upload — large files slow everything | Add `expo-image-manipulator` — resize to max 1200px, compress to 80% before Cloudinary upload |
-| P3 | [ ] | 🟡 | React Query stale times not tuned — too many refetches | activeTask: 5s, taskList: 30s, notifications: 60s, profile: 5min, wallet: 2min |
+| P3 | [x] | 🟡 | React Query stale times not tuned — too many refetches | activeTask: 5s, taskList: 30s, notifications: 60s, profile: 5min, wallet: 2min |
 | P4 | [ ] | 🟢 | No pagination on task lists — will break at 1000+ tasks | Add cursor-based pagination to `GET /tasks` — already supported in backend, needs frontend |
 | P5 | [ ] | 🟢 | Socket reconnection not robust — drops after phone sleep | Add exponential backoff in `socketStore` reconnect logic, restore subscriptions after reconnect |
 
@@ -143,6 +143,7 @@
 | Date | Gap ID | What was done | Session context |
 |------|--------|---------------|-----------------|
 | — | — | — | — |
+| 2026-03-28 | P3 | React Query stale times tuned in QueryClient + per-screen via staleTime | Session 2 — components + hooks |
 
 ---
 

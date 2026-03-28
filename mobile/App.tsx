@@ -22,14 +22,25 @@ import { authApi }         from './src/api/auth.api'
 // Keep splash visible until bootstrap completes
 SplashScreen.preventAutoHideAsync()
 
+// 🔧 Gap [P3]: React Query stale times tuned per data type
+// activeTask: 5s (live data), taskList: 30s, notifications: 60s,
+// profile/wallet: 5min (slow-changing)
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
+      staleTime: 30_000,  // default: 30s for task lists
+      gcTime:    5 * 60_000, // 5 min garbage collection
       retry:     2,
+      refetchOnWindowFocus: false,
     },
   },
 })
+
+// Per-query stale times are set via queryKey conventions:
+// queries with key[0]==='active-task'  → staleTime: 5_000  (set in screen)
+// queries with key[0]==='notifications'→ staleTime: 60_000 (set in screen)
+// queries with key[0]==='profile'      → staleTime: 300_000 (set in screen)
+// queries with key[0]==='wallet'       → staleTime: 120_000 (set in screen)
 
 // ─── Error Boundary ──────────────────────────────────────────────────────────
 interface ErrorBoundaryState { hasError: boolean; error: string }
