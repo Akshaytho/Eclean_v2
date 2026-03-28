@@ -1,0 +1,50 @@
+# SCREENSHOT FLOW: Citizen + Supervisor Screens
+# Uses worker login then navigates to shared screens
+
+appId: com.eclean.app
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "Skip"
+    optional: true
+- extendedWaitUntil:
+    visible: "Sign In"
+    timeout: 30000
+
+# Login as worker (to access shared screens)
+- tapOn:
+    text: "Email"
+- inputText: "${WORKER_EMAIL}"
+- tapOn:
+    text: "Password"
+- inputText: "${PASSWORD}"
+- tapOn: "Sign In"
+- extendedWaitUntil:
+    visible: "Good morning"
+    timeout: 40000
+
+# Notifications screen (shared)
+- tapOn:
+    text: "Notifications"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: "14_notifications"
+
+# Back to home
+- tapOn:
+    description: "back"
+    optional: true
+- waitForAnimationToEnd
+
+# Profile screen (shared)
+- tapOn: "Profile"
+- waitForAnimationToEnd
+- takeScreenshot: "15_profile"
+
+# Final summary screenshot
+- tapOn: "Home"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: "16_worker_home_final"

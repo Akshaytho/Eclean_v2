@@ -37,9 +37,7 @@
         "READ_EXTERNAL_STORAGE",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
-        "POST_NOTIFICATIONS",
-        "android.permission.CAMERA",
-        "android.permission.READ_MEDIA_IMAGES"
+        "POST_NOTIFICATIONS"
       ],
       "config": {
         "googleMaps": {
@@ -69,14 +67,6 @@
         {
           "photosPermission": "eClean needs photo library access to upload cleaning evidence photos.",
           "cameraPermission": "eClean needs camera access to take before/after photos of your cleaning work."
-        }
-      ],
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "eClean needs camera access to capture evidence photos for task verification.",
-          "microphonePermission": false,
-          "recordAudioAndroid": false
         }
       ]
     ],

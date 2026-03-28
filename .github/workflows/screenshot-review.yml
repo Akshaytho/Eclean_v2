@@ -1,0 +1,208 @@
+name: Screenshot Review
+
+# Run manually from Actions tab when you want a visual review
+# Claude downloads the artifact, views every screenshot, and fixes UI issues
+
+on:
+  workflow_dispatch:
+
+env:
+  WORKER_EMAIL: maestro-worker@eclean.test
+  BUYER_EMAIL:  maestro-buyer@eclean.test
+  PASSWORD:     Test@1234
+
+jobs:
+  screenshot:
+    name: Take Screenshots of Every Screen
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: mobile/node_modules
+          key: node-${{ hashFiles('mobile/package-lock.json') }}
+          restore-keys: node-
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            mobile/android/.gradle
+          key: gradle-${{ hashFiles('mobile/android/**/*.gradle*') }}
+          restore-keys: gradle-
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm install --legacy-peer-deps
+
+      - name: Patch react-native-svg
+        working-directory: mobile
+        run: |
+          FILE="node_modules/react-native-svg/common/cpp/react/renderer/components/rnsvg/RNSVGLayoutableShadowNode.cpp"
+          [ -f "$FILE" ] && sed -i 's/yoga::StyleSizeLength/yoga::StyleLength/g' "$FILE" && echo "✅ SVG patched" || echo "ℹ️ SVG patch not needed"
+
+      - name: Expo prebuild
+        working-directory: mobile
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Patch build.gradle
+        working-directory: mobile
+        run: |
+          sed -i '/enableBundleCompression/d' android/app/build.gradle
+          grep -n "enableBundleCompression" android/app/build.gradle || echo "✅ enableBundleCompression removed"
+
+      - name: Bundle JS
+        working-directory: mobile
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx expo export:embed \
+            --platform android \
+            --dev false \
+            --entry-file node_modules/expo/AppEntry.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res
+
+      - name: Build APK
+        working-directory: mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --warning-mode=none
+          APK=$(find . -name "*.apk" -path "*/debug/*" | head -1)
+          cp "$APK" ../eclean-debug.apk
+          ls -lh ../eclean-debug.apk
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | \
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Seed test accounts
+        run: |
+          BASE="https://ecleanfuture-production.up.railway.app"
+          curl -sf -X POST "$BASE/api/v1/ci/seed" \
+            -H "Content-Type: application/json" \
+            -H "x-ci-secret: ${{ secrets.Eclean_CI_Secret }}" 2>/dev/null || true
+          curl -sf -X POST "$BASE/api/v1/auth/register" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"maestro-worker@eclean.test","password":"Test@1234","name":"CI Worker","role":"WORKER"}' 2>/dev/null || true
+          curl -sf -X POST "$BASE/api/v1/auth/register" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"maestro-buyer@eclean.test","password":"Test@1234","name":"CI Buyer","role":"BUYER"}' 2>/dev/null || true
+          W=$(curl -sf -X POST "$BASE/api/v1/auth/login" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"maestro-worker@eclean.test","password":"Test@1234"}' 2>/dev/null)
+          echo "$W" | grep -q "accessToken" && echo "✅ Worker login OK" || echo "❌ Worker login failed"
+          B=$(curl -sf -X POST "$BASE/api/v1/auth/login" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"maestro-buyer@eclean.test","password":"Test@1234"}' 2>/dev/null)
+          echo "$B" | grep -q "accessToken" && echo "✅ Buyer login OK" || echo "❌ Buyer login failed"
+
+      - name: Take all screenshots (emulator + Maestro)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_5
+          avd-name: screenshot_avd
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            # Install APK
+            adb install -r mobile/eclean-debug.apk
+            echo "✅ APK installed"
+            sleep 10
+
+            mkdir -p /tmp/screenshots
+
+            # Run each screenshot flow — || true so one failure doesn't stop others
+            echo "=== Auth screens ==="
+            maestro test maestro/screenshots/ss_01_auth.yaml \
+              --env WORKER_EMAIL="$WORKER_EMAIL" \
+              --env BUYER_EMAIL="$BUYER_EMAIL" \
+              --env PASSWORD="$PASSWORD" || true
+
+            echo "=== Worker screens ==="
+            maestro test maestro/screenshots/ss_02_worker.yaml \
+              --env WORKER_EMAIL="$WORKER_EMAIL" \
+              --env BUYER_EMAIL="$BUYER_EMAIL" \
+              --env PASSWORD="$PASSWORD" || true
+
+            echo "=== Buyer screens ==="
+            maestro test maestro/screenshots/ss_03_buyer.yaml \
+              --env WORKER_EMAIL="$WORKER_EMAIL" \
+              --env BUYER_EMAIL="$BUYER_EMAIL" \
+              --env PASSWORD="$PASSWORD" || true
+
+            echo "=== Shared screens ==="
+            maestro test maestro/screenshots/ss_04_shared.yaml \
+              --env WORKER_EMAIL="$WORKER_EMAIL" \
+              --env BUYER_EMAIL="$BUYER_EMAIL" \
+              --env PASSWORD="$PASSWORD" || true
+
+            echo "✅ All screenshot flows complete" 
+
+      - name: Collect all screenshots from Maestro
+        run: |
+          mkdir -p /tmp/all_screenshots
+          # Maestro saves screenshots in ~/.maestro/tests/*/
+          find ~/.maestro/tests -name "*.png" | sort | while read f; do
+            NAME=$(basename "$f")
+            cp "$f" "/tmp/all_screenshots/$NAME"
+          done
+          # Also copy from --output dir
+          find /tmp/screenshots -name "*.png" 2>/dev/null | while read f; do
+            cp "$f" "/tmp/all_screenshots/"
+          done
+          echo "=== Screenshots captured ==="
+          ls -la /tmp/all_screenshots/
+          echo "Total: $(ls /tmp/all_screenshots/*.png 2>/dev/null | wc -l) screenshots"
+
+      - name: Upload screenshots artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: app-screenshots-${{ github.run_number }}
+          path: /tmp/all_screenshots/
+          retention-days: 7
+
+      - name: Screenshot summary
+        if: always()
+        run: |
+          COUNT=$(ls /tmp/all_screenshots/*.png 2>/dev/null | wc -l)
+          echo "## 📸 Screenshot Review — Run #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**$COUNT screenshots captured**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📥 Download **app-screenshots-${{ github.run_number }}** from Artifacts below" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Screens covered:" >> $GITHUB_STEP_SUMMARY
+          echo "- Auth: Onboarding, Login, Register" >> $GITHUB_STEP_SUMMARY
+          echo "- Worker: Home, Find Work, My Tasks, Wallet, Profile" >> $GITHUB_STEP_SUMMARY
+          echo "- Buyer: Home, Post Task, My Tasks, Notifications, Profile" >> $GITHUB_STEP_SUMMARY
+          echo "- Shared: Notifications, Profile" >> $GITHUB_STEP_SUMMARY

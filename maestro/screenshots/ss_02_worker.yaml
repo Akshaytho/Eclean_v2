@@ -1,0 +1,49 @@
+# SCREENSHOT FLOW: Worker Screens
+# Captures every worker screen after login
+
+appId: com.eclean.app
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "Skip"
+    optional: true
+- extendedWaitUntil:
+    visible: "Sign In"
+    timeout: 30000
+
+# Login as worker
+- tapOn:
+    text: "Email"
+- inputText: "${WORKER_EMAIL}"
+- tapOn:
+    text: "Password"
+- inputText: "${PASSWORD}"
+- tapOn: "Sign In"
+- extendedWaitUntil:
+    visible: "Good morning"
+    timeout: 40000
+
+# Worker Home
+- takeScreenshot: "04_worker_home"
+
+# Find Work tab
+- tapOn: "Find Work"
+- waitForAnimationToEnd
+- takeScreenshot: "05_worker_find_work"
+
+# My Tasks tab
+- tapOn: "My Tasks"
+- waitForAnimationToEnd
+- takeScreenshot: "06_worker_my_tasks"
+
+# Wallet tab
+- tapOn: "Wallet"
+- waitForAnimationToEnd
+- takeScreenshot: "07_worker_wallet"
+
+# Profile tab
+- tapOn: "Profile"
+- waitForAnimationToEnd
+- takeScreenshot: "08_worker_profile"

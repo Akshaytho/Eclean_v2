@@ -1,0 +1,26 @@
+# SCREENSHOT FLOW: Auth Screens
+# Captures: Onboarding, Login, Register screens
+
+appId: com.eclean.app
+---
+# Onboarding
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- takeScreenshot: "01_onboarding"
+
+# Skip to login
+- tapOn:
+    text: "Skip"
+    optional: true
+- extendedWaitUntil:
+    visible: "Sign In"
+    timeout: 30000
+- takeScreenshot: "02_login"
+
+# Go to register
+- tapOn:
+    text: "Register"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: "03_register"
