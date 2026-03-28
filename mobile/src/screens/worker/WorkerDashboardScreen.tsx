@@ -66,7 +66,7 @@ export function WorkerDashboardScreen() {
       <AppHeader
         title="Dashboard"
         theme="worker"
-        onNotificationPress={() => navigation.navigate('WorkerTabs', { screen: 'FindWork' } as any)}
+        onNotificationPress={() => navigation.navigate('Notifications' as any)}
       />
 
       <ScrollView

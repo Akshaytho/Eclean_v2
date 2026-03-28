@@ -88,7 +88,7 @@ export function WorkerHomeScreen() {
 
   return (
     <ScreenWrapper backgroundColor={W.background}>
-      <AppHeader title="eClean" theme="worker" onNotificationPress={() => navigation.navigate('WorkerTabs' as any)} />
+      <AppHeader title="eClean" theme="worker" onNotificationPress={() => navigation.navigate('Notifications' as any)} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={meQuery.isFetching} onRefresh={onRefresh} tintColor={W.primary} />}
