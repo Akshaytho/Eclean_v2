@@ -24,6 +24,7 @@ import type { PhotoType } from '../../components/camera/CaptureCamera'
 
 import { FlatList, Dimensions } from 'react-native'
 import { COLORS } from '../../constants/colors'
+import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { getAllPhotos, GalleryPhoto } from '../../services/galleryService'
 import { workerTasksApi } from '../../api/tasks.api'
 import { mediaApi } from '../../api/media.api'
@@ -83,6 +84,7 @@ export function ActiveTaskScreen() {
   const [photoSourceType, setPhotoSourceType] = useState<MediaType | null>(null)
   const [galleryPicker, setGalleryPicker] = useState<MediaType | null>(null)
   const [galleryPhotos, setGalleryPhotos] = useState<GalleryPhoto[]>([])
+  const [gpsWarning, setGpsWarning] = useState(false)
 
   // ── Task query ────────────────────────────────────────────────────────────
   const { data: task, isLoading } = useQuery({
@@ -172,9 +174,10 @@ export function ActiveTaskScreen() {
   const handleStart = () => {
     if (isStarting.current) return
     if (!currentLocation) {
-      Alert.alert('GPS Required', 'Please wait for your GPS to acquire a signal before starting.')
+      setGpsWarning(true)
       return
     }
+    setGpsWarning(false)
     isStarting.current = true
     startMutation.mutate()
   }
@@ -244,7 +247,7 @@ export function ActiveTaskScreen() {
   if (isLoading || !task) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={COLORS.brand.primary} size="large" />
+        <ActivityIndicator color={W.primary} size="large" />
       </View>
     )
   }
@@ -279,8 +282,8 @@ export function ActiveTaskScreen() {
             <Circle
               center={{ latitude: task.locationLat, longitude: task.locationLng! }}
               radius={2000}
-              strokeColor={`${COLORS.brand.primary}60`}
-              fillColor={`${COLORS.brand.primary}10`}
+              strokeColor={`${W.primary}60`}
+              fillColor={`${W.primary}10`}
             />
           )}
 
@@ -314,9 +317,9 @@ export function ActiveTaskScreen() {
           </View>
           <View style={styles.gpsStatus}>
             {connected
-              ? <Wifi size={14} color={COLORS.status.success} />
-              : <WifiOff size={14} color={COLORS.status.error} />}
-            <Text style={[styles.gpsText, { color: connected ? COLORS.status.success : COLORS.status.error }]}>
+              ? <Wifi size={14} color={W.status.success} />
+              : <WifiOff size={14} color={W.status.error} />}
+            <Text style={[styles.gpsText, { color: connected ? W.status.success : W.status.error }]}>
               {connected ? 'GPS live' : 'No signal'}
             </Text>
           </View>
@@ -342,6 +345,12 @@ export function ActiveTaskScreen() {
             <View style={styles.infoCard}>
               <Text style={styles.infoCardText}>Go to the task location and tap Start Work when you arrive.</Text>
             </View>
+            {gpsWarning && (
+              <View style={styles.gpsWarning}>
+                <AlertTriangle size={14} color={W.status.warning} />
+                <Text style={styles.gpsWarningText}>Waiting for GPS signal — please try again shortly.</Text>
+              </View>
+            )}
             <TouchableOpacity
               style={[styles.startBtn, startMutation.isPending && styles.btnDisabled]}
               onPress={handleStart}
@@ -415,7 +424,7 @@ export function ActiveTaskScreen() {
           onPress={() => navigation.navigate('Chat', { taskId, title: task.title })}
           activeOpacity={0.85}
         >
-          <MessageCircle size={16} color={COLORS.brand.primary} />
+          <MessageCircle size={16} color={W.primary} />
           <Text style={styles.chatBtnText}>Message Buyer</Text>
         </TouchableOpacity>
 
@@ -436,7 +445,7 @@ export function ActiveTaskScreen() {
           <TouchableOpacity activeOpacity={1} style={styles.sourceSheet}>
             <View style={styles.sourceHandle} />
             <View style={styles.sourceHeaderRow}>
-              <View style={[styles.sourceBadge, { backgroundColor: LABEL_COLORS[photoSourceType === 'BEFORE' ? 'Before' : photoSourceType === 'AFTER' ? 'After' : 'Proof'] ?? COLORS.brand.primary }]}>
+              <View style={[styles.sourceBadge, { backgroundColor: LABEL_COLORS[photoSourceType === 'BEFORE' ? 'Before' : photoSourceType === 'AFTER' ? 'After' : 'Proof'] ?? W.primary }]}>
                 <Text style={styles.sourceBadgeText}>{photoSourceType}</Text>
               </View>
               <Text style={styles.sourceTitle}>Add Evidence</Text>
@@ -444,12 +453,12 @@ export function ActiveTaskScreen() {
 
             <View style={styles.sourceCards}>
               <TouchableOpacity style={styles.sourceCard} onPress={pickFromCamera} activeOpacity={0.85}>
-                <View style={[styles.sourceCardIcon, { backgroundColor: `${COLORS.brand.primary}15` }]}>
-                  <Camera size={28} color={COLORS.brand.primary} />
+                <View style={[styles.sourceCardIcon, { backgroundColor: `${W.primary}15` }]}>
+                  <Camera size={28} color={W.primary} />
                 </View>
                 <Text style={styles.sourceCardTitle}>Take Photo</Text>
                 <Text style={styles.sourceCardSub}>Capture fresh{'\n'}evidence now</Text>
-                <View style={[styles.sourceCardTag, { backgroundColor: COLORS.brand.primary }]}>
+                <View style={[styles.sourceCardTag, { backgroundColor: W.primary }]}>
                   <Text style={styles.sourceCardTagText}>Recommended</Text>
                 </View>
               </TouchableOpacity>
@@ -478,7 +487,7 @@ export function ActiveTaskScreen() {
               <TextInput
                 style={styles.cancelInput}
                 placeholder="e.g. Area is inaccessible, weather issue..."
-                placeholderTextColor={COLORS.neutral[400]}
+                placeholderTextColor={W.text.muted}
                 value={cancelReason}
                 onChangeText={setCancelReason}
                 multiline
@@ -508,7 +517,7 @@ export function ActiveTaskScreen() {
         <View style={styles.gpModal}>
           <View style={styles.gpHeader}>
             <TouchableOpacity onPress={() => setGalleryPicker(null)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-              <X size={22} color={COLORS.neutral[900]} />
+              <X size={22} color={W.text.primary} />
             </TouchableOpacity>
             <Text style={styles.gpTitle}>Select from My Photos</Text>
             <View style={{ width: 22 }} />
@@ -530,7 +539,7 @@ export function ActiveTaskScreen() {
                   activeOpacity={0.8}
                 >
                   <Image source={{ uri: item.thumbUri }} style={styles.gpThumbImg} resizeMode="cover" />
-                  <View style={[styles.gpTypeDot, { backgroundColor: LABEL_COLORS[item.photoType === 'BEFORE' ? 'Before' : item.photoType === 'AFTER' ? 'After' : 'Proof'] ?? COLORS.neutral[400] }]}>
+                  <View style={[styles.gpTypeDot, { backgroundColor: LABEL_COLORS[item.photoType === 'BEFORE' ? 'Before' : item.photoType === 'AFTER' ? 'After' : 'Proof'] ?? W.text.muted }]}>
                     <Text style={styles.gpTypeDotText}>{item.photoType[0]}</Text>
                   </View>
                 </TouchableOpacity>
@@ -562,7 +571,7 @@ const LABEL_COLORS: Record<string, string> = {
 }
 
 function PhotoBox({ label, state, onPress }: { label: string; state: PhotoState; onPress: () => void }) {
-  const color = LABEL_COLORS[label] ?? COLORS.neutral[400]
+  const color = LABEL_COLORS[label] ?? W.text.muted
   return (
     <TouchableOpacity style={styles.photoBox} onPress={onPress} activeOpacity={0.8}>
       {state.uploading ? (
@@ -601,7 +610,7 @@ function PhotoBox({ label, state, onPress }: { label: string; state: PhotoState;
 }
 
 const styles = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: COLORS.background },
+  container:      { flex: 1, backgroundColor: W.background },
   center:         { flex: 1, alignItems: 'center', justifyContent: 'center' },
   mapContainer:   { height: 200 },
   statusBar:      { position: 'absolute', top: 52, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -615,62 +624,66 @@ const styles = StyleSheet.create({
 
   // Panel
   panel:          { flex: 1 },
-  panelContent:   { backgroundColor: COLORS.surface, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  panelContent:   { backgroundColor: W.surface, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
 
   // Task info
   taskInfoRow:    { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  taskTitle:      { fontSize: 16, fontWeight: '700', color: COLORS.neutral[900] },
-  taskCategory:   { fontSize: 12, color: COLORS.neutral[500], marginTop: 2 },
-  rateChip:       { backgroundColor: COLORS.brand.tint, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: COLORS.brand.primary },
-  rateText:       { fontSize: 16, fontWeight: '800', color: COLORS.brand.primary },
+  taskTitle:      { fontSize: 16, fontWeight: '700', color: W.text.primary },
+  taskCategory:   { fontSize: 12, color: W.text.secondary, marginTop: 2 },
+  rateChip:       { backgroundColor: W.primaryTint, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: W.primary },
+  rateText:       { fontSize: 16, fontWeight: '800', color: W.primary },
 
   // Info card (ACCEPTED state)
-  infoCard:       { backgroundColor: COLORS.neutral[100], borderRadius: 10, padding: 12, marginBottom: 12 },
-  infoCardText:   { fontSize: 13, color: COLORS.neutral[600], lineHeight: 18 },
+  infoCard:       { backgroundColor: W.primaryTint, borderRadius: 10, padding: 12, marginBottom: 12 },
+  infoCardText:   { fontSize: 13, color: W.text.secondary, lineHeight: 18 },
+
+  // GPS warning (inline, subtle)
+  gpsWarning:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FEF3C7', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
+  gpsWarningText: { fontSize: 12, color: '#92400E', flex: 1 },
 
   // Progress row
   progressRow:    { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  sectionLabel:   { fontSize: 14, fontWeight: '700', color: COLORS.neutral[800] },
+  sectionLabel:   { fontSize: 14, fontWeight: '700', color: W.text.primary },
   progressPills:  { flexDirection: 'row', gap: 4, marginLeft: 'auto', marginRight: 8 },
-  pill:           { width: 20, height: 4, borderRadius: 2, backgroundColor: COLORS.neutral[200] },
-  pillDone:       { backgroundColor: COLORS.brand.primary },
-  progressText:   { fontSize: 12, fontWeight: '700', color: COLORS.neutral[500] },
+  pill:           { width: 20, height: 4, borderRadius: 2, backgroundColor: W.border },
+  pillDone:       { backgroundColor: W.primary },
+  progressText:   { fontSize: 12, fontWeight: '700', color: W.text.secondary },
 
   // Photo grid
   photoGrid:      { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  photoBox:       { flex: 1, aspectRatio: 0.85, borderRadius: 12, backgroundColor: COLORS.neutral[50], borderWidth: 1.5, borderColor: COLORS.neutral[200], alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  photoBox:       { flex: 1, aspectRatio: 0.85, borderRadius: 12, backgroundColor: W.background, borderWidth: 1.5, borderColor: W.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   photoBoxInner:  { alignItems: 'center', justifyContent: 'center', gap: 4 },
   photoIconCircle:{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   photoLabel:     { fontSize: 12, fontWeight: '700' },
-  photoHint:      { fontSize: 9, color: COLORS.neutral[400] },
+  photoHint:      { fontSize: 9, color: W.text.muted },
   photoBadge:     { position: 'absolute', top: 6, left: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   photoBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
   checkOverlay:   { position: 'absolute', bottom: 6, right: 6, borderRadius: 10, padding: 3 },
 
   // Buttons
-  startBtn:       { backgroundColor: COLORS.brand.primary, borderRadius: 14, height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  startBtn:       { backgroundColor: W.primary, borderRadius: 14, height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   startBtnText:   { fontSize: 16, fontWeight: '700', color: '#fff' },
-  submitBtn:      { backgroundColor: COLORS.brand.primary, borderRadius: 14, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  submitBtn:      { backgroundColor: W.primary, borderRadius: 14, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   submitBtnText:  { fontSize: 14, fontWeight: '700', color: '#fff' },
-  desc:           { fontSize: 13, color: COLORS.neutral[600], lineHeight: 19, marginBottom: 8 },
-  infoLine:       { fontSize: 12, color: COLORS.neutral[500], marginBottom: 12 },
-  chatBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 44, borderRadius: 12, backgroundColor: COLORS.neutral[100], marginBottom: 8 },
-  chatBtnText:    { fontSize: 14, fontWeight: '600', color: COLORS.brand.primary },
-  cancelBtn:      { height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: COLORS.neutral[200], marginTop: 4 },
-  cancelBtnText:  { fontSize: 13, fontWeight: '500', color: COLORS.neutral[500] },
+  desc:           { fontSize: 13, color: W.text.secondary, lineHeight: 19, marginBottom: 8 },
+  infoLine:       { fontSize: 12, color: W.text.secondary, marginBottom: 12 },
+  chatBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 44, borderRadius: 12, backgroundColor: W.primaryTint, marginBottom: 8 },
+  chatBtnText:    { fontSize: 14, fontWeight: '600', color: W.primary },
+  cancelBtn:      { height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: W.border, marginTop: 4 },
+  cancelBtnText:  { fontSize: 13, fontWeight: '500', color: W.text.secondary },
   btnDisabled:    { opacity: 0.45 },
 
   // Cancel modal
   modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   cancelSheet:    { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-  cancelSheetTitle: { fontSize: 20, fontWeight: '800', color: COLORS.neutral[900], marginBottom: 4 },
-  cancelSheetSub: { fontSize: 13, color: COLORS.neutral[500], marginBottom: 16 },
-  cancelInput:    { backgroundColor: COLORS.neutral[100], borderRadius: 12, padding: 14, fontSize: 15, color: COLORS.neutral[900], minHeight: 80, textAlignVertical: 'top', borderWidth: 1, borderColor: COLORS.border },
-  cancelCharCount:{ fontSize: 11, color: COLORS.neutral[400], textAlign: 'right', marginTop: 4 },
+  cancelSheetTitle: { fontSize: 20, fontWeight: '800', color: W.text.primary, marginBottom: 4 },
+  cancelSheetSub: { fontSize: 13, color: W.text.secondary, marginBottom: 16 },
+  cancelInput:    { backgroundColor: W.primaryTint, borderRadius: 12, padding: 14, fontSize: 15, color: W.text.primary, minHeight: 80, textAlignVertical: 'top', borderWidth: 1, borderColor: W.border },
+  cancelCharCount:{ fontSize: 11, color: W.text.muted, textAlign: 'right', marginTop: 4 },
   cancelBtns:     { flexDirection: 'row', gap: 12, marginTop: 20 },
-  cancelSheetBack:{ flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.border },
-  cancelSheetBackText: { fontSize: 15, fontWeight: '600', color: COLORS.neutral[700] },
-  cancelSheetConfirm: { flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.status.error },
+  cancelSheetBack:{ flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: W.border },
+  cancelSheetBackText: { fontSize: 15, fontWeight: '600', color: W.text.secondary },
+  cancelSheetConfirm: { flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: W.status.error },
   cancelSheetConfirmText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 
   // Source picker sheet
@@ -679,22 +692,22 @@ const styles = StyleSheet.create({
   sourceHeaderRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
   sourceBadge:      { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
   sourceBadgeText:  { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
-  sourceTitle:      { fontSize: 20, fontWeight: '800', color: COLORS.neutral[900] },
+  sourceTitle:      { fontSize: 20, fontWeight: '800', color: W.text.primary },
   sourceCards:      { flexDirection: 'row', gap: 12 },
-  sourceCard:       { flex: 1, backgroundColor: COLORS.neutral[50], borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.neutral[200] },
+  sourceCard:       { flex: 1, backgroundColor: W.background, borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1.5, borderColor: W.border },
   sourceCardIcon:   { width: 56, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  sourceCardTitle:  { fontSize: 15, fontWeight: '700', color: COLORS.neutral[900], marginBottom: 4 },
-  sourceCardSub:    { fontSize: 11, color: COLORS.neutral[500], textAlign: 'center', lineHeight: 16 },
+  sourceCardTitle:  { fontSize: 15, fontWeight: '700', color: W.text.primary, marginBottom: 4 },
+  sourceCardSub:    { fontSize: 11, color: W.text.secondary, textAlign: 'center', lineHeight: 16 },
   sourceCardTag:    { position: 'absolute', top: 8, right: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   sourceCardTagText:{ color: '#fff', fontSize: 8, fontWeight: '800', letterSpacing: 0.5 },
-  sourceFooter:     { fontSize: 10, color: COLORS.neutral[400], textAlign: 'center', marginTop: 16 },
+  sourceFooter:     { fontSize: 10, color: W.text.muted, textAlign: 'center', marginTop: 16 },
 
   // Gallery picker
   gpModal:        { flex: 1, backgroundColor: '#fff' },
-  gpHeader:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  gpTitle:        { fontSize: 17, fontWeight: '700', color: COLORS.neutral[900] },
+  gpHeader:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: W.border },
+  gpTitle:        { fontSize: 17, fontWeight: '700', color: W.text.primary },
   gpEmpty:        { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  gpEmptyText:    { fontSize: 14, color: COLORS.neutral[400] },
+  gpEmptyText:    { fontSize: 14, color: W.text.muted },
   gpThumb:        { width: (Dimensions.get('window').width - 6) / 3, height: (Dimensions.get('window').width - 6) / 3, margin: 1 },
   gpThumbImg:     { width: '100%', height: '100%' },
   gpTypeDot:      { position: 'absolute', top: 4, left: 4, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },

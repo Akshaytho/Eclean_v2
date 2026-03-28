@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Alert, ActivityIndicator, Image,
+  ScrollView, ActivityIndicator, Image, Modal,
 } from 'react-native'
 import MapView, { Marker } from 'react-native-maps'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -12,6 +12,7 @@ import { ArrowLeft, MapPin, Clock, DollarSign, Briefcase, AlertTriangle } from '
 import * as Haptics from 'expo-haptics'
 
 import { COLORS } from '../../constants/colors'
+import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { DIRTY_LEVELS } from '../../constants/taskCategories'
 import { workerTasksApi } from '../../api/tasks.api'
 import { formatMoney } from '../../utils/formatMoney'
@@ -36,8 +37,8 @@ export function TaskDetailScreen() {
   const queryClient   = useQueryClient()
   const { joinTask }  = useSocketStore()
 
-  // Double-tap prevention
   const isAccepting = useRef(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const { data: task, isLoading, error } = useQuery({
     queryKey: ['worker', 'task', taskId],
@@ -55,33 +56,25 @@ export function TaskDetailScreen() {
     onError: (err: any) => {
       isAccepting.current = false
       const msg = err?.response?.data?.error?.message ?? 'Could not accept task'
-      Alert.alert('Cannot Accept', msg)
+      console.error('Cannot Accept:', msg)
     },
   })
 
   const handleAccept = () => {
+    setConfirmOpen(true)
+  }
+
+  const confirmAccept = () => {
     if (isAccepting.current) return
-    Alert.alert(
-      'Accept Task',
-      `Accept "${task?.title}" for ${formatMoney(task?.rateCents ?? 0, 'INR')}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Accept',
-          onPress: () => {
-            if (isAccepting.current) return
-            isAccepting.current = true
-            acceptMutation.mutate()
-          },
-        },
-      ],
-    )
+    isAccepting.current = true
+    setConfirmOpen(false)
+    acceptMutation.mutate()
   }
 
   if (isLoading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={COLORS.brand.primary} size="large" />
+        <ActivityIndicator color={W.primary} size="large" />
       </View>
     )
   }
@@ -105,7 +98,7 @@ export function TaskDetailScreen() {
       {/* ── Back header ── */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ArrowLeft size={22} color={COLORS.neutral[900]} />
+          <ArrowLeft size={22} color={W.text.primary} />
         </TouchableOpacity>
         <Text style={styles.topBarTitle} numberOfLines={1}>{task.title}</Text>
         <View style={{ width: 40 }} />
@@ -134,14 +127,14 @@ export function TaskDetailScreen() {
           </MapView>
         ) : (
           <View style={styles.noMap}>
-            <MapPin size={24} color={COLORS.neutral[400]} />
+            <MapPin size={24} color={W.text.muted} />
             <Text style={styles.noMapText}>No location specified</Text>
           </View>
         )}
 
         {/* ── Rate ── */}
         <View style={styles.rateCard}>
-          <DollarSign size={20} color={COLORS.brand.primary} />
+          <DollarSign size={20} color={W.primary} />
           <Text style={styles.rateAmount}>{formatMoney(task.rateCents, 'INR')}</Text>
           <View style={[styles.dirtyBadge, { backgroundColor: dirtyColor }]}>
             <Text style={styles.dirtyText}>{task.dirtyLevel}</Text>
@@ -165,39 +158,81 @@ export function TaskDetailScreen() {
         {/* ── Details ── */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Details</Text>
-          <DetailRow icon={<Briefcase size={16} color={COLORS.neutral[500]} />} label="Category" value={task.category.replace(/_/g, ' ')} />
-          <DetailRow icon={<AlertTriangle size={16} color={COLORS.neutral[500]} />} label="Urgency" value={task.urgency} />
+          <DetailRow icon={<Briefcase size={16} color={W.text.secondary} />} label="Category" value={task.category.replace(/_/g, ' ')} />
+          <DetailRow icon={<AlertTriangle size={16} color={W.text.secondary} />} label="Urgency" value={task.urgency} />
           {task.locationAddress && (
-            <DetailRow icon={<MapPin size={16} color={COLORS.neutral[500]} />} label="Location" value={task.locationAddress} />
+            <DetailRow icon={<MapPin size={16} color={W.text.secondary} />} label="Location" value={task.locationAddress} />
           )}
           {task.workWindowStart && (
             <DetailRow
-              icon={<Clock size={16} color={COLORS.neutral[500]} />}
+              icon={<Clock size={16} color={W.text.secondary} />}
               label="Work Window"
               value={`${new Date(task.workWindowStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${new Date(task.workWindowEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
             />
           )}
           {(task as any).buyer && (
-            <DetailRow icon={<Briefcase size={16} color={COLORS.neutral[500]} />} label="Posted by" value={(task as any).buyer.name} />
+            <DetailRow icon={<Briefcase size={16} color={W.text.secondary} />} label="Posted by" value={(task as any).buyer.name} />
           )}
         </View>
       </ScrollView>
 
-      {/* ── Accept Button ── */}
+      {/* ── Footer Button ── */}
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.acceptBtn, acceptMutation.isPending && styles.acceptBtnDisabled]}
-          onPress={handleAccept}
-          activeOpacity={0.85}
-          disabled={acceptMutation.isPending}
-        >
-          {acceptMutation.isPending ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.acceptBtnText}>Accept Task — {formatMoney(task.rateCents, 'INR')}</Text>
-          )}
-        </TouchableOpacity>
+        {task.status === 'OPEN' ? (
+          <TouchableOpacity
+            style={[styles.acceptBtn, acceptMutation.isPending && styles.acceptBtnDisabled]}
+            onPress={handleAccept}
+            activeOpacity={0.85}
+            disabled={acceptMutation.isPending}
+          >
+            {acceptMutation.isPending ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.acceptBtnText}>Accept Task — {formatMoney(task.rateCents, 'INR')}</Text>
+            )}
+          </TouchableOpacity>
+        ) : (task.status === 'ACCEPTED' || task.status === 'IN_PROGRESS') ? (
+          <TouchableOpacity
+            style={styles.acceptBtn}
+            onPress={() => navigation.replace('ActiveTask', { taskId })}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.acceptBtnText}>
+              {task.status === 'IN_PROGRESS' ? 'Continue Working' : 'Go to Task'}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
+
+      {/* Accept confirmation sheet */}
+      <Modal visible={confirmOpen} transparent animationType="fade" onRequestClose={() => setConfirmOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setConfirmOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.confirmSheet}>
+            <View style={styles.confirmHandle} />
+            <Text style={styles.confirmTitle}>Accept this task?</Text>
+            <Text style={styles.confirmSub}>{task?.title}</Text>
+            <View style={styles.confirmPriceRow}>
+              <Text style={styles.confirmPriceLabel}>You'll earn</Text>
+              <Text style={styles.confirmPrice}>{formatMoney(task?.rateCents ?? 0, 'INR')}</Text>
+            </View>
+            <View style={styles.confirmBtns}>
+              <TouchableOpacity style={styles.confirmCancel} onPress={() => setConfirmOpen(false)}>
+                <Text style={styles.confirmCancelText}>Not Now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmAccept}
+                onPress={confirmAccept}
+                disabled={acceptMutation.isPending}
+              >
+                {acceptMutation.isPending
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.confirmAcceptText}>Accept Task</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   )
 }
@@ -213,70 +248,70 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 }
 
 const styles = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: COLORS.background },
+  container:      { flex: 1, backgroundColor: W.background },
   center:         { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  errorText:      { fontSize: 16, color: COLORS.neutral[600], marginBottom: 12 },
-  backLink:       { color: COLORS.brand.primary, fontSize: 15, fontWeight: '600' },
+  errorText:      { fontSize: 16, color: W.text.secondary, marginBottom: 12 },
+  backLink:       { color: W.primary, fontSize: 15, fontWeight: '600' },
   topBar:         {
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 56,
     paddingBottom: 12,
     paddingHorizontal: 16,
-    backgroundColor: COLORS.surface,
+    backgroundColor: W.surface,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: W.border,
   },
   backBtn:        { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  topBarTitle:    { flex: 1, fontSize: 17, fontWeight: '700', color: COLORS.neutral[900], textAlign: 'center' },
+  topBarTitle:    { flex: 1, fontSize: 17, fontWeight: '700', color: W.text.primary, textAlign: 'center' },
   content:        { padding: 16, paddingBottom: 32, gap: 12 },
   miniMap:        { height: 180, borderRadius: 14, overflow: 'hidden' },
-  noMap:          { height: 100, borderRadius: 14, backgroundColor: COLORS.neutral[100], alignItems: 'center', justifyContent: 'center', gap: 8 },
-  noMapText:      { fontSize: 13, color: COLORS.neutral[400] },
-  refPhotoCard:   { borderRadius: 14, overflow: 'hidden', backgroundColor: COLORS.surface },
+  noMap:          { height: 100, borderRadius: 14, backgroundColor: W.primaryTint, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  noMapText:      { fontSize: 13, color: W.text.muted },
+  refPhotoCard:   { borderRadius: 14, overflow: 'hidden', backgroundColor: W.surface },
   refPhotoImg:    { width: '100%', height: 200, borderRadius: 14 },
-  refPhotoLabel:  { fontSize: 12, color: COLORS.neutral[500], textAlign: 'center', paddingVertical: 8 },
+  refPhotoLabel:  { fontSize: 12, color: W.text.secondary, textAlign: 'center', paddingVertical: 8 },
   rateCard:       {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: COLORS.surface,
+    backgroundColor: W.surface,
     borderRadius: 14,
     padding: 16,
-    shadowColor: COLORS.shadow,
+    shadowColor: W.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 2,
   },
-  rateAmount:     { fontSize: 24, fontWeight: '800', color: COLORS.brand.primary, flex: 1 },
+  rateAmount:     { fontSize: 24, fontWeight: '800', color: W.primary, flex: 1 },
   dirtyBadge:     { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   dirtyText:      { fontSize: 12, fontWeight: '700', color: '#fff' },
   card:           {
-    backgroundColor: COLORS.surface,
+    backgroundColor: W.surface,
     borderRadius: 14,
     padding: 16,
     gap: 10,
-    shadowColor: COLORS.shadow,
+    shadowColor: W.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 8,
     elevation: 2,
   },
-  cardTitle:      { fontSize: 14, fontWeight: '700', color: COLORS.neutral[700], marginBottom: 4 },
-  description:    { fontSize: 14, color: COLORS.neutral[700], lineHeight: 20 },
+  cardTitle:      { fontSize: 14, fontWeight: '700', color: W.text.secondary, marginBottom: 4 },
+  description:    { fontSize: 14, color: W.text.secondary, lineHeight: 20 },
   detailRow:      { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  detailLabel:    { fontSize: 13, color: COLORS.neutral[500], width: 90 },
-  detailValue:    { fontSize: 13, color: COLORS.neutral[800], flex: 1, fontWeight: '500' },
+  detailLabel:    { fontSize: 13, color: W.text.secondary, width: 90 },
+  detailValue:    { fontSize: 13, color: W.text.primary, flex: 1, fontWeight: '500' },
   footer:         {
     padding: 16,
     paddingBottom: 32,
-    backgroundColor: COLORS.surface,
+    backgroundColor: W.surface,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: W.border,
   },
   acceptBtn:      {
-    backgroundColor: COLORS.brand.primary,
+    backgroundColor: W.primary,
     borderRadius: 14,
     height: 52,
     alignItems: 'center',
@@ -284,4 +319,17 @@ const styles = StyleSheet.create({
   },
   acceptBtnDisabled: { opacity: 0.6 },
   acceptBtnText:  { fontSize: 16, fontWeight: '700', color: '#fff' },
+  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  confirmSheet:   { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 24, paddingBottom: 40 },
+  confirmHandle:  { width: 36, height: 4, borderRadius: 2, backgroundColor: '#D1D5DB', alignSelf: 'center', marginTop: 12, marginBottom: 20 },
+  confirmTitle:   { fontSize: 20, fontWeight: '800', color: W.text.primary },
+  confirmSub:     { fontSize: 14, color: W.text.secondary, marginTop: 4 },
+  confirmPriceRow:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#DCFCE7', borderRadius: 12, padding: 16, marginTop: 16 },
+  confirmPriceLabel: { fontSize: 14, color: '#15803D', fontWeight: '600' },
+  confirmPrice:   { fontSize: 24, fontWeight: '800', color: '#15803D' },
+  confirmBtns:    { flexDirection: 'row', gap: 12, marginTop: 20 },
+  confirmCancel:  { flex: 1, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E5E7EB' },
+  confirmCancelText: { fontSize: 15, fontWeight: '600', color: W.text.secondary },
+  confirmAccept:  { flex: 1, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: W.primary },
+  confirmAcceptText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 })

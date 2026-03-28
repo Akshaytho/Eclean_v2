@@ -20,10 +20,10 @@ type Nav = NativeStackNavigationProp<WorkerStackParamList>
 
 type Tab = 'active' | 'completed' | 'cancelled'
 
-const TAB_STATUSES: Record<Tab, string> = {
-  active:    'ACCEPTED,IN_PROGRESS,SUBMITTED,DISPUTED',
-  completed: 'APPROVED,COMPLETED,VERIFIED',
-  cancelled: 'CANCELLED,REJECTED',
+const TAB_STATUSES: Record<Tab, string[]> = {
+  active:    ['ACCEPTED', 'IN_PROGRESS', 'SUBMITTED', 'DISPUTED'],
+  completed: ['APPROVED', 'COMPLETED', 'VERIFIED'],
+  cancelled: ['CANCELLED', 'REJECTED'],
 }
 
 const STATUS_COLOR: Partial<Record<TaskStatus, string>> = {
@@ -55,12 +55,13 @@ export function MyTasksScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('active')
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['worker', 'my-tasks', activeTab],
-    queryFn:  () => workerTasksApi.myTasks({ status: TAB_STATUSES[activeTab], limit: 50 }),
+    queryKey: ['worker', 'my-tasks'],
+    queryFn:  () => workerTasksApi.myTasks({ limit: 100 }),
     staleTime: 15_000,
   })
 
-  const tasks = data?.tasks ?? []
+  const allTasks = data?.tasks ?? []
+  const tasks = allTasks.filter(t => TAB_STATUSES[activeTab].includes(t.status))
 
   return (
     <View style={styles.container}>

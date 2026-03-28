@@ -56,7 +56,7 @@ export function WorkerHomeScreen() {
   })
   const recentQuery = useQuery({
     queryKey: ['worker-tasks-recent'],
-    queryFn: () => workerTasksApi.myTasks({ status: 'APPROVED,COMPLETED', limit: 5 }),
+    queryFn: () => workerTasksApi.myTasks({ limit: 50 }),
     staleTime: 30_000,
   })
   const walletQuery = useQuery({
@@ -75,7 +75,7 @@ export function WorkerHomeScreen() {
   const isAvailable = wp?.isAvailable ?? true
   const activeTask = activeQuery.data?.tasks?.[0] ?? acceptedQuery.data?.tasks?.[0]
   const wallet = walletQuery.data
-  const recentTasks = recentQuery.data?.tasks ?? []
+  const recentTasks = (recentQuery.data?.tasks ?? []).filter(t => ['APPROVED', 'COMPLETED'].includes(t.status)).slice(0, 5)
 
   const firstName = user?.name?.split(' ')[0] ?? 'there'
   const hour = new Date().getHours()
