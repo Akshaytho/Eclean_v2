@@ -21,3 +21,7 @@ export { AIScoreCard }    from './task/AIScoreCard'
 // Map components
 export { WorkerLocationMarker } from './maps/WorkerLocationMarker'
 export { ZoneOverlay }          from './maps/ZoneOverlay'
+
+// Camera
+export { CaptureCamera, DashboardCamera, PhotoPreview } from './camera'
+export type { CaptureResult, PhotoType } from './camera'
