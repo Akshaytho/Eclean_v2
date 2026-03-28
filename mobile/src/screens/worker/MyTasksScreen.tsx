@@ -107,7 +107,12 @@ export function MyTasksScreen() {
           renderItem={({ item }) => (
             <TaskRow
               task={item}
-              onPress={() => navigation.navigate('TaskDetail', { taskId: item.id })}
+              onPress={() => {
+                if (item.status === 'ACCEPTED' || item.status === 'IN_PROGRESS')
+                  navigation.navigate('ActiveTask', { taskId: item.id })
+                else
+                  navigation.navigate('TaskDetail', { taskId: item.id })
+              }}
               onContinue={
                 (item.status === 'ACCEPTED' || item.status === 'IN_PROGRESS')
                   ? () => navigation.navigate('ActiveTask', { taskId: item.id })

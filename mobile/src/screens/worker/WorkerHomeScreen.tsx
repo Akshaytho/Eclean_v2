@@ -146,8 +146,7 @@ export function WorkerHomeScreen() {
           <TouchableOpacity
             style={s.activeCard}
             onPress={() => {
-              if (activeTask.status === 'IN_PROGRESS') navigation.navigate('ActiveTask', { taskId: activeTask.id })
-              else navigation.navigate('TaskDetail', { taskId: activeTask.id })
+              navigation.navigate('ActiveTask', { taskId: activeTask.id })
             }}
             activeOpacity={0.9}
           >

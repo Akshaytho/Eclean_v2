@@ -168,7 +168,7 @@ export function TaskDetailScreen() {
             <DetailRow
               icon={<Clock size={16} color={W.text.secondary} />}
               label="Work Window"
-              value={`${new Date(task.workWindowStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${new Date(task.workWindowEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+              value={`${task.workWindowStart} – ${task.workWindowEnd}`}
             />
           )}
           {(task as any).buyer && (
