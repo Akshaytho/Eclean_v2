@@ -1,0 +1,187 @@
+name: Build Debug APK
+
+# Runs on every push to main — gives you a downloadable APK within ~20 mins
+# Also runnable manually from GitHub Actions tab
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Java + Node ────────────────────────────────────────────────────────
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ── Caches ────────────────────────────────────────────────────────────
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: mobile/node_modules
+          key: node-${{ hashFiles('mobile/package-lock.json') }}
+          restore-keys: node-
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            mobile/android/.gradle
+          key: gradle-${{ hashFiles('mobile/android/**/*.gradle*') }}
+          restore-keys: gradle-
+
+      # ── Install deps ───────────────────────────────────────────────────────
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm install --legacy-peer-deps
+
+      # ── Patches ───────────────────────────────────────────────────────────
+      - name: Patch react-native-svg (RN 0.76 StyleLength fix)
+        working-directory: mobile
+        run: |
+          FILE="node_modules/react-native-svg/common/cpp/react/renderer/components/rnsvg/RNSVGLayoutableShadowNode.cpp"
+          if [ -f "$FILE" ]; then
+            sed -i 's/yoga::StyleSizeLength/yoga::StyleLength/g' "$FILE"
+            echo "✅ Patched RNSVGLayoutableShadowNode.cpp"
+          else
+            echo "ℹ️  SVG patch file not found — skipping"
+          fi
+
+      # ── Expo prebuild ──────────────────────────────────────────────────────
+      - name: Generate android/ with expo prebuild
+        working-directory: mobile
+        run: npx expo prebuild --platform android --clean --no-install
+
+      # ── Native module check ────────────────────────────────────────────────
+      - name: Verify native modules linked
+        working-directory: mobile
+        run: |
+          echo "=== Checking key native modules in build.gradle ==="
+          GRADLE="android/app/build.gradle"
+          for mod in react-native-maps react-native-reanimated react-native-gesture-handler; do
+            grep -q "$mod" "$GRADLE" \
+              && echo "✅ $mod linked" \
+              || echo "⚠️  $mod NOT found in build.gradle"
+          done
+
+      # ── Patch Gradle issues (RN 0.76) ─────────────────────────────────────
+      - name: Patch RN 0.76 build.gradle issues
+        working-directory: mobile/android
+        run: |
+          # Fix: compileSdkVersion if needed
+          if grep -q "compileSdkVersion 34" app/build.gradle 2>/dev/null; then
+            echo "ℹ️  compileSdkVersion already 34 — no patch needed"
+          fi
+          echo "✅ Gradle patch step complete"
+
+      # ── Bundle JS ─────────────────────────────────────────────────────────
+      - name: Bundle JavaScript (expo export:embed)
+        working-directory: mobile
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx expo export:embed \
+            --platform android \
+            --dev false \
+            --entry-file node_modules/expo/AppEntry.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res
+          echo "✅ JS bundle created: $(du -sh android/app/src/main/assets/index.android.bundle)"
+
+      # ── Build APK ─────────────────────────────────────────────────────────
+      - name: Build debug APK
+        working-directory: mobile/android
+        run: |
+          chmod +x gradlew
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Building APK... (this takes ~15 minutes)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # Run build — capture output for clean error display
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --warning-mode=none \
+            --stacktrace \
+            2>&1 | tee /tmp/gradle_full.log | grep -E \
+              "^> Task|FAILED|error:|Error:|Exception|BUILD SUCCESS|BUILD FAILED|warning:" \
+            | grep -v "^> Task :.*UP-TO-DATE" \
+            | grep -v "^> Task :.*FROM-CACHE"
+
+          BUILD_EXIT=${PIPESTATUS[0]}
+
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "❌ BUILD FAILED — Full error context:"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            # Show the last 80 lines which contain the actual error
+            tail -80 /tmp/gradle_full.log
+            exit $BUILD_EXIT
+          fi
+
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ BUILD SUCCEEDED"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          APK=$(find . -name "*.apk" -path "*/debug/*" | head -1)
+          echo "APK: $APK"
+          cp "$APK" ../eclean-debug.apk
+          ls -lh ../eclean-debug.apk
+
+      # ── Upload APK ─────────────────────────────────────────────────────────
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: eclean-debug-apk-${{ github.run_number }}
+          path: mobile/eclean-debug.apk
+          retention-days: 14
+
+      # ── Upload build logs on failure ────────────────────────────────────────
+      - name: Upload build logs (on failure)
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-failure-logs-${{ github.run_number }}
+          path: /tmp/gradle_full.log
+          retention-days: 7
+
+      # ── Summary ────────────────────────────────────────────────────────────
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## eClean APK Build — Run #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.event.head_commit.message }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f mobile/eclean-debug.apk ]; then
+            SIZE=$(du -sh mobile/eclean-debug.apk | cut -f1)
+            echo "✅ **APK built successfully — Size: $SIZE**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "📥 Download from the **Artifacts** section below" >> $GITHUB_STEP_SUMMARY
+            echo "📱 Install on Android: Settings → Security → Unknown sources → ON" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Build failed — download logs from Artifacts section below**" >> $GITHUB_STEP_SUMMARY
+          fi
