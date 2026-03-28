@@ -55,7 +55,16 @@ jobs:
         run: npm install --legacy-peer-deps
 
       # ── Patches ───────────────────────────────────────────────────────────
-      # SVG patch removed — react-native-svg 15.15.4 has native fix for RN 0.79+
+      - name: Patch react-native-svg (RN 0.81 StyleSizeLength fix)
+        working-directory: mobile
+        run: |
+          FILE="node_modules/react-native-svg/common/cpp/react/renderer/components/rnsvg/RNSVGLayoutableShadowNode.cpp"
+          if [ -f "$FILE" ]; then
+            sed -i 's/yoga::StyleLength/yoga::StyleSizeLength/g' "$FILE"
+            echo "✅ Patched StyleLength → StyleSizeLength for RN 0.81"
+          else
+            echo "ℹ️  SVG patch file not found — skipping"
+          fi
 
       # ── Expo prebuild ──────────────────────────────────────────────────────
       - name: Generate android/ with expo prebuild
