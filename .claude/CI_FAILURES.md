@@ -412,3 +412,9 @@ Next: Add CI_SECRET to GitHub repo secrets at
 Settings → Secrets → Actions → New repository secret
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23677343637
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-28 04:49 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `70fb31b` — fix: use correct GitHub secret name Eclean_CI_Secret
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23677423877
+- **Status:** Unresolved — add fix description when fixed
