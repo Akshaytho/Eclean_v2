@@ -84,16 +84,20 @@ jobs:
           done
 
       # ── Patch Gradle issues (RN 0.76) ─────────────────────────────────────
-            - name: Patch RN 0.76 build.gradle issues
-        working-directory: mobile/android
+      - name: Patch RN 0.76 build.gradle issues
+        working-directory: mobile
         run: |
-          # Fix 1: remove enableBundleCompression — not in RN 0.76 ReactExtension
-          if grep -q "enableBundleCompression" app/build.gradle; then
-            sed -i '/enableBundleCompression/d' app/build.gradle
-            echo "✅ Removed enableBundleCompression"
-          else
-            echo "ℹ️  enableBundleCompression not present"
-          fi
+          GRADLE="android/app/build.gradle"
+
+          echo "--- Before patch ---"
+          grep -n "enableBundleCompression" "$GRADLE" || echo "(not found)"
+
+          # Remove enableBundleCompression — not supported in this RN version's ReactExtension
+          # Run unconditionally — sed is a no-op if line doesn't exist
+          sed -i '/enableBundleCompression/d' "$GRADLE"
+
+          echo "--- After patch ---"
+          grep -n "enableBundleCompression" "$GRADLE" || echo "✅ enableBundleCompression removed"
           echo "✅ Gradle patch complete"
 
       - name: Bundle JavaScript (expo export:embed)
