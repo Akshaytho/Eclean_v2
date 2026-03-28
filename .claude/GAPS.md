@@ -73,7 +73,7 @@
 
 | # | Status | Priority | Problem | Solution |
 |---|--------|----------|---------|----------|
-| M1 | [ ] | 🔴 | No crash reporting — production crashes are invisible | Add Sentry React Native: `npx @sentry/wizard -i reactNative` — 30 min setup, free tier |
+| M1 | [x] | 🔴 | No crash reporting — production crashes are invisible | Add Sentry React Native: `npx @sentry/wizard -i reactNative` — 30 min setup, free tier |
 | M2 | [ ] | 🟡 | No backend error tracking — Fastify errors swallowed silently | Add Sentry Node SDK to Fastify: `@sentry/node` with `requestHandler` and `errorHandler` |
 | M3 | [ ] | 🟡 | No API analytics — don't know which endpoints are slow or failing | Add Fastify `pino` structured logging + ship logs to Better Stack (free tier) or Logtail |
 | M4 | [ ] | 🟡 | No user analytics — don't know where users drop off | Add PostHog React Native (open source, self-hostable, GDPR compliant) — track screen views |
@@ -143,6 +143,7 @@
 | Date | Gap ID | What was done | Session context |
 |------|--------|---------------|-----------------|
 | — | — | — | — |
+| 2026-03-28 | M1 | Sentry React Native installed + init in App.tsx + plugin in app.json | Session 3 — polish |
 | 2026-03-28 | P3 | React Query stale times tuned in QueryClient + per-screen via staleTime | Session 2 — components + hooks |
 
 ---

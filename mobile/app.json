@@ -78,6 +78,14 @@
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "eclean",
+          "project": "eclean-mobile",
+          "url": "https://sentry.io/"
+        }
       ]
     ],
     "extra": {

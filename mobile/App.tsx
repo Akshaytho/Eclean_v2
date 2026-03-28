@@ -8,6 +8,15 @@ import React, { useEffect, useState, Component } from 'react'
 import { StatusBar } from 'expo-status-bar'
 import { NavigationContainer } from '@react-navigation/native'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import * as Sentry from '@sentry/react-native'
+
+// Sentry crash reporting — DSN set via EXPO_PUBLIC_SENTRY_DSN env var
+// Get DSN from sentry.io → your project → Client Keys
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? '',
+  enabled: process.env.NODE_ENV === 'production',
+  tracesSampleRate: 0.2,
+})
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native'
 import * as SplashScreen from 'expo-splash-screen'
