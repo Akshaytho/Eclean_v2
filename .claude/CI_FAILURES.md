@@ -335,3 +335,27 @@ immediate parse/runtime failure. Replace with simpler pattern:
   3. extendedWaitUntil Sign In visible (works for both first launch and repeat)
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23676374977
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-28 03:54 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `6b3a7cd` — debug: add detailed CI diagnostics for login failure
+
+Backend debug step shows:
+- Railway reachability + health endpoint response
+- Register response (201 new / 409 already exists)
+- Login response with token presence check
+- App apiUrl config verification
+
+Flow debug screenshots capture:
+- Sign In screen loaded
+- Credentials filled
+- Screen immediately after tapping Sign In
+- Home screen (or error) after wait
+
+This will tell us exactly what fails:
+- Is Railway unreachable from emulator?
+- Does register/login API return errors?
+- Does the app hit a different API URL?
+- Does home screen load but content differs?
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23676898180
+- **Status:** Unresolved — add fix description when fixed
