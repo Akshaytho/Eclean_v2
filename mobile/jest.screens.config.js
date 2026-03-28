@@ -39,6 +39,12 @@ module.exports = {
     '^@gorhom/bottom-sheet$':            '<rootDir>/tests/__mocks__/bottom-sheet.js',
     '^lucide-react-native$':             '<rootDir>/tests/__mocks__/lucide.js',
     '^socket.io-client$':                '<rootDir>/tests/__mocks__/noop.js',
+    '^@sentry/react-native$':            '<rootDir>/tests/__mocks__/noop.js',
+    '^expo-camera$':                     '<rootDir>/tests/__mocks__/noop.js',
+    '^expo-file-system$':                '<rootDir>/tests/__mocks__/noop.js',
+    '^expo-crypto$':                     '<rootDir>/tests/__mocks__/noop.js',
+    '^expo-device$':                     '<rootDir>/tests/__mocks__/noop.js',
+    '^expo-image-manipulator$':          '<rootDir>/tests/__mocks__/noop.js',
     // Assets
     '\\.(jpg|jpeg|png|gif|svg|webp)$':   '<rootDir>/tests/__mocks__/fileMock.js',
   },

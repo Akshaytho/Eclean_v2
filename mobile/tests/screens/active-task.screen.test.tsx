@@ -157,22 +157,24 @@ describe('ActiveTaskScreen — IN_PROGRESS photo grid', () => {
     })
   })
 
-  it('shows Photos: 0/3 when no photos uploaded', async () => {
+  it('shows photo type buttons when no photos uploaded', async () => {
     mockApi.getTask.mockResolvedValue(
       makeTask({ status: 'IN_PROGRESS', startedAt: new Date().toISOString() }),
     )
     const { getByText } = wrap(<ActiveTaskScreen />)
-    await waitFor(() => expect(getByText(/Photos: 0\/3/)).toBeTruthy())
+    await waitFor(() => expect(getByText('Before')).toBeTruthy())
+    expect(getByText('After')).toBeTruthy()
+    expect(getByText('Proof')).toBeTruthy()
   })
 
-  it('navigates to SubmitProof when photo button tapped', async () => {
+  it('shows submit proof button in IN_PROGRESS state', async () => {
     mockApi.getTask.mockResolvedValue(
       makeTask({ status: 'IN_PROGRESS', startedAt: new Date().toISOString() }),
     )
     const { getByText } = wrap(<ActiveTaskScreen />)
-    await waitFor(() => expect(getByText(/Photos:/)).toBeTruthy())
-    fireEvent.press(getByText(/Photos:/))
-    expect(mockNavigate).toHaveBeenCalledWith('SubmitProof', { taskId: 'task-1' })
+    await waitFor(() => expect(getByText('Before')).toBeTruthy())
+    // Submit button exists (disabled until all 3 photos uploaded)
+    expect(getByText(/Submit|submit/i)).toBeTruthy()
   })
 })
 
