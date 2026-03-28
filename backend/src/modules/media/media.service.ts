@@ -2,11 +2,14 @@ import { Readable } from 'stream'
 import type { UploadApiResponse } from 'cloudinary'
 import { cloudinary, assertCloudinaryConfigured } from '../../lib/cloudinary'
 import { prisma } from '../../lib/prisma'
+import { logger } from '../../lib/logger'
 import {
   BadRequestError,
   NotFoundError,
   ForbiddenError,
 } from '../../lib/errors'
+import { extractExif, computePhotoDistance } from '../../lib/exif'
+import { logMediaEvent } from '../../lib/event-log'
 import {
   ALLOWED_MIME_TYPES,
   MAX_FILE_SIZE_BYTES,
@@ -69,6 +72,12 @@ export async function uploadTaskMedia(params: {
   // Guard — ensure Cloudinary is configured before attempting upload
   assertCloudinaryConfigured()
 
+  // ── EXIF extraction (BEFORE Cloudinary upload) ──────────────────────────────
+  // Cloudinary strips EXIF on upload. This is the ONLY chance to capture
+  // GPS coordinates, timestamp, and device info from the photo itself.
+  // Fire-and-forget — EXIF failure must never block the upload.
+  const exif = await extractExif(file)
+
   // Upload to Cloudinary via upload_stream (memory-efficient)
   const uploadResult = await new Promise<UploadApiResponse>((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
@@ -95,6 +104,51 @@ export async function uploadTaskMedia(params: {
       sizeBytes,
       type:      mediaType as never,
     },
+  })
+
+  // ── Write EXIF analytics (fire-and-forget) ──────────────────────────────────
+  // Captures the photo's GPS, timestamp, device — and flags fraud if GPS
+  // is too far from the task location. This data is irreplaceable.
+  const { distanceMeters, isFlagged, flagReason } = computePhotoDistance(
+    exif.lat, exif.lng, task.locationLat, task.locationLng,
+  )
+
+  // Write AnalyticsPhotoMeta asynchronously — never block the response
+  void prisma.analyticsPhotoMeta.create({
+    data: {
+      mediaId:                media.id,
+      taskId,
+      uploaderId:             userId,
+      uploaderRole:           userRole,
+      mediaType,
+      exifLat:                exif.lat,
+      exifLng:                exif.lng,
+      exifTimestamp:           exif.timestamp,
+      exifAltitude:           exif.altitude,
+      deviceMake:             exif.make,
+      deviceModel:            exif.model,
+      imageWidth:             exif.imageWidth,
+      imageHeight:            exif.imageHeight,
+      taskLat:                task.locationLat,
+      taskLng:                task.locationLng,
+      distanceFromTaskMeters: distanceMeters,
+      isFlagged,
+      flagReason,
+    },
+  }).catch((err) => {
+    logger.error({ err, mediaId: media.id }, 'AnalyticsPhotoMeta write failed (non-fatal)')
+  })
+
+  // Log the upload event for the EventLog stream
+  logMediaEvent(media.id, 'uploaded', userId, userRole, {
+    taskId,
+    mediaType,
+    mimeType,
+    sizeBytes,
+    url: uploadResult.secure_url,
+    exifGps: exif.lat !== null ? { lat: exif.lat, lng: exif.lng } : null,
+    exifDevice: exif.model,
+    isFlagged,
   })
 
   return media

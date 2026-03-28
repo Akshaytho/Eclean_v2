@@ -42,8 +42,30 @@ export const taskIdParamSchema = z.object({
   taskId: z.string().min(1),
 })
 
+// ─── API Key management ───────────────────────────────────────────────────────
+
+export const createApiKeySchema = z.object({
+  name:             z.string().min(2).max(100),
+  organizationName: z.string().min(2).max(200),
+  contactEmail:     z.string().email().optional(),
+  permissions:      z.array(z.string().min(1).max(50)).min(1),
+  rateLimitTier:    z.enum(['standard', 'premium', 'unlimited']).default('standard'),
+  expiresInDays:    z.number().int().positive().max(365).optional(),
+})
+
+export const apiKeyIdParamSchema = z.object({
+  id: z.string().uuid(),
+})
+
+export const listApiKeysQuerySchema = z.object({
+  page:  z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
+})
+
 // ─── Inferred types ───────────────────────────────────────────────────────────
 export type ConvertToTaskInput  = z.infer<typeof convertToTaskSchema>
 export type ResolveDisputeInput = z.infer<typeof resolveDisputeSchema>
 export type ListUsersQuery      = z.infer<typeof listUsersQuerySchema>
 export type ListDisputesQuery   = z.infer<typeof listDisputesQuerySchema>
+export type CreateApiKeyInput   = z.infer<typeof createApiKeySchema>
+export type ListApiKeysQuery    = z.infer<typeof listApiKeysQuerySchema>

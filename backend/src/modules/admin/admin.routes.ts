@@ -10,6 +10,9 @@ import {
   reportIdParamSchema,
   userIdParamSchema,
   taskIdParamSchema,
+  createApiKeySchema,
+  apiKeyIdParamSchema,
+  listApiKeysQuerySchema,
 } from './admin.schema'
 import * as ctrl from './admin.controller'
 
@@ -89,5 +92,34 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       preHandler: [...auth, validate({ params: userIdParamSchema })],
     },
     ctrl.verifyUserIdentity,
+  )
+
+  // ── API Key Management ────────────────────────────────────────────────────
+
+  // POST /api/v1/admin/api-keys — create a new B2B API key
+  fastify.post(
+    '/api-keys',
+    {
+      preHandler: [...auth, validate({ body: createApiKeySchema })],
+    },
+    ctrl.createApiKey,
+  )
+
+  // GET /api/v1/admin/api-keys — list all API keys
+  fastify.get(
+    '/api-keys',
+    {
+      preHandler: [...auth, validate({ query: listApiKeysQuerySchema })],
+    },
+    ctrl.listApiKeys,
+  )
+
+  // POST /api/v1/admin/api-keys/:id/revoke — deactivate a key
+  fastify.post(
+    '/api-keys/:id/revoke',
+    {
+      preHandler: [...auth, validate({ params: apiKeyIdParamSchema })],
+    },
+    ctrl.revokeApiKey,
   )
 }
