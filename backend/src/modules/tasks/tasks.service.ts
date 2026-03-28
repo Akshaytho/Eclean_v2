@@ -538,6 +538,12 @@ export async function submitTask(workerId: string, taskId: string) {
       },
     })
 
+    // Clear activeTaskId so worker can accept new tasks while this one is in review
+    await tx.workerProfile.update({
+      where: { userId: workerId },
+      data:  { activeTaskId: null },
+    })
+
     await recordEvent(tx, taskId, workerId, 'WORKER', 'IN_PROGRESS', 'SUBMITTED')
 
     await tx.notification.create({

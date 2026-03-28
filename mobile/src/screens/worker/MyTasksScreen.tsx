@@ -18,12 +18,20 @@ import type { WorkerStackParamList } from '../../navigation/types'
 
 type Nav = NativeStackNavigationProp<WorkerStackParamList>
 
-type Tab = 'active' | 'completed' | 'cancelled'
+type Tab = 'active' | 'in_review' | 'completed' | 'cancelled'
 
 const TAB_STATUSES: Record<Tab, string[]> = {
-  active:    ['ACCEPTED', 'IN_PROGRESS', 'SUBMITTED', 'DISPUTED'],
-  completed: ['APPROVED', 'COMPLETED', 'VERIFIED'],
+  active:    ['ACCEPTED', 'IN_PROGRESS'],
+  in_review: ['SUBMITTED', 'VERIFIED', 'DISPUTED'],
+  completed: ['APPROVED', 'COMPLETED'],
   cancelled: ['CANCELLED', 'REJECTED'],
+}
+
+const TAB_LABELS: Record<Tab, string> = {
+  active: 'Active',
+  in_review: 'In Review',
+  completed: 'Done',
+  cancelled: 'Cancelled',
 }
 
 const STATUS_COLOR: Partial<Record<TaskStatus, string>> = {
@@ -70,14 +78,14 @@ export function MyTasksScreen() {
 
       {/* ── Tabs ── */}
       <View style={styles.tabs}>
-        {(['active', 'completed', 'cancelled'] as Tab[]).map((tab) => (
+        {(['active', 'in_review', 'completed', 'cancelled'] as Tab[]).map((tab) => (
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && styles.tabActive]}
             onPress={() => setActiveTab(tab)}
           >
             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {TAB_LABELS[tab]}
             </Text>
           </TouchableOpacity>
         ))}
