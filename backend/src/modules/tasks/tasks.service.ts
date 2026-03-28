@@ -377,7 +377,11 @@ export async function acceptTask(workerId: string, taskId: string) {
 
         const profile = await tx.workerProfile.findUnique({ where: { userId: workerId } })
         if (!profile) throw new NotFoundError('Worker profile not found')
-        if (profile.activeTaskId !== null) throw new ConflictError('You already have an active task')
+        // Allow up to 3 concurrent tasks
+        const activeTasks = await tx.task.count({
+          where: { workerId, status: { in: ['ACCEPTED', 'IN_PROGRESS'] } },
+        })
+        if (activeTasks >= 3) throw new ConflictError('You can have at most 3 active tasks')
 
         const updated = await tx.task.update({
           where: { id: taskId },
