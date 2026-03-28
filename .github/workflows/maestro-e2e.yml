@@ -97,7 +97,7 @@ jobs:
           echo "→ Seeding via /api/v1/ci/seed..."
           SEED_RESP=$(curl -sf -w "\nHTTP_%{http_code}" -X POST "$BASE/api/v1/ci/seed" \
             -H "Content-Type: application/json" \
-            -H "x-ci-secret: ${{ secrets.CI_SECRET }}" 2>&1) || true
+            -H "x-ci-secret: ${{ secrets.Eclean_CI_Secret }}" 2>&1) || true
           echo "Seed response: $SEED_RESP"
           echo "$SEED_RESP" | grep -q '"ok":true' \
             && echo "✅ Seeded via /ci/seed" \
