@@ -308,3 +308,18 @@ Visual gradients work fine in production (EAS build) — this only
 affects CI where Fabric rejects the unregistered ViewManager.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23675577902
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-28 03:18 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `8a37b8a` — fix: Maestro flows skip onboarding before asserting Sign In
+
+App now renders correctly (LinearGradient shim working) but starts
+on Onboarding screen. All 4 flows updated to:
+1. Wait for either Skip or Sign In (whichever appears first)
+2. Tap Skip if onboarding is showing
+3. Then wait for Sign In screen
+
+This matches the actual app flow: first launch shows onboarding,
+Skip navigates to the Login screen where flows can proceed.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23675974775
+- **Status:** Unresolved — add fix description when fixed
