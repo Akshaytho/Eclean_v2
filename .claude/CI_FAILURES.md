@@ -386,3 +386,29 @@ marks complete in GAPS.md COMPLETION LOG.
 - **Commit:** `68c22e0` — docs: add NEXT_PLAN.md — 6-session roadmap to production APK
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23677274308
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-28 04:44 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `281c4ff` — fix: CI seed endpoint + clean Maestro login flow
+
+Backend:
+- Add /api/v1/ci/seed endpoint (POST, protected by x-ci-secret header)
+  Creates maestro-worker@eclean.test + maestro-buyer@eclean.test idempotently
+  via Prisma upsert — safe to call on every CI run
+- Add CI_SECRET to env schema (optional — endpoint is no-op if not set)
+- Register ciRoutes at /api/v1/ci in app.ts
+
+Workflow:
+- Replace broken debug step with clean seed step
+- Seed via /ci/seed first, fallback to direct /auth/register
+- Verify both logins return accessToken — fail fast if they don't
+- Single quotes in curl -d fixes the JSON quoting bug that caused exit code 3
+
+Flows:
+- Remove debug screenshots from 01 and 03 (no longer needed)
+- Keep optional Skip tap + extendedWaitUntil pattern (working)
+
+Next: Add CI_SECRET to GitHub repo secrets at
+Settings → Secrets → Actions → New repository secret
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23677343637
+- **Status:** Unresolved — add fix description when fixed
