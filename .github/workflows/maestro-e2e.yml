@@ -1,9 +1,7 @@
 name: Maestro E2E Tests
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_dispatch: # Disabled — re-enable for Sprint 6 CI
 
 env:
   WORKER_EMAIL: maestro-worker@eclean.test

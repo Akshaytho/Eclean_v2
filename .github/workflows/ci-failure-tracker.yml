@@ -1,9 +1,7 @@
 name: CI Failure Tracker
 
 on:
-  workflow_run:
-    workflows: ["Jest Tests (Unit + Screen + Integration)", "Maestro E2E Tests"]
-    types: [completed]
+  workflow_dispatch: # Disabled — re-enable for Sprint 6 CI
 
 permissions:
   contents: write

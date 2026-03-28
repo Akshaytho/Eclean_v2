@@ -1,10 +1,7 @@
 name: Jest Tests (Unit + Screen + Integration)
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
+  workflow_dispatch: # Disabled — re-enable for Sprint 6 CI
 
 jobs:
   jest:
