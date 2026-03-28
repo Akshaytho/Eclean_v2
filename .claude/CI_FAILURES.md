@@ -418,3 +418,14 @@ Settings → Secrets → Actions → New repository secret
 - **Commit:** `70fb31b` — fix: use correct GitHub secret name Eclean_CI_Secret
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23677423877
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-28 05:16 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `e08fa3a` — fix: increase post-login wait timeout to 40s for slow Railway cold start
+
+Railway backend on free tier can take 15-20s to respond from GitHub
+US runner. Flows were timing out at 25s waiting for home screen.
+All 4 flows now wait up to 40s after tapping Sign In before asserting
+home screen content.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23677843527
+- **Status:** Unresolved — add fix description when fixed
