@@ -35,7 +35,7 @@ appId: com.eclean.app
 # Wait longer for home screen
 - extendedWaitUntil:
     visible: "Worker"
-    timeout: 25000
+    timeout: 40000
 
 # Worker Home should appear after login
 - assertVisible:

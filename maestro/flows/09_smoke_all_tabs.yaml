@@ -21,6 +21,9 @@ appId: com.eclean.app
     text: "Password"
 - inputText: "${PASSWORD}"
 - tapOn: "Sign In"
+- extendedWaitUntil:
+    visible: "Good morning"
+    timeout: 30000
 
 # Home tab
 - assertVisible:

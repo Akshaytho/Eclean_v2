@@ -23,6 +23,9 @@ appId: com.eclean.app
     text: "Password"
 - inputText: "${PASSWORD}"
 - tapOn: "Sign In"
+- extendedWaitUntil:
+    visible: "Post New Task"
+    timeout: 30000
 
 # Wait for response
 - waitForAnimationToEnd
