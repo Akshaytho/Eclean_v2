@@ -14,8 +14,6 @@ appId: com.eclean.app
     timeout: 30000
 - assertVisible: "Sign In"
 
-# Screenshot: confirm on Sign In screen
-- takeScreenshot: "debug_03a_signin_screen"
 
 # Login as buyer
 - tapOn:
@@ -24,18 +22,15 @@ appId: com.eclean.app
 - tapOn:
     text: "Password"
 - inputText: "${PASSWORD}"
-- takeScreenshot: "debug_03b_credentials_filled"
 - tapOn: "Sign In"
 
 # Wait for response
 - waitForAnimationToEnd
-- takeScreenshot: "debug_03c_after_login_tap"
 
 # Wait for Buyer Home
 - extendedWaitUntil:
     visible: "Post New Task"
-    timeout: 20000
-- takeScreenshot: "debug_03d_buyer_home"
+    timeout: 25000
 
 # Buyer Home
 - assertVisible:

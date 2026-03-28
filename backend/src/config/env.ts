@@ -22,6 +22,7 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
+  CI_SECRET: z.string().optional(), // Set in CI only — enables /api/v1/ci/seed endpoint
 })
 
 export type Env = z.infer<typeof envSchema>

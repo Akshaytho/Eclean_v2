@@ -91,65 +91,37 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
 
-      - name: 🔍 DEBUG — Backend connectivity & test accounts
+      - name: Seed CI test accounts
         run: |
           BASE="https://ecleanfuture-production.up.railway.app"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "1️⃣  BACKEND REACHABILITY"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "→ Health check:"
-          curl -sv "$BASE/health" 2>&1 | tail -5 || true
-          curl -sw "\nHTTP %{http_code} in %{time_total}s\n" -o /tmp/health.json "$BASE/health" || true
-          cat /tmp/health.json 2>/dev/null || true
-
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "2️⃣  REGISTER WORKER (expect 201 or 409 if exists)"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          WORKER_REG=$(curl -sw "\n__HTTP_CODE__%{http_code}" -X POST "$BASE/api/v1/auth/register" \
+          echo "→ Seeding via /api/v1/ci/seed..."
+          SEED_RESP=$(curl -sf -w "\nHTTP_%{http_code}" -X POST "$BASE/api/v1/ci/seed" \
             -H "Content-Type: application/json" \
-            -d "{"email":"$WORKER_EMAIL","password":"$PASSWORD","name":"CI Worker","role":"WORKER"}" 2>/dev/null)
-          echo "Response: $WORKER_REG"
+            -H "x-ci-secret: ${{ secrets.CI_SECRET }}" 2>&1) || true
+          echo "Seed response: $SEED_RESP"
+          echo "$SEED_RESP" | grep -q '"ok":true' \
+            && echo "✅ Seeded via /ci/seed" \
+            || echo "⚠️  Falling back to direct register"
 
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "3️⃣  REGISTER BUYER (expect 201 or 409 if exists)"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          BUYER_REG=$(curl -sw "\n__HTTP_CODE__%{http_code}" -X POST "$BASE/api/v1/auth/register" \
+          # Fallback: register directly (409 if exists is fine, || true)
+          curl -sf -X POST "$BASE/api/v1/auth/register" \
             -H "Content-Type: application/json" \
-            -d "{"email":"$BUYER_EMAIL","password":"$PASSWORD","name":"CI Buyer","role":"BUYER"}" 2>/dev/null)
-          echo "Response: $BUYER_REG"
-
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "4️⃣  LOGIN WORKER (must return token)"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          WORKER_LOGIN=$(curl -sw "\n__HTTP_CODE__%{http_code}" -X POST "$BASE/api/v1/auth/login" \
+            -d '{"email":"maestro-worker@eclean.test","password":"Test@1234","name":"CI Worker","role":"WORKER"}' 2>/dev/null || true
+          curl -sf -X POST "$BASE/api/v1/auth/register" \
             -H "Content-Type: application/json" \
-            -d "{"email":"$WORKER_EMAIL","password":"$PASSWORD"}" 2>/dev/null)
-          echo "Response: $WORKER_LOGIN"
-          echo "$WORKER_LOGIN" | grep -q "token\|accessToken\|access_token" \
-            && echo "✅ WORKER LOGIN OK — token present" \
-            || echo "❌ WORKER LOGIN FAILED — no token in response"
+            -d '{"email":"maestro-buyer@eclean.test","password":"Test@1234","name":"CI Buyer","role":"BUYER"}' 2>/dev/null || true
 
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "5️⃣  LOGIN BUYER (must return token)"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          BUYER_LOGIN=$(curl -sw "\n__HTTP_CODE__%{http_code}" -X POST "$BASE/api/v1/auth/login" \
+          # Verify login works — this is the real test
+          echo "→ Verifying logins..."
+          W=$(curl -sf -X POST "$BASE/api/v1/auth/login" \
             -H "Content-Type: application/json" \
-            -d "{"email":"$BUYER_EMAIL","password":"$PASSWORD"}" 2>/dev/null)
-          echo "Response: $BUYER_LOGIN"
-          echo "$BUYER_LOGIN" | grep -q "token\|accessToken\|access_token" \
-            && echo "✅ BUYER LOGIN OK — token present" \
-            || echo "❌ BUYER LOGIN FAILED — no token in response"
+            -d '{"email":"maestro-worker@eclean.test","password":"Test@1234"}' 2>/dev/null || echo '{}')
+          echo "$W" | grep -q "accessToken" && echo "✅ Worker login OK" || { echo "❌ Worker login FAILED: $W"; exit 1; }
 
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "6️⃣  APP CONFIG (apiUrl the app uses)"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          grep -r "apiUrl\|API_URL\|baseURL\|BASE_URL" /home/runner/work/Eclean_v2/Eclean_v2/mobile/app.json 2>/dev/null || true
-          grep -r "apiUrl\|API_URL\|baseURL" /home/runner/work/Eclean_v2/Eclean_v2/mobile/src/services/ 2>/dev/null | head -5 || true
+          B=$(curl -sf -X POST "$BASE/api/v1/auth/login" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"maestro-buyer@eclean.test","password":"Test@1234"}' 2>/dev/null || echo '{}')
+          echo "$B" | grep -q "accessToken" && echo "✅ Buyer login OK" || { echo "❌ Buyer login FAILED: $B"; exit 1; }
 
       - name: Patch react-native-svg for RN 0.76 (StyleSizeLength → StyleLength)
         working-directory: mobile

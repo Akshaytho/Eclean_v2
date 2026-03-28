@@ -7,6 +7,7 @@ import rateLimit from '@fastify/rate-limit'
 import { env } from './config/env'
 import { errorHandler } from './middleware/error-handler'
 import { authRoutes } from './modules/auth/auth.routes'
+import { ciRoutes } from './modules/ci/ci.routes'
 import { buyerRoutes } from './modules/tasks/buyer.routes'
 import { workerRoutes } from './modules/tasks/worker.routes'
 import { mediaRoutes } from './modules/media/media.routes'
@@ -64,6 +65,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // ── Routes ───────────────────────────────────────────────────────────────────
   void app.register(authRoutes,          { prefix: '/api/v1/auth' })
+  void app.register(ciRoutes,            { prefix: '/api/v1/ci' })   // CI-only — protected by CI_SECRET header
   void app.register(buyerRoutes,         { prefix: '/api/v1/buyer/tasks' })
   void app.register(workerRoutes,        { prefix: '/api/v1/worker' })
   void app.register(mediaRoutes,         { prefix: '/api/v1/tasks' })
