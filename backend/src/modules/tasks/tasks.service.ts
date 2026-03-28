@@ -9,6 +9,7 @@ import {
 import { assertTransition } from './tasks.state-machine'
 import { DIRTY_LEVEL_PRICING } from './tasks.schema'
 import { emitTaskUpdated } from '../../realtime/socket'
+import { logTaskEvent } from '../../lib/event-log'
 import { payoutQueue, PAYOUT_QUEUE } from '../../jobs/payout.job'
 import type {
   CreateTaskInput,
@@ -73,7 +74,7 @@ export async function createTask(buyerId: string, input: CreateTaskInput) {
     )
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const task = await tx.task.create({
       data: {
         title:           input.title,
@@ -103,6 +104,13 @@ export async function createTask(buyerId: string, input: CreateTaskInput) {
 
     return task
   })
+
+  logTaskEvent(result.id, 'created', buyerId, 'BUYER', {
+    title: result.title, category: result.category, dirtyLevel: result.dirtyLevel,
+    rateCents: result.rateCents, zoneId: result.zoneId,
+  })
+
+  return result
 }
 
 // ─── BUYER — list + detail ────────────────────────────────────────────────────
@@ -177,6 +185,7 @@ export async function cancelTaskAsBuyer(
     return updated
   })
   emitTaskUpdated(taskId, 'CANCELLED')
+  logTaskEvent(taskId, 'status_changed', buyerId, 'BUYER', { from: task.status, to: 'CANCELLED', reason: input.reason })
   return result
 }
 
@@ -265,6 +274,7 @@ export async function approveTask(buyerId: string, taskId: string) {
   )
 
   emitTaskUpdated(taskId, 'APPROVED')
+  logTaskEvent(taskId, 'status_changed', buyerId, 'BUYER', { from: task.status, to: 'APPROVED', rateCents: task.rateCents })
   return updatedTask
 }
 
@@ -303,6 +313,7 @@ export async function rejectTask(buyerId: string, taskId: string, input: ReasonI
     return updated
   })
   emitTaskUpdated(taskId, 'REJECTED')
+  logTaskEvent(taskId, 'status_changed', buyerId, 'BUYER', { from: task.status, to: 'REJECTED', reason: input.reason })
   return result
 }
 
@@ -410,6 +421,7 @@ export async function acceptTask(workerId: string, taskId: string) {
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     )
     emitTaskUpdated(taskId, 'ACCEPTED')
+    logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'OPEN', to: 'ACCEPTED' })
     return result
   } catch (err) {
     // P2034: transaction conflict under SERIALIZABLE — safely retry as 409
@@ -463,6 +475,7 @@ export async function startTask(workerId: string, taskId: string, input?: StartT
     return updated
   })
   emitTaskUpdated(taskId, 'IN_PROGRESS')
+  logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'ACCEPTED', to: 'IN_PROGRESS' })
   return result
 }
 
@@ -507,6 +520,7 @@ export async function cancelTaskAsWorker(
     return updated
   })
   emitTaskUpdated(taskId, 'CANCELLED')
+  logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: task.status, to: 'CANCELLED', reason: input.reason })
   return result
 }
 
@@ -559,6 +573,7 @@ export async function submitTask(workerId: string, taskId: string) {
     return updated
   })
   emitTaskUpdated(taskId, 'SUBMITTED')
+  logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'IN_PROGRESS', to: 'SUBMITTED' })
   return result
 }
 
@@ -601,6 +616,7 @@ export async function retryTask(workerId: string, taskId: string) {
     return updated
   })
   emitTaskUpdated(taskId, 'IN_PROGRESS')
+  logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'REJECTED', to: 'IN_PROGRESS', action: 'retry' })
   return result
 }
 
@@ -632,6 +648,7 @@ export async function disputeTask(workerId: string, taskId: string, input: Reaso
     return updated
   })
   emitTaskUpdated(taskId, 'DISPUTED')
+  logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: task.status, to: 'DISPUTED', reason: input.reason })
   return result
 }
 
