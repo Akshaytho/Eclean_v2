@@ -39,6 +39,7 @@ export function TaskDetailScreen() {
 
   const isAccepting = useRef(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const { data: task, isLoading, error } = useQuery({
     queryKey: ['worker', 'task', taskId],
@@ -56,7 +57,7 @@ export function TaskDetailScreen() {
     onError: (err: any) => {
       isAccepting.current = false
       const msg = err?.response?.data?.error?.message ?? 'Could not accept task'
-      console.error('Cannot Accept:', msg)
+      setErrorMsg(msg)
     },
   })
 
@@ -175,6 +176,27 @@ export function TaskDetailScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* ── Error Banner ── */}
+      {errorMsg && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{errorMsg}</Text>
+          {errorMsg.toLowerCase().includes('active task') && (
+            <TouchableOpacity
+              style={styles.errorAction}
+              onPress={() => {
+                setErrorMsg(null)
+                navigation.navigate('WorkerTabs' as any)
+              }}
+            >
+              <Text style={styles.errorActionText}>Go to My Tasks</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={() => setErrorMsg(null)} style={styles.errorDismiss}>
+            <Text style={styles.errorDismissText}>Dismiss</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ── Footer Button ── */}
       <View style={styles.footer}>
@@ -317,6 +339,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  errorBanner:     { backgroundColor: '#FEF2F2', borderTopWidth: 1, borderTopColor: '#FECACA', paddingHorizontal: 20, paddingVertical: 14, gap: 10 },
+  errorText:       { fontSize: 14, fontWeight: '600', color: '#991B1B' },
+  errorAction:     { backgroundColor: W.primary, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
+  errorActionText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  errorDismiss:    { alignItems: 'center', paddingVertical: 4 },
+  errorDismissText:{ fontSize: 13, color: W.text.muted },
   acceptBtnDisabled: { opacity: 0.6 },
   acceptBtnText:  { fontSize: 16, fontWeight: '700', color: '#fff' },
   modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
