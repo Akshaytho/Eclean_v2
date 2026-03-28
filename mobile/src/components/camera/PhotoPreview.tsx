@@ -15,9 +15,10 @@ import type { PhotoType, CaptureMetadata } from './CaptureCamera'
 
 interface PhotoPreviewProps {
   uri:       string
-  metadata:  CaptureMetadata   // ✅ real metadata from shutter press, not re-created here
+  metadata:  CaptureMetadata
   photoType: PhotoType
   saving:    boolean
+  saved?:    boolean
   onRetake:  () => void
   onConfirm: (uri: string, metadata: CaptureMetadata) => void
 }
@@ -29,7 +30,7 @@ const PHOTO_TYPE_CONFIG = {
   GENERAL: { label: 'CAPTURE', color: '#8B5CF6' },
 }
 
-export function PhotoPreview({ uri, metadata, photoType, saving, onRetake, onConfirm }: PhotoPreviewProps) {
+export function PhotoPreview({ uri, metadata, photoType, saving, saved, onRetake, onConfirm }: PhotoPreviewProps) {
   const insets     = useSafeAreaInsets()
   const cfg        = PHOTO_TYPE_CONFIG[photoType]
   const capturedAt = new Date(metadata.timestamp)
@@ -90,6 +91,16 @@ export function PhotoPreview({ uri, metadata, photoType, saving, onRetake, onCon
         </TouchableOpacity>
       </View>
 
+      {/* Saved confirmation overlay */}
+      {saved && (
+        <View style={s.savedOverlay}>
+          <View style={s.savedCircle}>
+            <Check size={36} color="#fff" strokeWidth={3} />
+          </View>
+          <Text style={s.savedText}>Photo Saved</Text>
+        </View>
+      )}
+
       {/* Watermark band */}
       <View style={[s.watermarkBand, { bottom: insets.bottom + 80 }]}>
         <Text style={s.watermarkText}>
@@ -121,4 +132,7 @@ const s = StyleSheet.create({
   disabled:      { opacity: 0.6 },
   watermarkBand: { position: 'absolute', left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', paddingVertical: 5, alignItems: 'center', zIndex: 10 },
   watermarkText: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '600', letterSpacing: 0.5 },
+  savedOverlay:  { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', zIndex: 20 },
+  savedCircle:   { width: 80, height: 80, borderRadius: 40, backgroundColor: '#16A34A', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  savedText:     { color: '#fff', fontSize: 20, fontWeight: '800' },
 })

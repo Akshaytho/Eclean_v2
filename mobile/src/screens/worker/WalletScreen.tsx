@@ -7,7 +7,7 @@ import { LinearGradient } from '../../components/LinearGradientShim'
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle, Clock, XCircle, ArrowDownLeft } from 'lucide-react-native'
 
-import { COLORS } from '../../constants/colors'
+import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { payoutsApi } from '../../api/payouts.api'
 import type { PayoutListItem } from '../../api/payouts.api'
 import { formatMoney } from '../../utils/formatMoney'
@@ -15,10 +15,10 @@ import { timeAgo } from '../../utils/timeAgo'
 import type { PayoutStatus } from '../../types'
 
 const STATUS_COLOR: Record<PayoutStatus, string> = {
-  PENDING:    COLORS.status.warning,
-  PROCESSING: COLORS.status.info,
-  COMPLETED:  COLORS.status.success,
-  FAILED:     COLORS.status.error,
+  PENDING:    W.status.warning,
+  PROCESSING: W.status.info,
+  COMPLETED:  W.status.success,
+  FAILED:     W.status.error,
 }
 
 const STATUS_LABEL: Record<PayoutStatus, string> = {
@@ -47,7 +47,7 @@ export function WalletScreen() {
     <View style={styles.container}>
       {/* ── Gradient Header ── */}
       <LinearGradient
-        colors={[COLORS.brand.dark, COLORS.brand.primary]}
+        colors={W.gradient}
         style={styles.header}
       >
         <Text style={styles.headerLabel}>Total Earned</Text>
@@ -79,7 +79,7 @@ export function WalletScreen() {
 
         {/* Withdraw coming soon */}
         <TouchableOpacity style={styles.withdrawBtn} disabled activeOpacity={0.8}>
-          <ArrowDownLeft size={16} color={COLORS.neutral[500]} style={{ marginRight: 6 }} />
+          <ArrowDownLeft size={16} color={W.text.secondary} style={{ marginRight: 6 }} />
           <Text style={styles.withdrawText}>Withdraw — Coming Soon</Text>
         </TouchableOpacity>
       </LinearGradient>
@@ -93,7 +93,7 @@ export function WalletScreen() {
       </View>
 
       {payoutsLoading ? (
-        <ActivityIndicator color={COLORS.brand.primary} style={{ marginTop: 32 }} />
+        <ActivityIndicator color={W.primary} style={{ marginTop: 32 }} />
       ) : (
         <FlatList
           data={payouts}
@@ -104,7 +104,7 @@ export function WalletScreen() {
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <CheckCircle size={40} color={COLORS.neutral[300]} />
+              <CheckCircle size={40} color={W.text.muted} />
               <Text style={styles.emptyText}>No payouts yet</Text>
               <Text style={styles.emptySubtext}>Complete tasks to earn money</Text>
             </View>
@@ -147,7 +147,7 @@ function PayoutRow({ payout }: { payout: PayoutListItem }) {
 }
 
 const styles = StyleSheet.create({
-  container:     { flex: 1, backgroundColor: COLORS.background },
+  container:     { flex: 1, backgroundColor: W.background },
   header:        { paddingTop: 56, paddingBottom: 24, paddingHorizontal: 20 },
   headerLabel:   { fontSize: 13, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
   totalEarned:   { fontSize: 38, fontWeight: '800', color: '#fff', marginVertical: 4 },
@@ -157,14 +157,14 @@ const styles = StyleSheet.create({
   summaryLabel:  { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
   withdrawBtn:   {
     marginTop: 16,
-    backgroundColor: COLORS.neutral[200],
+    backgroundColor: W.border,
     borderRadius: 12,
     height: 42,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  withdrawText:  { fontSize: 14, fontWeight: '600', color: COLORS.neutral[500] },
+  withdrawText:  { fontSize: 14, fontWeight: '600', color: W.text.secondary },
   historyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -172,33 +172,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    borderBottomColor: W.border,
+    backgroundColor: W.surface,
   },
-  historyTitle:  { fontSize: 16, fontWeight: '700', color: COLORS.neutral[900] },
-  historyCount:  { fontSize: 13, color: COLORS.neutral[400] },
+  historyTitle:  { fontSize: 16, fontWeight: '700', color: W.text.primary },
+  historyCount:  { fontSize: 13, color: W.text.muted },
   list:          { padding: 16, paddingBottom: 40 },
   empty:         { alignItems: 'center', paddingTop: 48, gap: 8 },
-  emptyText:     { fontSize: 15, fontWeight: '600', color: COLORS.neutral[600] },
-  emptySubtext:  { fontSize: 13, color: COLORS.neutral[400] },
+  emptyText:     { fontSize: 15, fontWeight: '600', color: W.text.secondary },
+  emptySubtext:  { fontSize: 13, color: W.text.muted },
   payoutCard:    {
-    backgroundColor: COLORS.surface,
+    backgroundColor: W.surface,
     borderRadius: 14,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: COLORS.shadow,
+    shadowColor: W.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 6,
     elevation: 2,
   },
   payoutLeft:    { flex: 1 },
-  payoutTask:    { fontSize: 14, fontWeight: '600', color: COLORS.neutral[900], marginBottom: 3 },
-  payoutBuyer:   { fontSize: 12, color: COLORS.neutral[500], marginBottom: 2 },
-  payoutDate:    { fontSize: 11, color: COLORS.neutral[400] },
+  payoutTask:    { fontSize: 14, fontWeight: '600', color: W.text.primary, marginBottom: 3 },
+  payoutBuyer:   { fontSize: 12, color: W.text.secondary, marginBottom: 2 },
+  payoutDate:    { fontSize: 11, color: W.text.muted },
   payoutRight:   { alignItems: 'flex-end', gap: 6 },
-  payoutAmount:  { fontSize: 17, fontWeight: '800', color: COLORS.brand.primary },
+  payoutAmount:  { fontSize: 17, fontWeight: '800', color: W.primary },
   statusBadge:   { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   statusText:    { fontSize: 11, fontWeight: '700' },
 })

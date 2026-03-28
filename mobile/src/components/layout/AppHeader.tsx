@@ -5,6 +5,7 @@ import { Bell } from 'lucide-react-native'
 import { useNavigation } from '@react-navigation/native'
 import { COLORS } from '../../constants/colors'
 import { BUYER_THEME as B } from '../../constants/buyerTheme'
+import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { useAuthStore } from '../../stores/authStore'
 import { useQuery } from '@tanstack/react-query'
 import { notificationsApi } from '../../api/notifications.api'
@@ -40,18 +41,18 @@ export function AppHeader({ title = 'eClean', onNotificationPress, theme = 'buye
   const avatarColor = colors[colorIdx]
 
   return (
-    <View style={[s.container, { paddingTop: insets.top + 8, backgroundColor: isBuyer ? B.surface : COLORS.surface, borderBottomColor: isBuyer ? B.border : COLORS.border }]}>
+    <View style={[s.container, { paddingTop: insets.top + 8, backgroundColor: isBuyer ? B.surface : W.surface, borderBottomColor: isBuyer ? B.border : W.border }]}>
       {/* Logo / Title */}
       <View style={s.left}>
-        <View style={[s.logoDot, { backgroundColor: isBuyer ? B.primary : COLORS.brand.primary }]} />
-        <Text style={[s.title, { color: isBuyer ? B.text.primary : COLORS.neutral[900] }]}>{title}</Text>
+        <View style={[s.logoDot, { backgroundColor: isBuyer ? B.primary : W.primary }]} />
+        <Text style={[s.title, { color: isBuyer ? B.text.primary : W.text.primary }]}>{title}</Text>
       </View>
 
       {/* Right actions */}
       <View style={s.right}>
         {/* Bell */}
-        <TouchableOpacity style={[s.bellBtn, { backgroundColor: isBuyer ? B.primaryTint : COLORS.neutral[50] }]} onPress={onNotificationPress} activeOpacity={0.8}>
-          <Bell size={20} color={isBuyer ? B.primary : COLORS.neutral[700]} />
+        <TouchableOpacity style={[s.bellBtn, { backgroundColor: isBuyer ? B.primaryTint : W.primaryTint }]} onPress={onNotificationPress} activeOpacity={0.8}>
+          <Bell size={20} color={isBuyer ? B.primary : W.primary} />
           {unread > 0 && (
             <View style={s.badge}>
               <Text style={s.badgeText}>{unread > 9 ? '9+' : unread}</Text>

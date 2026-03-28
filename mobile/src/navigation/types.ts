@@ -15,17 +15,18 @@ export type WorkerTabParamList = {
   WorkerHome:  undefined
   FindWork:    undefined
   MyTasks:     undefined
-  Wallet:      undefined
-  Profile:     undefined
+  Dashboard:   undefined
 }
 
 export type WorkerStackParamList = {
-  WorkerTabs:    undefined
-  TaskDetail:    { taskId: string }
-  ActiveTask:    { taskId: string }
-  SubmitProof:   { taskId: string }
-  Chat:          { taskId: string; title: string }
-  Gallery:       undefined
+  WorkerTabs:      undefined
+  TaskDetail:      { taskId: string }
+  ActiveTask:      { taskId: string }
+  SubmitProof:     { taskId: string }
+  Chat:            { taskId: string; title: string }
+  Gallery:         undefined
+  Wallet:          undefined
+  Notifications:   undefined
 }
 
 // ─── Buyer ───────────────────────────────────────────────────────────────────

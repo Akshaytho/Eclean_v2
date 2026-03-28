@@ -12,6 +12,7 @@ import * as Location from 'expo-location'
 import { MapPin, Filter } from 'lucide-react-native'
 
 import { COLORS } from '../../constants/colors'
+import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { DIRTY_LEVELS, TASK_CATEGORIES } from '../../constants/taskCategories'
 import { workerTasksApi } from '../../api/tasks.api'
 import { formatMoney } from '../../utils/formatMoney'
@@ -109,8 +110,8 @@ export function FindWorkScreen() {
           <Circle
             center={{ latitude: currentLocation.lat, longitude: currentLocation.lng }}
             radius={RADIUS_KM * 1000}
-            strokeColor={`${COLORS.brand.primary}50`}
-            fillColor={`${COLORS.brand.primary}12`}
+            strokeColor={`${W.primary}50`}
+            fillColor={`${W.primary}12`}
           />
         )}
 
@@ -135,7 +136,7 @@ export function FindWorkScreen() {
       >
         {/* Filter chips */}
         <View style={styles.filterRow}>
-          <Filter size={16} color={COLORS.neutral[500]} />
+          <Filter size={16} color={W.text.secondary} />
           {(Object.keys(DIRTY_LEVELS) as DirtyLevel[]).map((level) => (
             <TouchableOpacity
               key={level}
@@ -165,12 +166,12 @@ export function FindWorkScreen() {
         </View>
 
         {isLoading ? (
-          <ActivityIndicator color={COLORS.brand.primary} style={{ marginTop: 32 }} />
+          <ActivityIndicator color={W.primary} style={{ marginTop: 32 }} />
         ) : (
           <BottomSheetScrollView contentContainerStyle={styles.list}>
             {tasks.length === 0 ? (
               <View style={styles.empty}>
-                <MapPin size={40} color={COLORS.neutral[300]} />
+                <MapPin size={40} color={W.text.muted} />
                 <Text style={styles.emptyText}>No tasks found nearby</Text>
                 <Text style={styles.emptySubtext}>Try increasing the radius or changing filters</Text>
               </View>
@@ -221,8 +222,8 @@ function TaskCard({
 
 const styles = StyleSheet.create({
   container:        { flex: 1 },
-  sheetBg:          { backgroundColor: COLORS.surface, borderRadius: 20 },
-  handle:           { backgroundColor: COLORS.neutral[300], width: 40 },
+  sheetBg:          { backgroundColor: W.surface, borderRadius: 20 },
+  handle:           { backgroundColor: W.text.muted, width: 40 },
   filterRow:        {
     flexDirection: 'row',
     alignItems: 'center',
@@ -235,37 +236,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: COLORS.neutral[100],
+    backgroundColor: W.primaryTint,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: W.border,
   },
-  chipText:         { fontSize: 12, fontWeight: '600', color: COLORS.neutral[700] },
+  chipText:         { fontSize: 12, fontWeight: '600', color: W.text.secondary },
   countRow:         {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
-  countText:        { fontSize: 13, color: COLORS.neutral[500] },
-  refreshText:      { fontSize: 13, color: COLORS.brand.primary, fontWeight: '600' },
+  countText:        { fontSize: 13, color: W.text.secondary },
+  refreshText:      { fontSize: 13, color: W.primary, fontWeight: '600' },
   list:             { paddingHorizontal: 16, paddingBottom: 32, gap: 10 },
   empty:            { alignItems: 'center', paddingTop: 32, gap: 8 },
-  emptyText:        { fontSize: 15, fontWeight: '600', color: COLORS.neutral[600] },
-  emptySubtext:     { fontSize: 13, color: COLORS.neutral[400], textAlign: 'center' },
+  emptyText:        { fontSize: 15, fontWeight: '600', color: W.text.secondary },
+  emptySubtext:     { fontSize: 13, color: W.text.muted, textAlign: 'center' },
   taskCard:         {
-    backgroundColor: COLORS.neutral[50],
+    backgroundColor: W.card,
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: W.border,
   },
-  taskCardSelected: { borderColor: COLORS.brand.primary, borderWidth: 2 },
+  taskCardSelected: { borderColor: W.primary, borderWidth: 2 },
   taskCardTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  taskTitle:        { flex: 1, fontSize: 14, fontWeight: '600', color: COLORS.neutral[900], marginRight: 8 },
-  taskRate:         { fontSize: 16, fontWeight: '700', color: COLORS.brand.primary },
+  taskTitle:        { flex: 1, fontSize: 14, fontWeight: '600', color: W.text.primary, marginRight: 8 },
+  taskRate:         { fontSize: 16, fontWeight: '700', color: W.primary },
   taskCardBottom:   { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   levelBadge:       { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   levelText:        { fontSize: 10, fontWeight: '700', color: '#fff' },
-  taskCategory:     { fontSize: 12, color: COLORS.neutral[500] },
-  taskAddress:      { fontSize: 11, color: COLORS.neutral[400], flex: 1 },
+  taskCategory:     { fontSize: 12, color: W.text.secondary },
+  taskAddress:      { fontSize: 11, color: W.text.muted, flex: 1 },
 })

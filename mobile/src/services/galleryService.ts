@@ -20,7 +20,7 @@
  * - FlatList with getItemLayout for instant scroll
  */
 
-import * as FileSystem from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 
 const GALLERY_DIR = `${FileSystem.documentDirectory}eclean_gallery/`
@@ -48,9 +48,18 @@ export interface GalleryPhoto {
 
 // ── Ensure gallery directories exist ──────────────────────────────────────────
 async function ensureDir(dir: string): Promise<void> {
-  const info = await FileSystem.getInfoAsync(dir)
-  if (!info.exists) {
-    await FileSystem.makeDirectoryAsync(dir, { intermediates: true })
+  try {
+    const info = await FileSystem.getInfoAsync(dir)
+    if (!info.exists) {
+      await FileSystem.makeDirectoryAsync(dir, { intermediates: true })
+    }
+  } catch {
+    // Directory might already exist or getInfoAsync deprecated — try creating directly
+    try {
+      await FileSystem.makeDirectoryAsync(dir, { intermediates: true })
+    } catch {
+      // Already exists — fine
+    }
   }
 }
 

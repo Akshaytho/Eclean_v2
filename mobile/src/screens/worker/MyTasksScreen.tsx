@@ -6,9 +6,10 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { CheckCircle, Clock, XCircle, AlertCircle } from 'lucide-react-native'
+import { CheckCircle, Clock, XCircle } from 'lucide-react-native'
 
-import { COLORS } from '../../constants/colors'
+import { WORKER_THEME as W } from '../../constants/workerTheme'
+import { AppHeader } from '../../components/layout/AppHeader'
 import { workerTasksApi } from '../../api/tasks.api'
 import { formatMoney } from '../../utils/formatMoney'
 import { timeAgo } from '../../utils/timeAgo'
@@ -26,15 +27,15 @@ const TAB_STATUSES: Record<Tab, string> = {
 }
 
 const STATUS_COLOR: Partial<Record<TaskStatus, string>> = {
-  ACCEPTED:    COLORS.status.info,
-  IN_PROGRESS: COLORS.brand.primary,
-  SUBMITTED:   COLORS.status.warning,
-  APPROVED:    COLORS.status.success,
-  COMPLETED:   COLORS.status.success,
-  VERIFIED:    COLORS.status.success,
-  REJECTED:    COLORS.status.error,
-  CANCELLED:   COLORS.neutral[400],
-  DISPUTED:    COLORS.status.error,
+  ACCEPTED:    W.status.info,
+  IN_PROGRESS: W.primary,
+  SUBMITTED:   W.status.warning,
+  APPROVED:    W.status.success,
+  COMPLETED:   W.status.success,
+  VERIFIED:    W.status.success,
+  REJECTED:    W.status.error,
+  CANCELLED:   W.text.muted,
+  DISPUTED:    W.status.error,
 }
 
 const STATUS_LABEL: Partial<Record<TaskStatus, string>> = {
@@ -64,9 +65,7 @@ export function MyTasksScreen() {
   return (
     <View style={styles.container}>
       {/* ── Header ── */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Tasks</Text>
-      </View>
+      <AppHeader title="My Tasks" theme="worker" />
 
       {/* ── Tabs ── */}
       <View style={styles.tabs}>
@@ -85,7 +84,7 @@ export function MyTasksScreen() {
 
       {/* ── List ── */}
       {isLoading ? (
-        <ActivityIndicator color={COLORS.brand.primary} style={{ marginTop: 40 }} />
+        <ActivityIndicator color={W.primary} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={tasks}
@@ -97,10 +96,10 @@ export function MyTasksScreen() {
           ListEmptyComponent={
             <View style={styles.empty}>
               {activeTab === 'active'
-                ? <Clock size={40} color={COLORS.neutral[300]} />
+                ? <Clock size={40} color={W.text.muted} />
                 : activeTab === 'completed'
-                  ? <CheckCircle size={40} color={COLORS.neutral[300]} />
-                  : <XCircle size={40} color={COLORS.neutral[300]} />}
+                  ? <CheckCircle size={40} color={W.text.muted} />
+                  : <XCircle size={40} color={W.text.muted} />}
               <Text style={styles.emptyText}>No {activeTab} tasks</Text>
             </View>
           }
@@ -124,7 +123,7 @@ export function MyTasksScreen() {
 function TaskRow({
   task, onPress, onContinue,
 }: { task: Task; onPress: () => void; onContinue?: () => void }) {
-  const statusColor = STATUS_COLOR[task.status] ?? COLORS.neutral[400]
+  const statusColor = STATUS_COLOR[task.status] ?? W.text.muted
   const statusLabel = STATUS_LABEL[task.status] ?? task.status
 
   return (
@@ -152,52 +151,43 @@ function TaskRow({
 }
 
 const styles = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: COLORS.background },
-  header:         {
-    paddingTop: 56,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  headerTitle:    { fontSize: 22, fontWeight: '800', color: COLORS.neutral[900] },
+  container:      { flex: 1, backgroundColor: W.background },
   tabs:           {
     flexDirection: 'row',
-    backgroundColor: COLORS.surface,
+    backgroundColor: W.surface,
     paddingHorizontal: 16,
     paddingBottom: 12,
     gap: 8,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: W.border,
   },
   tab:            {
     flex: 1,
     paddingVertical: 8,
     borderRadius: 10,
     alignItems: 'center',
-    backgroundColor: COLORS.neutral[100],
+    backgroundColor: W.primaryTint,
   },
-  tabActive:      { backgroundColor: COLORS.brand.primary },
-  tabText:        { fontSize: 13, fontWeight: '600', color: COLORS.neutral[600] },
+  tabActive:      { backgroundColor: W.primary },
+  tabText:        { fontSize: 13, fontWeight: '600', color: W.text.secondary },
   tabTextActive:  { color: '#fff' },
   list:           { padding: 16, paddingBottom: 40 },
   empty:          { alignItems: 'center', paddingTop: 60, gap: 12 },
-  emptyText:      { fontSize: 15, color: COLORS.neutral[500] },
+  emptyText:      { fontSize: 15, color: W.text.secondary },
   taskCard:       {
-    backgroundColor: COLORS.surface,
+    backgroundColor: W.surface,
     borderRadius: 14,
     padding: 16,
-    shadowColor: COLORS.shadow,
+    shadowColor: W.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 6,
     elevation: 2,
   },
   taskTop:        { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
-  taskTitle:      { fontSize: 15, fontWeight: '600', color: COLORS.neutral[900], marginBottom: 3 },
-  taskMeta:       { fontSize: 12, color: COLORS.neutral[400] },
-  taskRate:       { fontSize: 16, fontWeight: '700', color: COLORS.brand.primary, marginLeft: 8 },
+  taskTitle:      { fontSize: 15, fontWeight: '600', color: W.text.primary, marginBottom: 3 },
+  taskMeta:       { fontSize: 12, color: W.text.muted },
+  taskRate:       { fontSize: 16, fontWeight: '700', color: W.primary, marginLeft: 8 },
   taskBottom:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   statusBadge:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   statusDot:      { width: 7, height: 7, borderRadius: 4 },
@@ -206,7 +196,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 10,
-    backgroundColor: COLORS.brand.tint,
+    backgroundColor: W.primaryTint,
   },
-  continueBtnText:{ fontSize: 13, fontWeight: '700', color: COLORS.brand.primary },
+  continueBtnText:{ fontSize: 13, fontWeight: '700', color: W.primary },
 })

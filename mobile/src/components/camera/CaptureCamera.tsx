@@ -12,10 +12,11 @@ import {
 } from 'react-native'
 import { CameraView, useCameraPermissions, CameraType } from 'expo-camera'
 import * as Location from 'expo-location'
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
+
 import * as Device from 'expo-device'
+import * as Haptics from 'expo-haptics'
 import * as Crypto from 'expo-crypto'
-import * as FileSystem from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { X, RotateCcw, Zap, ZapOff } from 'lucide-react-native'
 import { COLORS } from '../../constants/colors'
@@ -62,6 +63,7 @@ export function CaptureCamera({ taskId, photoType, onCapture, onClose }: Capture
   const [saving,    setSaving]          = useState(false)
   // preview holds both the URI and metadata captured at shutter press
   const [preview,   setPreview]         = useState<{ uri: string; metadata: CaptureMetadata } | null>(null)
+  const [saved,     setSaved]           = useState(false)
   const cameraRef = useRef<CameraView>(null)
   const insets    = useSafeAreaInsets()
   const cfg       = PHOTO_TYPE_CONFIG[photoType]
@@ -82,9 +84,14 @@ export function CaptureCamera({ taskId, photoType, onCapture, onClose }: Capture
 
       if (!photo) throw new Error('Camera failed to capture')
 
-      // SHA-256 hash of raw photo — tamper-proof evidence
-      const photoBase64 = await FileSystem.readAsStringAsync(photo.uri, { encoding: FileSystem.EncodingType.Base64 })
-      const photoHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, photoBase64)
+      // SHA-256 hash — non-blocking, fallback if it fails
+      let photoHash = ''
+      try {
+        const photoBase64 = await FileSystem.readAsStringAsync(photo.uri, { encoding: FileSystem.EncodingType.Base64 })
+        photoHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, photoBase64)
+      } catch {
+        photoHash = `fallback-${Date.now()}`
+      }
 
       // Build metadata at the exact moment of capture
       const metadata: CaptureMetadata = {
@@ -99,9 +106,10 @@ export function CaptureCamera({ taskId, photoType, onCapture, onClose }: Capture
       // Show preview with metadata attached
       setPreview({ uri: photo.uri, metadata })
       setCapturing(false)
-    } catch (err) {
+    } catch (err: any) {
       setCapturing(false)
-      Alert.alert('Capture failed', 'Could not take photo. Please try again.')
+      console.error('CaptureCamera error:', err?.message ?? err)
+      Alert.alert('Capture failed', err?.message ?? 'Could not take photo. Please try again.')
     }
   }, [capturing, taskId])
 
@@ -110,12 +118,18 @@ export function CaptureCamera({ taskId, photoType, onCapture, onClose }: Capture
     setSaving(true)
     try {
       const galleryPhoto = await saveToGallery(uri, taskId, photoType, metadata)
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      setSaving(false)
+      setSaved(true)
+      // Show "Saved!" for 1 second before closing
+      await new Promise(r => setTimeout(r, 1000))
+      setSaved(false)
       setPreview(null)
-      setSaving(false)
       onCapture({ photo: galleryPhoto, uploaded: false })
-    } catch (err) {
+    } catch (err: any) {
       setSaving(false)
-      Alert.alert('Save failed', 'Could not save photo. Please retake.')
+      console.error('Save failed:', err?.message ?? err)
+      Alert.alert('Save failed', err?.message ?? 'Could not save photo. Please retake.')
     }
   }, [taskId, photoType, onCapture])
 
@@ -133,6 +147,19 @@ export function CaptureCamera({ taskId, photoType, onCapture, onClose }: Capture
         <TouchableOpacity style={s.closeBtn} onPress={onClose}>
           <X size={24} color="rgba(255,255,255,0.7)" />
         </TouchableOpacity>
+      </View>
+    )
+  }
+
+  // ── Saved confirmation (full screen overlay) ─────────────────────────────────
+  if (saved) {
+    return (
+      <View style={[s.bg, s.center]}>
+        <View style={s.savedCircle}>
+          <Text style={s.savedCheck}>✓</Text>
+        </View>
+        <Text style={s.savedTitle}>Photo Saved</Text>
+        <Text style={s.savedSub}>Added to your gallery</Text>
       </View>
     )
   }
@@ -254,4 +281,8 @@ const s = StyleSheet.create({
   permBtn:       { backgroundColor: COLORS.brand.primary, paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12 },
   permBtnText:   { color: 'white', fontSize: 15, fontWeight: '700' },
   closeBtn:      { position: 'absolute', top: 60, right: 24 },
+  savedCircle:   { width: 90, height: 90, borderRadius: 45, backgroundColor: '#16A34A', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  savedCheck:    { color: '#fff', fontSize: 40, fontWeight: '800' },
+  savedTitle:    { color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 6 },
+  savedSub:      { color: 'rgba(255,255,255,0.6)', fontSize: 14 },
 })
