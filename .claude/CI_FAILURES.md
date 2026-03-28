@@ -359,3 +359,24 @@ This will tell us exactly what fails:
 - Does home screen load but content differs?
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23676898180
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-28 04:13 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `d10b0fd` — docs: add GAPS.md master registry + auto-pickup protocol
+
+GAPS.md contains 42 problems across 9 categories:
+- Security (8 items) — rate limiting, API keys, JWT refresh
+- Infrastructure (7 items) — Railway, backups, staging
+- Legal/Compliance (7 items) — DPDP Act, privacy policy, KYC
+- App Store (6 items) — Play Store setup, signing, screenshots
+- Monitoring (5 items) — Sentry, analytics, uptime
+- Missing Features (12 items) — citizen/supervisor screens, offline
+- Performance (5 items) — FlatList, compression, pagination
+- CI/CD (5 items) — Maestro fixes, Sprint 3 tests
+- Data Monetisation (5 items) — zone scoring, municipal API
+
+MASTER_PROMPT updated to read GAPS.md as STEP 3 in session protocol.
+Claude picks ONE relevant gap per session, adds after main task,
+marks complete in GAPS.md COMPLETION LOG.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23677202201
+- **Status:** Unresolved — add fix description when fixed
