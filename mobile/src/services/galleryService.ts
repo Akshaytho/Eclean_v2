@@ -20,7 +20,7 @@
  * - FlatList with getItemLayout for instant scroll
  */
 
-import * as FileSystem from 'expo-file-system/legacy'
+import * as FileSystem from 'expo-file-system'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 
 const GALLERY_DIR = `${FileSystem.documentDirectory}eclean_gallery/`

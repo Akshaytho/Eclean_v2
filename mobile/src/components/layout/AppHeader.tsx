@@ -22,7 +22,7 @@ export function AppHeader({ title = 'eClean', onNotificationPress, theme = 'buye
 
   const { data } = useQuery({
     queryKey: ['notifications-unread'],
-    queryFn: () => notificationsApi.list({ page: 1 }),
+    queryFn: () => notificationsApi.list(1),
     staleTime: 30_000,
   })
   const unread = (data as any)?.unreadCount ?? 0
