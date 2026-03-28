@@ -17,8 +17,8 @@ import { citizenRoutes } from './modules/citizen/citizen.routes'
 import { adminRoutes } from './modules/admin/admin.routes'
 import { notificationsRoutes } from './modules/notifications/notifications.routes'
 import { payoutsRoutes } from './modules/payouts/payouts.routes'
-import { analyticsRoutes } from './modules/analytics/analytics.routes'
-import { dataExportRoutes } from './modules/data-export/export.routes'
+import { analyticsRoutes } from './intelligence/analytics/analytics.routes'
+import { dataExportRoutes } from './intelligence/data-export/export.routes'
 import type { FastifyInstance } from 'fastify'
 
 export async function buildApp(): Promise<FastifyInstance> {
