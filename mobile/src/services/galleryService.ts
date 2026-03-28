@@ -21,7 +21,7 @@
  */
 
 import * as FileSystem from 'expo-file-system'
-import * as ImageManipulator from 'expo-image-manipulator'
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 
 const GALLERY_DIR = `${FileSystem.documentDirectory}eclean_gallery/`
 const THUMB_SIZE  = 200   // px — thumbnail dimensions for gallery grid
@@ -74,17 +74,17 @@ export async function saveToGallery(
   await ensureDir(thumbDir)
 
   // Compress full-res (max 1200px, 85% quality)
-  const compressed = await ImageManipulator.manipulateAsync(
+  const compressed = await manipulateAsync(
     sourceUri,
     [{ resize: { width: MAX_FULL_PX } }],
-    { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
+    { compress: 0.85, format: SaveFormat.JPEG }
   )
 
   // Generate thumbnail (200px, 70% quality — tiny but clear enough for grid)
-  const thumb = await ImageManipulator.manipulateAsync(
+  const thumb = await manipulateAsync(
     sourceUri,
-    [{ resize: { width: THUMB_SIZE, height: THUMB_SIZE } }],
-    { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+    [{ resize: { width: THUMB_SIZE } }],  // width only — height scales proportionally, no distortion
+    { compress: 0.7, format: SaveFormat.JPEG }
   )
 
   const fullUri  = `${fullDir}${id}.jpg`

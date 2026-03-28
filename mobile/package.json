@@ -29,7 +29,7 @@
     "expo": "~53.0.0",
     "expo-camera": "~16.1.11",
     "expo-constants": "~17.0.0",
-    "expo-device": "~7.0.0",
+    "expo-device": "~7.1.4",
     "expo-file-system": "~18.1.11",
     "expo-haptics": "~14.0.0",
     "expo-image-manipulator": "~13.1.7",
