@@ -57,7 +57,7 @@ export function CreateReportScreen() {
       urgency,
       lat:             lat!,
       lng:             lng!,
-      locationAddress: address || undefined,
+
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['citizen-reports'] })

@@ -66,9 +66,13 @@ export type SupervisorStackParamList = {
 
 export type CitizenTabParamList = {
   CitizenHome:    undefined
-  CreateReport:   undefined
   Notifications:  undefined
   Profile:        undefined
+}
+
+export type CitizenStackParamList = {
+  CitizenTabs:   undefined
+  CreateReport:  undefined
 }
 
 // ─── Root ─────────────────────────────────────────────────────────────────────

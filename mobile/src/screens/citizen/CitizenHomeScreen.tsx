@@ -35,7 +35,7 @@ export function CitizenHomeScreen() {
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['citizen-reports'],
-    queryFn:  citizenApi.getReports,
+    queryFn:  citizenApi.listReports,
     staleTime: 30_000,
   })
 

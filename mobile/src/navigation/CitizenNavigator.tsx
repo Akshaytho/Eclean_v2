@@ -3,16 +3,13 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator }   from '@react-navigation/bottom-tabs'
 import { Home, Bell, User }           from 'lucide-react-native'
 import { COLORS }                     from '../constants/colors'
-import type { CitizenTabParamList }   from './types'
+import type { CitizenTabParamList, CitizenStackParamList } from './types'
 import { CitizenHomeScreen }   from '../screens/citizen/CitizenHomeScreen'
 import { CreateReportScreen }  from '../screens/citizen/CreateReportScreen'
 import { NotificationsScreen } from '../screens/shared/NotificationsScreen'
 import { ProfileScreen }       from '../screens/shared/ProfileScreen'
 
-type CitizenStackParamList = {
-  CitizenTabs:    undefined
-  CreateReport:   undefined
-}
+
 
 const Tab   = createBottomTabNavigator<CitizenTabParamList>()
 const Stack = createNativeStackNavigator<CitizenStackParamList>()
