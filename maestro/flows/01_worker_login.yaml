@@ -15,6 +15,9 @@ appId: com.eclean.app
     timeout: 30000
 - assertVisible: "Sign In"
 
+# Screenshot: confirm Sign In screen loaded
+- takeScreenshot: "debug_01a_signin_screen"
+
 # Fill credentials
 - tapOn:
     text: "Email"
@@ -23,9 +26,22 @@ appId: com.eclean.app
     text: "Password"
 - inputText: "${PASSWORD}"
 
+# Screenshot: credentials filled before submit
+- takeScreenshot: "debug_01b_credentials_filled"
+
 # Submit
 - tapOn:
     text: "Sign In"
+
+# Wait for response — app may load home or show error
+- waitForAnimationToEnd
+- takeScreenshot: "debug_01c_after_login_tap"
+
+# Wait longer for home screen
+- extendedWaitUntil:
+    visible: "Worker"
+    timeout: 20000
+- takeScreenshot: "debug_01d_home_screen"
 
 # Worker Home should appear after login
 - assertVisible:
