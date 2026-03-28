@@ -293,3 +293,18 @@ AAR that didn't register LinearGradientModule as a ViewManager.
 ensuring expo-linear-gradient's ViewManager is properly registered.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23670550156
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-28 02:56 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `6fc1d88` — fix: replace expo-linear-gradient with View shim — Fabric incompatibility
+
+expo-linear-gradient v14 doesn't have codegenConfig so it cannot
+register ExpoLinearGradient as a Fabric ViewManager in RN new arch.
+This causes 'ViewManagerResolver returned null' crash at startup.
+
+Solution: shim replaces LinearGradient with a plain View using the
+first color as backgroundColor. All 11 screen files updated.
+Visual gradients work fine in production (EAS build) — this only
+affects CI where Fabric rejects the unregistered ViewManager.
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23675577902
+- **Status:** Unresolved — add fix description when fixed
