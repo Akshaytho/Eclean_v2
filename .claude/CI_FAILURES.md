@@ -380,3 +380,9 @@ Claude picks ONE relevant gap per session, adds after main task,
 marks complete in GAPS.md COMPLETION LOG.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23677202201
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-28 04:18 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `68c22e0` — docs: add NEXT_PLAN.md — 6-session roadmap to production APK
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23677274308
+- **Status:** Unresolved — add fix description when fixed
