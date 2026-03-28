@@ -6,19 +6,13 @@ appId: com.eclean.app
 # App launches and shows login
 - launchApp:
     clearState: true
-- extendedWaitUntil:
-    anyOf:
-      - visible: "Sign In"
-      - visible: "Skip"
-    timeout: 30000
-- runFlow:
-    when:
-      visible: "Skip"
-    commands:
-      - tapOn: "Skip"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Skip"
+    optional: true
 - extendedWaitUntil:
     visible: "Sign In"
-    timeout: 15000
+    timeout: 30000
 - assertVisible: "Sign In"
 
 # Fill credentials
