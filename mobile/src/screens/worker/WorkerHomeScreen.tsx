@@ -23,6 +23,7 @@ import { workerTasksApi }  from '../../api/tasks.api'
 import { authApi }         from '../../api/auth.api'
 import { apiClient }       from '../../api/client'
 import { useAuthStore }    from '../../stores/authStore'
+import { DashboardCamera }  from '../../components/camera/DashboardCamera'
 import { formatMoney }     from '../../utils/formatMoney'
 import { timeAgo }         from '../../utils/timeAgo'
 import type { WorkerStackParamList } from '../../navigation/types'
@@ -185,6 +186,14 @@ export function WorkerHomeScreen() {
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
+        {/* Quick Camera & Gallery */}
+        <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
+          <DashboardCamera
+            onGalleryPress={() => navigation.navigate('Gallery' as any)}
+            showGalleryBtn
+          />
+        </View>
+
       </ScrollView>
     </ScreenWrapper>
   )
