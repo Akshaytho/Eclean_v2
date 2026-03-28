@@ -323,3 +323,15 @@ This matches the actual app flow: first launch shows onboarding,
 Skip navigates to the Login screen where flows can proceed.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23675974775
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-28 03:44 UTC
+- **Workflow:** Maestro E2E Tests
+- **Commit:** `571211b` — fix: use optional tapOn Skip instead of unsupported anyOf in extendedWaitUntil
+
+extendedWaitUntil with anyOf is not supported in Maestro 2.3.0 — caused
+immediate parse/runtime failure. Replace with simpler pattern:
+  1. waitForAnimationToEnd (let app settle)
+  2. tapOn Skip with optional:true (no-op if already on login screen)
+  3. extendedWaitUntil Sign In visible (works for both first launch and repeat)
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23676374977
+- **Status:** Unresolved — add fix description when fixed
