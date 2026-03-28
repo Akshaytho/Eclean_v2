@@ -30,14 +30,24 @@ eclean-v2/
 ```
 STEP 1 — Read .claude/HANDOFF.md (what was done last session, what's next)
 STEP 2 — Read .claude/SPRINTS.md (sprint plan with checkboxes — find current sprint)
+STEP 3 — Read .claude/GAPS.md (master problems registry — pick ONE relevant gap)
 ```
 
-After reading both, tell me:
+After reading all three, tell me:
 1. What sprint we are in
 2. What has been completed so far
 3. What needs to be done this session
+4. Which ONE gap item from GAPS.md you will piggyback this session (relevant to current work)
 
 Then WAIT for my confirmation before writing any code.
+
+## GAPS.md RULES (read before every session):
+
+- Pick EXACTLY ONE gap item relevant to current work domain
+- Add it AFTER the main task is done — never disrupt the sprint
+- Format when reporting: "🔧 Gap [{ID}]: {description} — will add after main task"
+- Mark [x] + update COMPLETION LOG in GAPS.md when done
+- If no gap is naturally relevant → skip entirely, don't force it
 
 ## ABSOLUTE RULES:
 - Never `git add .` — stage specific files only
