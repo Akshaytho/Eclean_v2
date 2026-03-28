@@ -4,100 +4,92 @@
 
 ---
 
-## Last Session: 2026-03-28 (Sessions 1-2-Camera — Marathon Session)
+## Last Session: 2026-03-28 (Session 3-4 — Live Testing + Major Redesign)
 
-### Status: MAJOR PROGRESS ✅
+### Status: MAJOR PROGRESS — Buyer Experience Redesigned
 
-### What was completed this session:
+### What was completed:
 
-**CI — Session 1:**
-- Backend `/api/v1/ci/seed` endpoint built (protected by `x-ci-secret` header)
-- Registered `ciRoutes` in `app.ts`, `CI_SECRET` added to `env.ts`
-- Workflow updated: seed step now uses correct secret name `Eclean_CI_Secret`
-- Maestro flows: increased post-login wait to 40s (Railway cold start fix)
-- ALL 3 workflows disabled (workflow_dispatch only) — re-enable Sprint 6
-- NEW: `build-apk.yml` runs on every push to main → downloadable APK from Actions tab
+**SDK & Build Fixes:**
+- Expo SDK 53 → 54 upgrade + react-native-worklets installed
+- expo-updates removed (crashed Expo Go)
+- expo-file-system → expo-file-system/legacy (SDK 54 deprecation)
+- SafeAreaView → react-native-safe-area-context in ScreenWrapper
 
-**Session 2 — Components + Hooks:**
-- `components/ui/Card.tsx` — base card with shadow + touchable
-- `components/ui/Avatar.tsx` — initials (color hashed) + photo fallback
-- `components/ui/Skeleton.tsx` + SkeletonCard preset
-- `components/ui/EmptyState.tsx` — emoji + title + action
-- `components/layout/GradientHeader.tsx` — dark gradient top bar
-- `components/task/TaskCard.tsx` — reusable task item
-- `components/task/TaskTimer.tsx` — elapsed time from server startedAt
-- `components/task/StatusTimeline.tsx` — OPEN→APPROVED visual
-- `components/task/AIScoreCard.tsx` — score + EXCELLENT/GOOD/UNCERTAIN/POOR
-- `components/maps/WorkerLocationMarker.tsx` — animated pulsing dot
-- `components/maps/ZoneOverlay.tsx` — dirty-level polygon for Supervisor
-- `hooks/useSocket.ts` + `useJoinTaskRoom`
-- `hooks/useGeofence.ts` — haversine distance check
-- `hooks/useUnreadCount.ts` — notification badge with real-time update
-- `hooks/useOfflineQueue.ts` — queue mutations + auto-replay
-- `components/index.ts` + `hooks/index.ts` — barrel exports
-- Gap [P3] ✅ — React Query stale times tuned in QueryClient
+**Camera & Evidence System:**
+- CaptureCamera hooks crash fixed (Rules of Hooks violation)
+- SHA-256 photo hashing added via expo-crypto — tamper-proof evidence
+- ActiveTaskScreen: gallery access REMOVED — camera-only for worker evidence
+- Photo source picker: clean bottom sheet with "Take Photo" / "My Photos" cards
+- Buyer reference photo: PostTaskScreen Step 2 has camera for buyers to show task area
+- Worker TaskDetailScreen: shows buyer's reference photo before accepting
 
-**CaptureCamera — Evidence Camera System:**
-- `components/camera/CaptureCamera.tsx` — full-screen camera, NO gallery
-  - GPS + UTC timestamp at exact shutter press moment
-  - Device ID bound at capture time
-  - BEFORE/AFTER/PROOF/GENERAL type badge
-  - Flash + flip controls, colored viewfinder corners
-- `components/camera/PhotoPreview.tsx` — preview with Retake / Use Photo
-- `components/camera/DashboardCamera.tsx` — quick access for every dashboard
-- `services/galleryService.ts` — in-app gallery (NOT phone gallery)
-  - Full-res 1200px + 200px thumbnails stored separately
-  - JSON metadata alongside each photo
-  - cleanOldPhotos() removes uploaded photos >30 days
-- `screens/shared/GalleryScreen.tsx` — FlatList 3-col grid
-  - getItemLayout for instant scroll
-  - Thumbnails only, full-res on tap
-  - Upload status dots per photo
-- Wired DashboardCamera into WorkerHomeScreen
+**ActiveTaskScreen Redesign:**
+- Map shrunk to 200px, bottom panel scrollable
+- Cancel task: proper bottom sheet modal (replaced Alert.prompt)
+- Task details card with description + address
+- Chat with Buyer button
+- Photo source picker with "Recommended" tag on camera option
 
-**Architecture Documents:**
-- `GAPS.md` — 42 problems across 9 categories with solutions + auto-pickup rules
-- `NEXT_PLAN.md` — 6-session roadmap to production APK
-- `eClean_Master_Architecture.pdf` — 15-section master doc (give to any AI session)
-  - Incorporates both founder analysis + ChatGPT architectural review
-  - Sections: 5 wrappers, Maps, Evidence Camera, AI Verification, Library-independent types,
-    modelVersion, Idempotency, GPS state, Performance, Observability, Mistakes, Phases,
-    Dependencies, Decision Log
+**Buyer Theme System:**
+- Created `buyerTheme.ts` — navy (#0A2463) + gold (#D4A843) palette
+- ALL buyer screens themed: Home, Dashboard, PostTask, TaskDetail, BuyerTasks, LiveTrack, Rating
+- Tab bar: navy active icons
+- Worker screens untouched (still green COLORS)
+- Modular: change buyerTheme.ts → all buyer screens update
 
-### CI State:
-- Jest: 109/109 ✅ (all workflows manual-only until Sprint 6)
-- Maestro: disabled — login works, home screen timeout fix applied (40s wait)
-- build-apk.yml: ✅ ACTIVE — runs on every push, APK downloadable from Actions tab
+**Buyer Navigation Redesign:**
+- 4 tabs: Home · Post Task · My Tasks · Dashboard (was 5 with Profile + Notifications)
+- AppHeader component: logo + bell (unread badge) + avatar on all screens
+- Notifications moved to bell icon → slides in from right with back button
+- Dashboard: profile card + stats + quick actions + settings + logout
+- Gallery screen registered in both Worker + Buyer navigators
 
-### What needs to happen next (Session 3):
+**BuyerHomeScreen — Premium Redesign:**
+- Time-aware greeting ("Good afternoon, Ravi")
+- "What needs cleaning?" CTA card (Uber pattern)
+- Smart sections: Needs Review (gold), In Progress (with Track/Chat/Details), Waiting for Workers
+- Stats strip: Total / Completed / Spent
+- Quick Post categories: horizontal scroll (Street, Drain, Park, Garbage, Toilet)
+- Daily rotating tip in warm yellow card
+- "How eClean Works" 4-step visual with connected dots
+- Trust badges: Verified Workers, AI Verification, Escrow Payment, Real-time Tracking
+- Empty state: "Your areas are clean" with icon + CTA
 
-**Priority 1 — Wire CaptureCamera into task screens:**
-- `ActiveTaskScreen` — replace expo-image-picker with CaptureCamera in photo grid
-- `CreateReportScreen` — replace with CaptureCamera
-- `InspectZoneScreen` — replace with CaptureCamera
-- Wire DashboardCamera into BuyerHomeScreen, CitizenHomeScreen, SupervisorHomeScreen
+**Test Data Seeded:**
+- testbuyer@eclean.app / Test@1234 (Ravi Kumar)
+- testworker@eclean.app / Test@1234 (Suresh Babu)
+- 4 tasks near Lingampally, Hyderabad (user's location)
+- 3 tasks in Bengaluru
 
-**Priority 2 — Sprint 3 gap fill:**
-- `BuyerTaskDetailScreen` — wire StatusTimeline + AIScoreCard + full-screen photo tap + reject reason modal
-- `LiveTrackScreen` — replace static marker with WorkerLocationMarker (animated)
-- `PostTaskScreen` — "Use My Location" GPS button on step 3
-- `WorkerHomeScreen` — Online/Offline/Busy status toggle
+### What needs to happen next:
 
-**Priority 3 — Sprint 4 screens:**
-- SupervisorHomeScreen — real zone map with ZoneOverlay polygons
-- ZoneDetailScreen + InspectZoneScreen (new screens)
-- ProfileScreen — real stats from GET /auth/me
-- CitizenHomeScreen + CreateReportScreen — verify completeness
+**Priority 1 — Worker screens need same treatment:**
+- WorkerHomeScreen redesign (same premium feel as buyer)
+- Worker theme file (keep green but modernize)
+- Worker navigation: add Dashboard tab, move notifications to header
 
-### Key files to know:
-- Evidence camera: `mobile/src/components/camera/`
-- In-app gallery: `mobile/src/services/galleryService.ts`
-- Gallery screen: `mobile/src/screens/shared/GalleryScreen.tsx`
-- Master architecture: `.claude/` folder + `eClean_Master_Architecture.pdf`
-- APK build: `.github/workflows/build-apk.yml` (runs on every push)
+**Priority 2 — Sprint 4 screens:**
+- SupervisorHomeScreen (real zone map)
+- CitizenHomeScreen + CreateReportScreen
+- ProfileScreen with real data
 
-### External still needed:
-- Mapbox tokens (pk.* + sk.*) from mapbox.com — for Session 4 Mapbox migration
-- Railway: `CI_SECRET` env var set to same value as GitHub `Eclean_CI_Secret` secret
-- Google Maps API key (for react-native-maps production use)
-- Sentry DSN (React Native + Node) — Sprint 5
+**Priority 3 — Polish:**
+- All Alert.prompt usage → replace with bottom sheet modals
+- PostTaskScreen Step 0 back button fix (tab screen edge case)
+- Skeleton loading states instead of spinners
+- ScreenWrapper background override for buyer screens using it
+
+### Dev environment:
+- Backend: Railway production — healthy
+- Mobile: Expo SDK 54, dev server via `npx expo start --clear`
+- User tests on iPhone via Expo Go (Lingampally, Hyderabad)
+- Emulator available but slow (use phone instead)
+
+### Key files:
+- Buyer theme: `mobile/src/constants/buyerTheme.ts`
+- AppHeader: `mobile/src/components/layout/AppHeader.tsx`
+- BuyerHomeScreen: `mobile/src/screens/buyer/BuyerHomeScreen.tsx` (premium redesign)
+- BuyerDashboardScreen: `mobile/src/screens/buyer/BuyerDashboardScreen.tsx`
+- CaptureCamera: `mobile/src/components/camera/CaptureCamera.tsx` (SHA-256 + hooks fix)
+- ActiveTaskScreen: `mobile/src/screens/worker/ActiveTaskScreen.tsx` (camera-only + cancel modal)

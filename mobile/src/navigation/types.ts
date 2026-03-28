@@ -25,6 +25,7 @@ export type WorkerStackParamList = {
   ActiveTask:    { taskId: string }
   SubmitProof:   { taskId: string }
   Chat:          { taskId: string; title: string }
+  Gallery:       undefined
 }
 
 // ─── Buyer ───────────────────────────────────────────────────────────────────
@@ -33,8 +34,7 @@ export type BuyerTabParamList = {
   BuyerHome:    undefined
   PostTask:     undefined
   BuyerTasks:   undefined
-  Notifications: undefined
-  Profile:      undefined
+  Dashboard:    undefined
 }
 
 export type BuyerStackParamList = {
@@ -43,6 +43,8 @@ export type BuyerStackParamList = {
   LiveTrack:         { taskId: string }
   Rating:            { taskId: string }
   Chat:              { taskId: string; title: string }
+  Gallery:           undefined
+  Notifications:     undefined
 }
 
 // ─── Supervisor ──────────────────────────────────────────────────────────────

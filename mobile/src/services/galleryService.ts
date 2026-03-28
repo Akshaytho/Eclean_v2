@@ -20,7 +20,7 @@
  * - FlatList with getItemLayout for instant scroll
  */
 
-import * as FileSystem from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 
 const GALLERY_DIR = `${FileSystem.documentDirectory}eclean_gallery/`
@@ -40,6 +40,7 @@ export interface GalleryPhoto {
     timestamp:  string        // ISO UTC — captured at shutter press
     deviceId:   string
     taskId:     string | null
+    photoHash:  string        // SHA-256 — tamper-proof evidence
   }
   capturedAt:   string        // ISO UTC
   uploaded:     boolean

@@ -31,6 +31,7 @@ import * as Haptics from 'expo-haptics'
 import { StatusBadge }    from '../../components/ui/Badge'
 import { Button }         from '../../components/ui/Button'
 import { COLORS }         from '../../constants/colors'
+import { BUYER_THEME as B } from '../../constants/buyerTheme'
 import { buyerTasksApi }  from '../../api/tasks.api'
 import { useSocketStore } from '../../stores/socketStore'
 import { formatMoney }    from '../../utils/formatMoney'
@@ -59,9 +60,9 @@ const STATUS_ORDER: Record<string, number> = {
 // ─── AI score label ────────────────────────────────────────────────────────
 function aiLabel(score: number): { text: string; color: string } {
   if (score >= 85) return { text: 'EXCELLENT', color: '#16A34A' }
-  if (score >= 70) return { text: 'GOOD',      color: COLORS.brand.primary }
+  if (score >= 70) return { text: 'GOOD',      color: B.primary }
   if (score >= 50) return { text: 'UNCERTAIN', color: '#D97706' }
-  return              { text: 'POOR',      color: COLORS.status.error }
+  return              { text: 'POOR',      color: B.status.error }
 }
 
 export function BuyerTaskDetailScreen() {
@@ -163,7 +164,7 @@ export function BuyerTaskDetailScreen() {
   }
 
   if (isLoading || !task) {
-    return <View style={s.loading}><ActivityIndicator size="large" color={COLORS.brand.primary} /></View>
+    return <View style={s.loading}><ActivityIndicator size="large" color={B.primary} /></View>
   }
 
   const canAct      = task.status === 'SUBMITTED' || task.status === 'VERIFIED'
@@ -180,7 +181,7 @@ export function BuyerTaskDetailScreen() {
       {/* ── Header ── */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <ChevronLeft size={22} color={COLORS.neutral[900]} />
+          <ChevronLeft size={22} color={B.text.primary} />
         </TouchableOpacity>
         <Text style={s.headerTitle} numberOfLines={1}>{task.title}</Text>
         <View style={{ width: 36 }} />
@@ -230,7 +231,7 @@ export function BuyerTaskDetailScreen() {
             onPress={() => navigation.navigate('LiveTrack', { taskId })}
             activeOpacity={0.85}
           >
-            <Navigation size={18} color={COLORS.brand.primary} />
+            <Navigation size={18} color={B.primary} />
             <Text style={s.trackBtnText}>Track Worker Live</Text>
           </TouchableOpacity>
         )}
@@ -303,7 +304,7 @@ export function BuyerTaskDetailScreen() {
                 onPress={() => navigation.navigate('Chat', { taskId, title: task.title })}
                 style={s.chatBtn}
               >
-                <MessageCircle size={20} color={COLORS.brand.primary} />
+                <MessageCircle size={20} color={B.primary} />
               </TouchableOpacity>
             </View>
           </View>
@@ -315,13 +316,13 @@ export function BuyerTaskDetailScreen() {
           <Text style={s.desc}>{task.description}</Text>
           {task.locationAddress && (
             <View style={s.locationRow}>
-              <MapPin size={14} color={COLORS.neutral[500]} />
+              <MapPin size={14} color={B.text.secondary} />
               <Text style={s.location}>{task.locationAddress}</Text>
             </View>
           )}
           {task.startedAt && (
             <View style={s.locationRow}>
-              <Clock size={14} color={COLORS.neutral[500]} />
+              <Clock size={14} color={B.text.secondary} />
               <Text style={s.location}>
                 Started {timeAgo(task.startedAt)}
                 {task.timeSpentSecs && ` · ${Math.round(task.timeSpentSecs / 60)} min on site`}
@@ -378,7 +379,7 @@ export function BuyerTaskDetailScreen() {
               onChangeText={setRejectReason}
               multiline
               numberOfLines={4}
-              placeholderTextColor={COLORS.neutral[400]}
+              placeholderTextColor={B.text.muted}
               autoFocus
             />
             <Text style={s.charCount}>{rejectReason.length} / 10 min</Text>
@@ -424,71 +425,71 @@ export function BuyerTaskDetailScreen() {
 }
 
 const s = StyleSheet.create({
-  root:        { flex: 1, backgroundColor: COLORS.surface },
+  root:        { flex: 1, backgroundColor: B.surface },
   loading:     { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: B.border },
   backBtn:     { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: COLORS.neutral[900], textAlign: 'center' },
+  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: B.text.primary, textAlign: 'center' },
 
   // Timeline
-  timeline:         { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: COLORS.neutral[50], borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  timeline:         { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: B.background, borderBottomWidth: 1, borderBottomColor: B.border },
   timelineItem:     { flex: 1, alignItems: 'center', gap: 4 },
   timelineDotCol:   { alignItems: 'center' },
-  timelineDot:      { width: 22, height: 22, borderRadius: 11, backgroundColor: COLORS.neutral[200], alignItems: 'center', justifyContent: 'center' },
-  timelineDotDone:  { backgroundColor: COLORS.brand.primary },
-  timelineDotCurrent:{ backgroundColor: COLORS.brand.primary, borderWidth: 2, borderColor: COLORS.brand.light },
-  timelineLine:     { width: 2, height: 16, backgroundColor: COLORS.neutral[200] },
-  timelineLineDone: { backgroundColor: COLORS.brand.primary },
-  timelineLabel:    { fontSize: 9, color: COLORS.neutral[400], fontWeight: '500', textAlign: 'center' },
-  timelineLabelActive: { color: COLORS.brand.primary },
+  timelineDot:      { width: 22, height: 22, borderRadius: 11, backgroundColor: B.border, alignItems: 'center', justifyContent: 'center' },
+  timelineDotDone:  { backgroundColor: B.primary },
+  timelineDotCurrent:{ backgroundColor: B.primary, borderWidth: 2, borderColor: COLORS.brand.light },
+  timelineLine:     { width: 2, height: 16, backgroundColor: B.border },
+  timelineLineDone: { backgroundColor: B.primary },
+  timelineLabel:    { fontSize: 9, color: B.text.muted, fontWeight: '500', textAlign: 'center' },
+  timelineLabelActive: { color: B.primary },
 
   topRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
-  price:       { fontSize: 26, fontWeight: '800', color: COLORS.brand.primary },
-  updated:     { fontSize: 12, color: COLORS.neutral[400], marginTop: 2 },
+  price:       { fontSize: 26, fontWeight: '800', color: B.primary },
+  updated:     { fontSize: 12, color: B.text.muted, marginTop: 2 },
 
-  trackBtn:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 20, marginBottom: 16, backgroundColor: COLORS.brand.tint, borderRadius: 12, padding: 14, borderWidth: 1.5, borderColor: COLORS.brand.primary },
-  trackBtnText:{ fontSize: 15, fontWeight: '700', color: COLORS.brand.primary },
+  trackBtn:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 20, marginBottom: 16, backgroundColor: B.primaryTint, borderRadius: 12, padding: 14, borderWidth: 1.5, borderColor: B.primary },
+  trackBtnText:{ fontSize: 15, fontWeight: '700', color: B.primary },
 
   // AI card
-  aiCard:       { marginHorizontal: 20, marginBottom: 16, backgroundColor: COLORS.neutral[50], borderRadius: 14, padding: 16, borderLeftWidth: 4 },
+  aiCard:       { marginHorizontal: 20, marginBottom: 16, backgroundColor: B.background, borderRadius: 14, padding: 16, borderLeftWidth: 4 },
   aiCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
-  aiCardTitle:  { fontSize: 13, fontWeight: '700', color: COLORS.neutral[700], marginBottom: 6 },
+  aiCardTitle:  { fontSize: 13, fontWeight: '700', color: B.text.secondary, marginBottom: 6 },
   aiBadge:      { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
   aiBadgeText:  { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
   aiScoreNum:   { fontSize: 36, fontWeight: '800' },
-  aiReasoning:  { fontSize: 13, color: COLORS.neutral[600], lineHeight: 20, marginBottom: 8 },
-  aiNote:       { fontSize: 12, fontWeight: '600', color: COLORS.neutral[600] },
+  aiReasoning:  { fontSize: 13, color: B.text.secondary, lineHeight: 20, marginBottom: 8 },
+  aiNote:       { fontSize: 12, fontWeight: '600', color: B.text.secondary },
 
   // Photos
   section:       { paddingHorizontal: 20, marginBottom: 20 },
-  sectionTitle:  { fontSize: 15, fontWeight: '700', color: COLORS.neutral[800], marginBottom: 12 },
+  sectionTitle:  { fontSize: 15, fontWeight: '700', color: B.text.primary, marginBottom: 12 },
   photoGroup:    { marginBottom: 12 },
-  photoGroupLabel:{ fontSize: 12, fontWeight: '600', color: COLORS.neutral[500], marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  photoGroupLabel:{ fontSize: 12, fontWeight: '600', color: B.text.secondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
   photoRow:      { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  photoThumb:    { width: 90, height: 90, borderRadius: 10, backgroundColor: COLORS.neutral[100] },
+  photoThumb:    { width: 90, height: 90, borderRadius: 10, backgroundColor: B.primaryTint },
 
   // Worker
-  workerRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: COLORS.neutral[50], borderRadius: 14, padding: 14 },
-  workerAvatar:  { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.brand.primary, alignItems: 'center', justifyContent: 'center' },
+  workerRow:     { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: B.background, borderRadius: 14, padding: 14 },
+  workerAvatar:  { width: 44, height: 44, borderRadius: 22, backgroundColor: B.primary, alignItems: 'center', justifyContent: 'center' },
   workerInitial: { fontSize: 20, fontWeight: '700', color: '#fff' },
-  workerName:    { fontSize: 15, fontWeight: '700', color: COLORS.neutral[900] },
-  workerEmail:   { fontSize: 12, color: COLORS.neutral[500], marginTop: 2 },
-  chatBtn:       { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.brand.tint, alignItems: 'center', justifyContent: 'center' },
+  workerName:    { fontSize: 15, fontWeight: '700', color: B.text.primary },
+  workerEmail:   { fontSize: 12, color: B.text.secondary, marginTop: 2 },
+  chatBtn:       { width: 40, height: 40, borderRadius: 20, backgroundColor: B.primaryTint, alignItems: 'center', justifyContent: 'center' },
 
-  desc:          { fontSize: 14, color: COLORS.neutral[600], lineHeight: 22 },
+  desc:          { fontSize: 14, color: B.text.secondary, lineHeight: 22 },
   locationRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  location:      { fontSize: 13, color: COLORS.neutral[500], flex: 1 },
+  location:      { fontSize: 13, color: B.text.secondary, flex: 1 },
 
-  footer:        { flexDirection: 'row', gap: 12, padding: 20, backgroundColor: COLORS.surface, borderTopWidth: 1, borderTopColor: COLORS.border },
+  footer:        { flexDirection: 'row', gap: 12, padding: 20, backgroundColor: B.surface, borderTopWidth: 1, borderTopColor: B.border },
   footerBtn:     { flex: 1 },
 
   // Reject modal
   modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalBox:      { backgroundColor: COLORS.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24 },
-  modalTitle:    { fontSize: 18, fontWeight: '700', color: COLORS.neutral[900], marginBottom: 6 },
-  modalSub:      { fontSize: 13, color: COLORS.neutral[500], marginBottom: 16 },
-  modalInput:    { backgroundColor: COLORS.neutral[50], borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 12, padding: 14, fontSize: 14, color: COLORS.neutral[900], height: 110, textAlignVertical: 'top' },
-  charCount:     { fontSize: 11, color: COLORS.neutral[400], textAlign: 'right', marginTop: 4, marginBottom: 16 },
+  modalBox:      { backgroundColor: B.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24 },
+  modalTitle:    { fontSize: 18, fontWeight: '700', color: B.text.primary, marginBottom: 6 },
+  modalSub:      { fontSize: 13, color: B.text.secondary, marginBottom: 16 },
+  modalInput:    { backgroundColor: B.background, borderWidth: 1.5, borderColor: B.border, borderRadius: 12, padding: 14, fontSize: 14, color: B.text.primary, height: 110, textAlignVertical: 'top' },
+  charCount:     { fontSize: 11, color: B.text.muted, textAlign: 'right', marginTop: 4, marginBottom: 16 },
   modalBtns:     { flexDirection: 'row', gap: 12 },
 
   // Photo viewer

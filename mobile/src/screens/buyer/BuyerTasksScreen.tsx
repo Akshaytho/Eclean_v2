@@ -15,7 +15,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { Search } from 'lucide-react-native'
 import { ScreenWrapper }  from '../../components/layout/ScreenWrapper'
 import { StatusBadge }    from '../../components/ui/Badge'
-import { COLORS }         from '../../constants/colors'
+import { BUYER_THEME as B } from '../../constants/buyerTheme'
+import { AppHeader }      from '../../components/layout/AppHeader'
 import { buyerTasksApi }  from '../../api/tasks.api'
 import { formatMoney }    from '../../utils/formatMoney'
 import { timeAgo }        from '../../utils/timeAgo'
@@ -47,7 +48,8 @@ export function BuyerTasksScreen() {
   )
 
   return (
-    <ScreenWrapper>
+    <ScreenWrapper backgroundColor={B.background}>
+      <AppHeader title="My Tasks" onNotificationPress={() => navigation.navigate('Notifications' as any)} />
       {/* Tab bar */}
       <View style={s.tabs}>
         {TABS.map((t, i) => (
@@ -63,13 +65,13 @@ export function BuyerTasksScreen() {
 
       {/* Search box */}
       <View style={s.searchBox}>
-        <Search size={16} color={COLORS.neutral[400]} />
+        <Search size={16} color={B.text.muted} />
         <TextInput
           style={s.searchInput}
           placeholder="Search tasks..."
           value={search}
           onChangeText={setSearch}
-          placeholderTextColor={COLORS.neutral[400]}
+          placeholderTextColor={B.text.muted}
           returnKeyType="search"
           clearButtonMode="while-editing"
         />
@@ -77,7 +79,7 @@ export function BuyerTasksScreen() {
 
       {/* Task list */}
       {query.isLoading
-        ? <ActivityIndicator color={COLORS.brand.primary} style={{ marginTop: 60 }} />
+        ? <ActivityIndicator color={B.primary} style={{ marginTop: 60 }} />
         : (
           <FlatList
             data={tasks}
@@ -87,7 +89,7 @@ export function BuyerTasksScreen() {
               <RefreshControl
                 refreshing={query.isFetching}
                 onRefresh={query.refetch}
-                tintColor={COLORS.brand.primary}
+                tintColor={B.primary}
               />
             }
             ListEmptyComponent={
@@ -128,21 +130,21 @@ export function BuyerTasksScreen() {
 
 const s = StyleSheet.create({
   tabs:          { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, gap: 8 },
-  tab:           { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: COLORS.neutral[100], alignItems: 'center' },
-  tabActive:     { backgroundColor: COLORS.brand.primary },
-  tabText:       { fontSize: 13, fontWeight: '600', color: COLORS.neutral[600] },
+  tab:           { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: B.primaryTint, alignItems: 'center' },
+  tabActive:     { backgroundColor: B.primary },
+  tabText:       { fontSize: 13, fontWeight: '600', color: B.text.secondary },
   tabTextActive: { color: '#fff' },
-  searchBox:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 4, backgroundColor: COLORS.neutral[100], borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
-  searchInput:   { flex: 1, fontSize: 14, color: COLORS.neutral[900] },
-  card:          { backgroundColor: COLORS.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: COLORS.border },
+  searchBox:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 4, backgroundColor: B.primaryTint, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  searchInput:   { flex: 1, fontSize: 14, color: B.text.primary },
+  card:          { backgroundColor: B.surface, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: B.border },
   cardUrgent:    { borderColor: '#D97706', borderWidth: 2 },
   cardTop:       { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  title:         { flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.neutral[900], marginRight: 8 },
+  title:         { flex: 1, fontSize: 15, fontWeight: '700', color: B.text.primary, marginRight: 8 },
   cardMeta:      { flexDirection: 'row', justifyContent: 'space-between' },
-  price:         { fontSize: 15, fontWeight: '700', color: COLORS.brand.primary },
-  time:          { fontSize: 12, color: COLORS.neutral[400] },
-  aiScore:       { fontSize: 12, color: COLORS.brand.primary, fontWeight: '600', marginTop: 6 },
+  price:         { fontSize: 15, fontWeight: '700', color: B.primary },
+  time:          { fontSize: 12, color: B.text.muted },
+  aiScore:       { fontSize: 12, color: B.primary, fontWeight: '600', marginTop: 6 },
   urgent:        { fontSize: 12, color: '#D97706', fontWeight: '600', marginTop: 6 },
   empty:         { alignItems: 'center', paddingTop: 60 },
-  emptyText:     { fontSize: 15, color: COLORS.neutral[500] },
+  emptyText:     { fontSize: 15, color: B.text.secondary },
 })

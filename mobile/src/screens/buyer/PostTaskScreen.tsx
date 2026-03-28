@@ -2,14 +2,18 @@
 import React, { useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator, TextInput,
+  Alert, ActivityIndicator, TextInput, Image, Modal,
 } from 'react-native'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react-native'
+import { ChevronLeft, ChevronRight, CheckCircle, Camera, X } from 'lucide-react-native'
+import { CaptureCamera } from '../../components/camera/CaptureCamera'
+import type { CaptureResult } from '../../components/camera/CaptureCamera'
+import { mediaApi } from '../../api/media.api'
 import { LinearGradient } from '../../components/LinearGradientShim'
 import { COLORS }        from '../../constants/colors'
+import { BUYER_THEME as B } from '../../constants/buyerTheme'
 import * as Location from 'expo-location'
 import { buyerTasksApi } from '../../api/tasks.api'
 import { DIRTY_LEVELS, URGENCY_LEVELS } from '../../constants/taskCategories'
@@ -54,6 +58,8 @@ export function PostTaskScreen() {
   const [step, setStep] = useState(0)
   const [form, setForm] = useState<FormState>(INITIAL)
   const [gpsLoading, setGpsLoading] = useState(false)
+  const [refPhoto, setRefPhoto] = useState<string | null>(null)
+  const [cameraOpen, setCameraOpen] = useState(false)
 
   const useMyLocation = async () => {
     setGpsLoading(true)
@@ -96,17 +102,20 @@ export function PostTaskScreen() {
       locationLat:     form.lat ?? undefined,
       locationLng:     form.lng ?? undefined,
     }),
-    onSuccess: (task) => {
+    onSuccess: async (task) => {
+      // Upload reference photo if taken
+      if (refPhoto) {
+        try {
+          await mediaApi.upload(task.id, refPhoto, 'REFERENCE')
+        } catch {
+          // photo upload failed but task is created — not critical
+        }
+      }
       qc.invalidateQueries({ queryKey: ['buyer-tasks-active'] })
-      Alert.alert(
-        'Task Posted! 🎉',
-        `Your task is live. Workers near you can see it now.`,
-        [{ text: 'View Task', onPress: () => {
-          navigation.navigate('BuyerTaskDetail', { taskId: task.id })
-        }}],
-      )
       setForm(INITIAL)
+      setRefPhoto(null)
       setStep(0)
+      navigation.navigate('BuyerTaskDetail', { taskId: task.id })
     },
     onError: (err: any) => {
       Alert.alert('Error', err?.response?.data?.error?.message ?? 'Could not post task. Try again.')
@@ -128,7 +137,7 @@ export function PostTaskScreen() {
   return (
     <View style={s.root}>
       {/* Header */}
-      <LinearGradient colors={[COLORS.brand.primary, COLORS.brand.dark]} style={s.header}>
+      <LinearGradient colors={B.gradient} style={s.header}>
         <TouchableOpacity onPress={() => step > 0 ? setStep(s => s - 1) : navigation.goBack()} style={s.backBtn}>
           <ChevronLeft size={22} color="#fff" />
         </TouchableOpacity>
@@ -184,7 +193,7 @@ export function PostTaskScreen() {
               placeholder="e.g. Clean blocked drain on MG Road"
               value={form.title}
               onChangeText={v => set('title', v)}
-              placeholderTextColor={COLORS.neutral[400]}
+              placeholderTextColor={B.text.muted}
             />
 
             <Text style={s.fieldLabel}>Description</Text>
@@ -195,7 +204,7 @@ export function PostTaskScreen() {
               onChangeText={v => set('description', v)}
               multiline
               numberOfLines={4}
-              placeholderTextColor={COLORS.neutral[400]}
+              placeholderTextColor={B.text.muted}
             />
 
             <Text style={s.fieldLabel}>Condition Level</Text>
@@ -251,7 +260,7 @@ export function PostTaskScreen() {
               activeOpacity={0.8}
             >
               {gpsLoading
-                ? <ActivityIndicator size="small" color={COLORS.brand.primary} />
+                ? <ActivityIndicator size="small" color={B.primary} />
                 : <Text style={s.gpsBtnText}>📍 Use My Location</Text>
               }
             </TouchableOpacity>
@@ -262,12 +271,27 @@ export function PostTaskScreen() {
               placeholder="e.g. MG Road, near Bus Stop 12, Hyderabad"
               value={form.address}
               onChangeText={v => set('address', v)}
-              placeholderTextColor={COLORS.neutral[400]}
+              placeholderTextColor={B.text.muted}
             />
             {form.lat && form.lng && (
-              <Text style={s.gpsConfirm}>✅ GPS coordinates captured ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})</Text>
+              <Text style={s.gpsConfirm}>GPS coordinates captured ({form.lat.toFixed(4)}, {form.lng.toFixed(4)})</Text>
             )}
-            <Text style={s.hint}>Location is optional — you can skip this step</Text>
+
+            <Text style={s.fieldLabel}>Reference Photo</Text>
+            <Text style={s.hint}>Show workers what the area looks like</Text>
+            {refPhoto ? (
+              <View style={s.refPhotoWrap}>
+                <Image source={{ uri: refPhoto }} style={s.refPhotoImg} resizeMode="cover" />
+                <TouchableOpacity style={s.refPhotoRemove} onPress={() => setRefPhoto(null)}>
+                  <X size={16} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={s.refPhotoBtn} onPress={() => setCameraOpen(true)} activeOpacity={0.85}>
+                <Camera size={22} color={B.primary} />
+                <Text style={s.refPhotoBtnText}>Take a Photo</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -282,6 +306,7 @@ export function PostTaskScreen() {
               <SummaryRow label="Condition" value={DIRTY_LEVELS[form.dirtyLevel]?.label + ' dirty'} />
               <SummaryRow label="Urgency"   value={form.urgency} />
               {form.address ? <SummaryRow label="Location" value={form.address} /> : null}
+              {refPhoto ? <SummaryRow label="Photo" value="Reference photo attached" /> : null}
               <SummaryRow label="Work Window" value="07:00 – 11:30 AM" />
               <SummaryRow label="Upload By"   value="12:00 PM" />
               <View style={s.divider} />
@@ -296,6 +321,19 @@ export function PostTaskScreen() {
 
         <View style={{ height: 120 }} />
       </ScrollView>
+
+      {/* Reference photo camera */}
+      <Modal visible={cameraOpen} animationType="slide" statusBarTranslucent>
+        <CaptureCamera
+          taskId={null}
+          photoType="GENERAL"
+          onCapture={(result: CaptureResult) => {
+            setCameraOpen(false)
+            setRefPhoto(result.photo.fullUri)
+          }}
+          onClose={() => setCameraOpen(false)}
+        />
+      </Modal>
 
       {/* Footer CTA */}
       <View style={s.footer}>
@@ -331,55 +369,60 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 }
 
 const s = StyleSheet.create({
-  root:     { flex: 1, backgroundColor: COLORS.background },
-  header:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 56, paddingBottom: 16, paddingHorizontal: 20 },
+  root:     { flex: 1, backgroundColor: B.background },
+  header:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 52, paddingBottom: 16, paddingHorizontal: 20 },
   backBtn:  { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#fff' },
-  stepRow:  { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  stepRow:  { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: B.surface, borderBottomWidth: 1, borderBottomColor: B.border },
   stepItem: { flex: 1, alignItems: 'center', gap: 4 },
-  stepDot:  { width: 26, height: 26, borderRadius: 13, backgroundColor: COLORS.neutral[200], alignItems: 'center', justifyContent: 'center' },
-  stepDotActive: { backgroundColor: COLORS.brand.primary },
-  stepNum:  { fontSize: 12, fontWeight: '700', color: COLORS.neutral[500] },
+  stepDot:  { width: 26, height: 26, borderRadius: 13, backgroundColor: B.border, alignItems: 'center', justifyContent: 'center' },
+  stepDotActive: { backgroundColor: B.primary },
+  stepNum:  { fontSize: 12, fontWeight: '700', color: B.text.secondary },
   stepNumActive: { color: '#fff' },
-  stepLabel: { fontSize: 10, color: COLORS.neutral[400], fontWeight: '500' },
-  stepLabelActive: { color: COLORS.brand.primary },
+  stepLabel: { fontSize: 10, color: B.text.muted, fontWeight: '500' },
+  stepLabelActive: { color: B.primary },
   body:     { flex: 1, padding: 20 },
-  stepTitle: { fontSize: 20, fontWeight: '700', color: COLORS.neutral[900], marginBottom: 6 },
-  stepSub:   { fontSize: 14, color: COLORS.neutral[500], marginBottom: 20 },
+  stepTitle: { fontSize: 20, fontWeight: '700', color: B.text.primary, marginBottom: 6 },
+  stepSub:   { fontSize: 14, color: B.text.secondary, marginBottom: 20 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
-  categoryCard: { width: '47%', backgroundColor: COLORS.surface, borderRadius: 14, padding: 16, alignItems: 'center', gap: 8, borderWidth: 2, borderColor: COLORS.border },
-  categoryCardActive: { borderColor: COLORS.brand.primary, backgroundColor: COLORS.brand.tint },
+  categoryCard: { width: '47%', backgroundColor: B.surface, borderRadius: 14, padding: 16, alignItems: 'center', gap: 8, borderWidth: 2, borderColor: B.border },
+  categoryCardActive: { borderColor: B.primary, backgroundColor: B.primaryTint },
   categoryEmoji: { fontSize: 32 },
-  categoryLabel: { fontSize: 13, fontWeight: '600', color: COLORS.neutral[700], textAlign: 'center' },
-  categoryLabelActive: { color: COLORS.brand.primary },
+  categoryLabel: { fontSize: 13, fontWeight: '600', color: B.text.secondary, textAlign: 'center' },
+  categoryLabelActive: { color: B.primary },
   formGroup: { gap: 4 },
-  fieldLabel: { fontSize: 14, fontWeight: '600', color: COLORS.neutral[700], marginTop: 16, marginBottom: 8 },
-  textInput: { backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14, fontSize: 15, color: COLORS.neutral[900] },
+  fieldLabel: { fontSize: 14, fontWeight: '600', color: B.text.secondary, marginTop: 16, marginBottom: 8 },
+  textInput: { backgroundColor: B.surface, borderWidth: 1.5, borderColor: B.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14, fontSize: 15, color: B.text.primary },
   textArea:  { height: 100, textAlignVertical: 'top' },
   optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  optionChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.surface },
-  optionChipActive: { borderColor: COLORS.brand.primary, backgroundColor: COLORS.brand.tint },
-  optionText: { fontSize: 13, fontWeight: '600', color: COLORS.neutral[600] },
-  optionTextActive: { color: COLORS.brand.primary },
-  hint:         { fontSize: 12, color: COLORS.neutral[400], marginTop: 8 },
+  optionChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: B.border, backgroundColor: B.surface },
+  optionChipActive: { borderColor: B.primary, backgroundColor: B.primaryTint },
+  optionText: { fontSize: 13, fontWeight: '600', color: B.text.secondary },
+  optionTextActive: { color: B.primary },
+  hint:         { fontSize: 12, color: B.text.muted, marginTop: 8 },
   optionPrice:  { fontSize: 11, fontWeight: '700', marginTop: 2 },
-  pricingPreview:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.brand.tint, borderRadius: 10, padding: 12, marginTop: 10 },
-  pricingLabel: { fontSize: 13, color: COLORS.brand.primary, fontWeight: '600' },
-  pricingValue: { fontSize: 20, fontWeight: '800', color: COLORS.brand.primary },
-  gpsBtn:   { backgroundColor: COLORS.brand.tint, borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.brand.primary, marginBottom: 16 },
-  gpsBtnText:{ fontSize: 15, fontWeight: '700', color: COLORS.brand.primary },
+  pricingPreview:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: B.primaryTint, borderRadius: 10, padding: 12, marginTop: 10 },
+  pricingLabel: { fontSize: 13, color: B.primary, fontWeight: '600' },
+  pricingValue: { fontSize: 20, fontWeight: '800', color: B.primary },
+  gpsBtn:   { backgroundColor: B.primaryTint, borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1.5, borderColor: B.primary, marginBottom: 16 },
+  gpsBtnText:{ fontSize: 15, fontWeight: '700', color: B.primary },
   gpsConfirm:{ fontSize: 12, color: '#16A34A', fontWeight: '600', marginTop: 6 },
-  summaryCard: { backgroundColor: COLORS.surface, borderRadius: 16, padding: 20, gap: 12, borderWidth: 1, borderColor: COLORS.border },
+  refPhotoBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: B.primaryTint, borderRadius: 12, paddingVertical: 40, borderWidth: 1.5, borderColor: B.border, borderStyle: 'dashed', marginTop: 8 },
+  refPhotoBtnText: { fontSize: 15, fontWeight: '600', color: B.primary },
+  refPhotoWrap:  { marginTop: 8, borderRadius: 12, overflow: 'hidden', position: 'relative' },
+  refPhotoImg:   { width: '100%', height: 180, borderRadius: 12 },
+  refPhotoRemove:{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
+  summaryCard: { backgroundColor: B.surface, borderRadius: 16, padding: 20, gap: 12, borderWidth: 1, borderColor: B.border },
   summaryRow:  { flexDirection: 'row', justifyContent: 'space-between' },
-  summaryLabel:{ fontSize: 13, color: COLORS.neutral[500] },
-  summaryValue:{ fontSize: 13, fontWeight: '600', color: COLORS.neutral[800], flex: 1, textAlign: 'right' },
-  divider:    { height: 1, backgroundColor: COLORS.border, marginVertical: 4 },
+  summaryLabel:{ fontSize: 13, color: B.text.secondary },
+  summaryValue:{ fontSize: 13, fontWeight: '600', color: B.text.primary, flex: 1, textAlign: 'right' },
+  divider:    { height: 1, backgroundColor: B.border, marginVertical: 4 },
   priceRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  priceLabel: { fontSize: 16, fontWeight: '700', color: COLORS.neutral[800] },
-  priceValue: { fontSize: 28, fontWeight: '800', color: COLORS.brand.primary },
-  priceNote:  { fontSize: 12, color: COLORS.neutral[400] },
-  footer:     { padding: 20, backgroundColor: COLORS.surface, borderTopWidth: 1, borderTopColor: COLORS.border },
-  nextBtn:    { backgroundColor: COLORS.brand.primary, borderRadius: 14, paddingVertical: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  priceLabel: { fontSize: 16, fontWeight: '700', color: B.text.primary },
+  priceValue: { fontSize: 28, fontWeight: '800', color: B.primary },
+  priceNote:  { fontSize: 12, color: B.text.muted },
+  footer:     { padding: 20, backgroundColor: B.surface, borderTopWidth: 1, borderTopColor: B.border },
+  nextBtn:    { backgroundColor: B.primary, borderRadius: 14, paddingVertical: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   nextBtnDisabled: { opacity: 0.5 },
   nextBtnText:{ fontSize: 17, fontWeight: '700', color: '#fff' },
 })

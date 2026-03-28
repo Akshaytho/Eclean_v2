@@ -14,6 +14,8 @@ import { CameraView, useCameraPermissions, CameraType } from 'expo-camera'
 import * as Location from 'expo-location'
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 import * as Device from 'expo-device'
+import * as Crypto from 'expo-crypto'
+import * as FileSystem from 'expo-file-system/legacy'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { X, RotateCcw, Zap, ZapOff } from 'lucide-react-native'
 import { COLORS } from '../../constants/colors'
@@ -35,6 +37,7 @@ export interface CaptureMetadata {
   timestamp: string       // ISO UTC — captured at shutter press moment
   deviceId:  string
   taskId:    string | null
+  photoHash: string       // SHA-256 of raw photo bytes — tamper-proof evidence
 }
 
 interface CaptureCameraProps {
@@ -63,25 +66,7 @@ export function CaptureCamera({ taskId, photoType, onCapture, onClose }: Capture
   const insets    = useSafeAreaInsets()
   const cfg       = PHOTO_TYPE_CONFIG[photoType]
 
-  // ── Permission screen ────────────────────────────────────────────────────────
-  if (!permission) return <View style={s.bg} />
-
-  if (!permission.granted) {
-    return (
-      <View style={[s.bg, s.center]}>
-        <Text style={s.permTitle}>Camera permission needed</Text>
-        <Text style={s.permSub}>eClean needs camera access to capture evidence photos</Text>
-        <TouchableOpacity style={s.permBtn} onPress={requestPermission}>
-          <Text style={s.permBtnText}>Grant Camera Permission</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.closeBtn} onPress={onClose}>
-          <X size={24} color="rgba(255,255,255,0.7)" />
-        </TouchableOpacity>
-      </View>
-    )
-  }
-
-  // ── Shutter press ────────────────────────────────────────────────────────────
+  // ── Shutter press (must be before early returns — Rules of Hooks) ──────────
   const onShutter = useCallback(async () => {
     if (!cameraRef.current || capturing) return
     setCapturing(true)
@@ -97,16 +82,21 @@ export function CaptureCamera({ taskId, photoType, onCapture, onClose }: Capture
 
       if (!photo) throw new Error('Camera failed to capture')
 
+      // SHA-256 hash of raw photo — tamper-proof evidence
+      const photoBase64 = await FileSystem.readAsStringAsync(photo.uri, { encoding: FileSystem.EncodingType.Base64 })
+      const photoHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, photoBase64)
+
       // Build metadata at the exact moment of capture
       const metadata: CaptureMetadata = {
-        lat:       locResult?.coords.latitude  ?? null,   // ✅ correct field name
+        lat:       locResult?.coords.latitude  ?? null,
         lng:       locResult?.coords.longitude ?? null,
         timestamp: new Date().toISOString(),
         deviceId:  Device.modelId ?? Device.deviceName ?? 'unknown',
         taskId,
+        photoHash,
       }
 
-      // Show preview with metadata attached — not lost anymore
+      // Show preview with metadata attached
       setPreview({ uri: photo.uri, metadata })
       setCapturing(false)
     } catch (err) {
@@ -128,6 +118,24 @@ export function CaptureCamera({ taskId, photoType, onCapture, onClose }: Capture
       Alert.alert('Save failed', 'Could not save photo. Please retake.')
     }
   }, [taskId, photoType, onCapture])
+
+  // ── Permission screen (after all hooks) ────────────────────────────────────
+  if (!permission) return <View style={s.bg} />
+
+  if (!permission.granted) {
+    return (
+      <View style={[s.bg, s.center]}>
+        <Text style={s.permTitle}>Camera permission needed</Text>
+        <Text style={s.permSub}>eClean needs camera access to capture evidence photos</Text>
+        <TouchableOpacity style={s.permBtn} onPress={requestPermission}>
+          <Text style={s.permBtnText}>Grant Camera Permission</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.closeBtn} onPress={onClose}>
+          <X size={24} color="rgba(255,255,255,0.7)" />
+        </TouchableOpacity>
+      </View>
+    )
+  }
 
   // ── Preview screen ───────────────────────────────────────────────────────────
   if (preview) {

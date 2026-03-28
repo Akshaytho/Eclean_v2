@@ -15,6 +15,7 @@ import { TaskDetailScreen }  from '../screens/worker/TaskDetailScreen'
 import { ActiveTaskScreen }  from '../screens/worker/ActiveTaskScreen'
 import { SubmitProofScreen } from '../screens/worker/SubmitProofScreen'
 import { ChatScreen }        from '../screens/shared/ChatScreen'
+import { GalleryScreen }     from '../screens/shared/GalleryScreen'
 
 const Tab   = createBottomTabNavigator<WorkerTabParamList>()
 const Stack = createNativeStackNavigator<WorkerStackParamList>()
@@ -60,6 +61,7 @@ export function WorkerNavigator() {
       <Stack.Screen name="ActiveTask"  component={ActiveTaskScreen}  options={{ animation: 'slide_from_right', gestureEnabled: false }} />
       <Stack.Screen name="SubmitProof" component={SubmitProofScreen} options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="Chat"        component={ChatScreen}        options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="Gallery"     component={GalleryScreen}     options={{ animation: 'slide_from_right' }} />
     </Stack.Navigator>
   )
 }

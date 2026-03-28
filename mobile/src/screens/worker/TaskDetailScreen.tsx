@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Alert, ActivityIndicator,
+  ScrollView, Alert, ActivityIndicator, Image,
 } from 'react-native'
 import MapView, { Marker } from 'react-native-maps'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -148,6 +148,14 @@ export function TaskDetailScreen() {
           </View>
         </View>
 
+        {/* ── Reference Photo (from buyer) ── */}
+        {task.media?.filter(m => m.type === 'REFERENCE').map(m => (
+          <View key={m.id} style={styles.refPhotoCard}>
+            <Image source={{ uri: m.url }} style={styles.refPhotoImg} resizeMode="cover" />
+            <Text style={styles.refPhotoLabel}>Photo from buyer</Text>
+          </View>
+        ))}
+
         {/* ── Description ── */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Description</Text>
@@ -225,6 +233,9 @@ const styles = StyleSheet.create({
   miniMap:        { height: 180, borderRadius: 14, overflow: 'hidden' },
   noMap:          { height: 100, borderRadius: 14, backgroundColor: COLORS.neutral[100], alignItems: 'center', justifyContent: 'center', gap: 8 },
   noMapText:      { fontSize: 13, color: COLORS.neutral[400] },
+  refPhotoCard:   { borderRadius: 14, overflow: 'hidden', backgroundColor: COLORS.surface },
+  refPhotoImg:    { width: '100%', height: 200, borderRadius: 14 },
+  refPhotoLabel:  { fontSize: 12, color: COLORS.neutral[500], textAlign: 'center', paddingVertical: 8 },
   rateCard:       {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,7 +1,7 @@
 import React from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bell, CheckCheck, ChevronRight } from 'lucide-react-native'
+import { ArrowLeft, Bell, CheckCheck, ChevronRight } from 'lucide-react-native'
 import { useNavigation } from '@react-navigation/native'
 import { ScreenWrapper }       from '../../components/layout/ScreenWrapper'
 import { COLORS }              from '../../constants/colors'
@@ -35,6 +35,9 @@ export function NotificationsScreen() {
     <ScreenWrapper>
       {/* Header */}
       <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <ArrowLeft size={22} color={COLORS.neutral[900]} />
+        </TouchableOpacity>
         <Text style={s.title}>Notifications</Text>
         {unread > 0 && (
           <TouchableOpacity onPress={() => markAllMutation.mutate()} style={s.markAllBtn}>
@@ -88,7 +91,8 @@ export function NotificationsScreen() {
 }
 
 const s = StyleSheet.create({
-  header:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
+  header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, gap: 8 },
+  backBtn:     { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   title:       { fontSize: 22, fontWeight: '700', color: COLORS.neutral[900] },
   markAllBtn:  { flexDirection: 'row', alignItems: 'center', gap: 5 },
   markAllText: { fontSize: 13, color: COLORS.brand.primary, fontWeight: '600' },

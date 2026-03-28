@@ -20,7 +20,8 @@ import {
   Dimensions, Image, Modal, ActivityIndicator, RefreshControl,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { X, Check, Clock, Trash2, Upload } from 'lucide-react-native'
+import { ArrowLeft, X, Check, Clock, Trash2, Upload } from 'lucide-react-native'
+import { useNavigation } from '@react-navigation/native'
 import { COLORS } from '../../constants/colors'
 import { getAllPhotos, deletePhoto, getGalleryStats, GalleryPhoto } from '../../services/galleryService'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -37,6 +38,7 @@ const TYPE_COLORS: Record<string, string> = {
 }
 
 export function GalleryScreen() {
+  const navigation                = useNavigation()
   const insets                    = useSafeAreaInsets()
   const [photos,    setPhotos]    = useState<GalleryPhoto[]>([])
   const [loading,   setLoading]   = useState(true)
@@ -105,8 +107,15 @@ export function GalleryScreen() {
     <ScreenWrapper>
       {/* Header */}
       <View style={[s.header, { paddingTop: insets.top }]}>
-        <Text style={s.title}>My Photos</Text>
-        <Text style={s.stats}>{stats.count} photos  •  {stats.sizeMB} MB</Text>
+        <View style={s.headerRow}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <ArrowLeft size={22} color={COLORS.neutral[900]} />
+          </TouchableOpacity>
+          <View>
+            <Text style={s.title}>My Photos</Text>
+            <Text style={s.stats}>{stats.count} photos  •  {stats.sizeMB} MB</Text>
+          </View>
+        </View>
       </View>
 
       {photos.length === 0 ? (
@@ -184,6 +193,8 @@ export function GalleryScreen() {
 const s = StyleSheet.create({
   center:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header:       { paddingHorizontal: 20, paddingBottom: 12, backgroundColor: COLORS.surface },
+  headerRow:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  backBtn:      { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   title:        { fontSize: 22, fontWeight: '800', color: COLORS.neutral[900] },
   stats:        { fontSize: 12, color: COLORS.neutral[400], marginTop: 2 },
   grid:         { padding: 1 },
