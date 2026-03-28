@@ -3,7 +3,7 @@
 
 import React from 'react'
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import { LinearGradient } from '../../components/LinearGradientShim'
 import { ScreenWrapper } from '../../components/layout/ScreenWrapper'
 import { useAuthStore } from '../../stores/authStore'
 import { useSocketStore } from '../../stores/socketStore'

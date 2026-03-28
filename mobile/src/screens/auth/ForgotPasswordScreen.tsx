@@ -7,7 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import { LinearGradient } from '../../components/LinearGradientShim'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { AuthStackParamList } from '../../navigation/types'
 import { Input } from '../../components/ui/Input'

@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet,
   FlatList, ActivityIndicator, TouchableOpacity,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import { LinearGradient } from '../../components/LinearGradientShim'
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle, Clock, XCircle, ArrowDownLeft } from 'lucide-react-native'
 

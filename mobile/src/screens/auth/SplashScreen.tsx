@@ -5,7 +5,7 @@
 
 import React, { useEffect } from 'react'
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import { LinearGradient } from '../../components/LinearGradientShim'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { AuthStackParamList } from '../../navigation/types'
 import { getTokens } from '../../stores/authStore'
