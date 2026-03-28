@@ -38,33 +38,34 @@ export async function ciRoutes(fastify: FastifyInstance): Promise<void> {
     // Upsert worker account
     const worker = await prisma.user.upsert({
       where:  { email: CI_WORKER_EMAIL },
-      update: { passwordHash, emailVerified: true, name: 'CI Worker' },
+      update: { passwordHash, isEmailVerified: true, name: 'CI Worker' },
       create: {
-        email:         CI_WORKER_EMAIL,
+        email:           CI_WORKER_EMAIL,
         passwordHash,
-        name:          'CI Worker',
-        role:          'WORKER',
-        emailVerified: true,
-        workerProfile: { create: { bio: 'CI test worker', skills: [] } },
+        name:            'CI Worker',
+        role:            'WORKER',
+        isEmailVerified: true,
+        workerProfile:   { create: { skills: [] } },
       },
     })
 
     // Upsert buyer account
     const buyer = await prisma.user.upsert({
       where:  { email: CI_BUYER_EMAIL },
-      update: { passwordHash, emailVerified: true, name: 'CI Buyer' },
+      update: { passwordHash, isEmailVerified: true, name: 'CI Buyer' },
       create: {
-        email:         CI_BUYER_EMAIL,
+        email:           CI_BUYER_EMAIL,
         passwordHash,
-        name:          'CI Buyer',
-        role:          'BUYER',
-        emailVerified: true,
+        name:            'CI Buyer',
+        role:            'BUYER',
+        isEmailVerified: true,
       },
     })
 
     // Generate tokens so Maestro can use them directly if needed
-    const workerToken = signAccessToken({ sub: worker.id, role: worker.role, jti: `ci-worker-${Date.now()}` })
-    const buyerToken  = signAccessToken({ sub: buyer.id,  role: buyer.role,  jti: `ci-buyer-${Date.now()}` })
+    // signAccessToken(sub, role, email) returns { token, jti }
+    const { token: workerToken } = signAccessToken(worker.id, worker.role, worker.email)
+    const { token: buyerToken }  = signAccessToken(buyer.id, buyer.role, buyer.email)
 
     return reply.status(200).send({
       ok: true,
