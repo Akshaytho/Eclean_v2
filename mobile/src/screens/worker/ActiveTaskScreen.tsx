@@ -8,7 +8,7 @@ import React, { useEffect, useRef, useCallback, useState } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Alert, Image, ActivityIndicator, ScrollView,
-  TextInput, KeyboardAvoidingView, Platform,
+  TextInput, KeyboardAvoidingView, Platform, Linking,
 } from 'react-native'
 import MapView, { Marker, Polyline, Circle } from 'react-native-maps'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -57,6 +57,26 @@ function formatElapsed(secs: number): string {
   const pad = (n: number) => n.toString().padStart(2, '0')
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`
 }
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function openMapsNavigation(lat: number, lng: number) {
+  const url = Platform.select({
+    ios: `maps://app?daddr=${lat},${lng}&dirflg=d`,
+    android: `google.navigation:q=${lat},${lng}&mode=d`,
+  })
+  if (url) Linking.openURL(url).catch(() => {
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`)
+  })
+}
+
+const GEOFENCE_RADIUS_KM = 0.5 // 500 meters
 
 export function ActiveTaskScreen() {
   const navigation          = useNavigation<Nav>()
@@ -171,15 +191,33 @@ export function ActiveTaskScreen() {
     },
   })
 
+  // Distance to task location
+  const distanceKm = (currentLocation && task?.locationLat)
+    ? haversineKm(currentLocation.lat, currentLocation.lng, task.locationLat, task.locationLng!)
+    : null
+  const isNearTask = distanceKm !== null && distanceKm <= GEOFENCE_RADIUS_KM
+  const hasLocation = task?.locationLat != null
+
   const handleStart = () => {
     if (isStarting.current) return
     if (!currentLocation) {
       setGpsWarning(true)
       return
     }
+    // If task has location, enforce geofence
+    if (hasLocation && !isNearTask) {
+      setGpsWarning(true)
+      return
+    }
     setGpsWarning(false)
     isStarting.current = true
     startMutation.mutate()
+  }
+
+  const handleNavigate = () => {
+    if (task?.locationLat && task?.locationLng) {
+      openMapsNavigation(task.locationLat, task.locationLng)
+    }
   }
 
   const handleCancel = () => {
@@ -339,30 +377,74 @@ export function ActiveTaskScreen() {
           </View>
         </View>
 
-        {/* Start Work button (ACCEPTED state) */}
+        {/* ACCEPTED state — navigate + geofence + start */}
         {isAccepted && (
           <>
-            <View style={styles.infoCard}>
-              <Text style={styles.infoCardText}>Go to the task location and tap Start Work when you arrive.</Text>
-            </View>
+            {/* Distance indicator */}
+            {hasLocation && distanceKm !== null && (
+              <View style={[styles.distanceCard, isNearTask ? styles.distanceNear : styles.distanceFar]}>
+                <MapPin size={18} color={isNearTask ? W.primary : W.secondary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.distanceText, { color: isNearTask ? '#15803D' : '#92400E' }]}>
+                    {isNearTask
+                      ? "You're at the location!"
+                      : `${distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)} km`} away`
+                    }
+                  </Text>
+                  <Text style={styles.distanceSub}>
+                    {isNearTask ? 'You can start work now' : 'Get within 500m to start work'}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Navigate button — opens Google Maps */}
+            {hasLocation && !isNearTask && (
+              <TouchableOpacity style={styles.navigateBtn} onPress={handleNavigate} activeOpacity={0.85}>
+                <MapPin size={18} color="#fff" />
+                <Text style={styles.navigateBtnText}>Navigate to Location</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* No location set */}
+            {!hasLocation && (
+              <View style={styles.infoCard}>
+                <Text style={styles.infoCardText}>No specific location set. You can start work anytime.</Text>
+              </View>
+            )}
+
+            {/* GPS warning */}
             {gpsWarning && (
               <View style={styles.gpsWarning}>
                 <AlertTriangle size={14} color={W.status.warning} />
-                <Text style={styles.gpsWarningText}>Waiting for GPS signal — please try again shortly.</Text>
+                <Text style={styles.gpsWarningText}>
+                  {!currentLocation
+                    ? 'Waiting for GPS signal...'
+                    : hasLocation && !isNearTask
+                      ? `You need to be within 500m of the task location. Currently ${distanceKm ? `${distanceKm.toFixed(1)} km` : '?'} away.`
+                      : 'GPS acquired — tap Start Work'}
+                </Text>
               </View>
             )}
+
+            {/* Start Work button */}
             <TouchableOpacity
-              style={[styles.startBtn, startMutation.isPending && styles.btnDisabled]}
+              style={[
+                styles.startBtn,
+                (startMutation.isPending || (hasLocation && !isNearTask)) && styles.btnDisabled,
+              ]}
               onPress={handleStart}
               activeOpacity={0.85}
-              disabled={startMutation.isPending}
+              disabled={startMutation.isPending || (hasLocation && !isNearTask)}
             >
               {startMutation.isPending
                 ? <ActivityIndicator color="#fff" />
                 : (
                     <>
                       <Play size={18} color="#fff" style={{ marginRight: 8 }} />
-                      <Text style={styles.startBtnText}>Start Work</Text>
+                      <Text style={styles.startBtnText}>
+                        {hasLocation && !isNearTask ? 'Go to location first' : 'Start Work'}
+                      </Text>
                     </>
                   )}
             </TouchableOpacity>
@@ -636,6 +718,15 @@ const styles = StyleSheet.create({
   // Info card (ACCEPTED state)
   infoCard:       { backgroundColor: W.primaryTint, borderRadius: 10, padding: 12, marginBottom: 12 },
   infoCardText:   { fontSize: 13, color: W.text.secondary, lineHeight: 18 },
+
+  // Distance + Navigation
+  distanceCard:   { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, padding: 14, marginBottom: 12 },
+  distanceNear:   { backgroundColor: '#DCFCE7', borderWidth: 1, borderColor: '#86EFAC' },
+  distanceFar:    { backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FDE68A' },
+  distanceText:   { fontSize: 15, fontWeight: '700' },
+  distanceSub:    { fontSize: 12, color: W.text.muted, marginTop: 2 },
+  navigateBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3B82F6', borderRadius: 14, height: 50, marginBottom: 12 },
+  navigateBtnText:{ fontSize: 15, fontWeight: '700', color: '#fff' },
 
   // GPS warning (inline, subtle)
   gpsWarning:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FEF3C7', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
