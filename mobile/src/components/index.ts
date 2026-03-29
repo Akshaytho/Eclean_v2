@@ -3,10 +3,10 @@ export { Card }       from './ui/Card'
 export { Avatar }     from './ui/Avatar'
 export { Skeleton, SkeletonCard } from './ui/Skeleton'
 export { EmptyState } from './ui/EmptyState'
-export { Badge }      from './ui/Badge'
+export { StatusBadge as Badge, StatusBadge } from './ui/Badge'
 export { Button }     from './ui/Button'
 export { Input }      from './ui/Input'
-export { Toast }      from './ui/Toast'
+export { ToastContainer as Toast, ToastContainer } from './ui/Toast'
 
 // Layout
 export { ScreenWrapper }   from './layout/ScreenWrapper'

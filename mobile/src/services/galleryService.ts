@@ -197,7 +197,7 @@ export async function deletePhoto(photo: GalleryPhoto): Promise<void> {
 
 // ── Get gallery stats ─────────────────────────────────────────────────────────
 export async function getGalleryStats(): Promise<{ count: number; sizeMB: number }> {
-  const info = await FileSystem.getInfoAsync(GALLERY_DIR, { size: true })
+  const info = await FileSystem.getInfoAsync(GALLERY_DIR)
   if (!info.exists) return { count: 0, sizeMB: 0 }
   const all = await getAllPhotos()
   return {

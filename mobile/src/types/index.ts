@@ -186,25 +186,6 @@ export interface CitizenReport {
   updatedAt:       string
 }
 
-export interface WorkerProfile {
-  id:              string
-  userId:          string
-  rating:          number
-  completedTasks:  number
-  activeTaskId:    string | null
-  isAvailable:     boolean
-  identityVerified:boolean
-  skills:          string[]
-}
-
-export interface BuyerProfile {
-  id:              string
-  userId:          string
-  companyName:     string | null
-  totalTasksPosted:number
-  totalSpentCents: number
-}
-
 export interface WalletData {
   pendingCents:        number
   processingCents:     number

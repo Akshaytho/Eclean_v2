@@ -20,7 +20,7 @@ export function EmptyState({ emoji, title, subtitle, actionLabel, onAction, styl
       {subtitle && <Text style={s.subtitle}>{subtitle}</Text>}
       {actionLabel && onAction && (
         <Button
-          title={actionLabel}
+          label={actionLabel}
           onPress={onAction}
           style={s.btn}
         />

@@ -13,7 +13,7 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge:  true,
-  }),
+  } as Notifications.NotificationBehavior),
 })
 
 export function usePushNotifications() {

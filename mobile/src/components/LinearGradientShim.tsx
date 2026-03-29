@@ -8,7 +8,7 @@ import React from 'react'
 import { View, ViewStyle, StyleSheet } from 'react-native'
 
 interface Props {
-  colors: string[]
+  colors: readonly string[] | string[]
   style?: ViewStyle | ViewStyle[] | any
   start?: { x: number; y: number }
   end?: { x: number; y: number }

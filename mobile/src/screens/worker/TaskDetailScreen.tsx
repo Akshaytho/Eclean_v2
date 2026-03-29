@@ -180,7 +180,7 @@ export function TaskDetailScreen() {
       {/* ── Error Banner ── */}
       {errorMsg && (
         <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{errorMsg}</Text>
+          <Text style={styles.errorBannerText}>{errorMsg}</Text>
           {errorMsg.toLowerCase().includes('active task') && (
             <TouchableOpacity
               style={styles.errorAction}
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   errorBanner:     { backgroundColor: '#FEF2F2', borderTopWidth: 1, borderTopColor: '#FECACA', paddingHorizontal: 20, paddingVertical: 14, gap: 10 },
-  errorText:       { fontSize: 14, fontWeight: '600', color: '#991B1B' },
+  errorBannerText: { fontSize: 14, fontWeight: '600', color: '#991B1B' },
   errorAction:     { backgroundColor: W.primary, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   errorActionText: { fontSize: 14, fontWeight: '700', color: '#fff' },
   errorDismiss:    { alignItems: 'center', paddingVertical: 4 },
