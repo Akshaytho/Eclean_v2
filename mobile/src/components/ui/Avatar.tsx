@@ -1,12 +1,12 @@
 import React from 'react'
-import { View, Text, Image, StyleSheet, ViewStyle } from 'react-native'
+import { View, Text, Image, StyleSheet, ImageStyle } from 'react-native'
 import { COLORS } from '../../constants/colors'
 
 interface AvatarProps {
   name:     string
   photoUrl?: string | null
   size?:    number
-  style?:   ViewStyle
+  style?:   ImageStyle
 }
 
 function getInitials(name: string): string {
