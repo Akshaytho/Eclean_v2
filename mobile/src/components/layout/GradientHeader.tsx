@@ -36,7 +36,7 @@ export function GradientHeader({
     >
       <View style={s.row}>
         {leftIcon ? (
-          <TouchableOpacity onPress={onLeftPress} style={s.iconBtn} hitSlop={8}>
+          <TouchableOpacity onPress={onLeftPress} style={s.iconBtn}>
             {leftIcon}
           </TouchableOpacity>
         ) : <View style={s.iconPlaceholder} />}
@@ -47,7 +47,7 @@ export function GradientHeader({
         </View>
 
         {rightIcon ? (
-          <TouchableOpacity onPress={onRightPress} style={s.iconBtn} hitSlop={8}>
+          <TouchableOpacity onPress={onRightPress} style={s.iconBtn}>
             {rightIcon}
           </TouchableOpacity>
         ) : <View style={s.iconPlaceholder} />}
