@@ -20,6 +20,7 @@ import { payoutsRoutes } from './modules/payouts/payouts.routes'
 import { paymentRoutes } from './modules/payments/payment.routes'
 import { analyticsRoutes } from './intelligence/analytics/analytics.routes'
 import { dataExportRoutes } from './intelligence/data-export/export.routes'
+import { aiRoutes } from './modules/ai/ai.routes'
 import type { FastifyInstance } from 'fastify'
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -74,6 +75,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   void app.register(paymentRoutes,       { prefix: '/api/v1/buyer/payments' })
   void app.register(analyticsRoutes,     { prefix: '/api/v1/analytics' }) // analytics + behavior events
   void app.register(dataExportRoutes,    { prefix: '/api/v1/data' })      // B2B data export (API key auth)
+  void app.register(aiRoutes,            { prefix: '/api/v1/ai' })        // AI verification engine (review queue, trust, accuracy)
 
   app.get('/health', async () => ({
     status:    'ok',

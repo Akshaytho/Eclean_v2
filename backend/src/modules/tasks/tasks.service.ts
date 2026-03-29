@@ -13,6 +13,8 @@ import { logTaskEvent } from '../../lib/event-log'
 import { payoutQueue, PAYOUT_QUEUE } from '../../jobs/payout.job'
 import { verifyPaymentSignature, refundPayment } from '../payments/payment.service'
 import { logger } from '../../lib/logger'
+import { recordCalibrationEvent } from '../ai/calibration'
+import { updateTrustAfterHumanDecision } from '../ai/worker-trust'
 import type {
   CreateTaskInput,
   ReasonInput,
@@ -361,6 +363,43 @@ export async function approveTask(buyerId: string, taskId: string) {
 
   emitTaskUpdated(taskId, 'APPROVED')
   logTaskEvent(taskId, 'status_changed', buyerId, 'BUYER', { from: task.status, to: 'APPROVED', rateCents: task.rateCents })
+
+  // ── AI Calibration feedback (fire-and-forget) ───────────────────────
+  // Record that the buyer approved — this trains the AI to be smarter.
+  void (async () => {
+    try {
+      const verification = await prisma.aiVerification.findFirst({
+        where: { taskId },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (verification) {
+        await recordCalibrationEvent({
+          verificationId: verification.id,
+          taskId,
+          aiScore: verification.finalScore,
+          aiRecommendation: verification.recommendation,
+          aiConfidence: verification.confidence,
+          humanDecision: 'APPROVED',
+          decidedBy: buyerId,
+          decidedByRole: 'BUYER',
+          category: task.category,
+          dirtyLevel: task.dirtyLevel,
+          workerTrustAtTime: verification.workerTrustScore,
+        })
+      }
+      if (task.workerId) {
+        await updateTrustAfterHumanDecision({
+          workerId: task.workerId,
+          decision: 'APPROVED',
+          aiRecommendation: verification?.recommendation ?? 'UNKNOWN',
+          decidedByRole: 'BUYER',
+        })
+      }
+    } catch (err) {
+      logger.debug({ err, taskId }, 'Calibration feedback failed (non-fatal)')
+    }
+  })()
+
   return updatedTask
 }
 
@@ -415,6 +454,42 @@ export async function rejectTask(buyerId: string, taskId: string, input: ReasonI
   }
   emitTaskUpdated(taskId, 'REJECTED')
   logTaskEvent(taskId, 'status_changed', buyerId, 'BUYER', { from: task.status, to: 'REJECTED', reason: input.reason })
+
+  // ── AI Calibration feedback (fire-and-forget) ───────────────────────
+  void (async () => {
+    try {
+      const verification = await prisma.aiVerification.findFirst({
+        where: { taskId },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (verification) {
+        await recordCalibrationEvent({
+          verificationId: verification.id,
+          taskId,
+          aiScore: verification.finalScore,
+          aiRecommendation: verification.recommendation,
+          aiConfidence: verification.confidence,
+          humanDecision: 'REJECTED',
+          decidedBy: buyerId,
+          decidedByRole: 'BUYER',
+          category: task.category,
+          dirtyLevel: task.dirtyLevel,
+          workerTrustAtTime: verification.workerTrustScore,
+        })
+      }
+      if (task.workerId) {
+        await updateTrustAfterHumanDecision({
+          workerId: task.workerId,
+          decision: 'REJECTED',
+          aiRecommendation: verification?.recommendation ?? 'UNKNOWN',
+          decidedByRole: 'BUYER',
+        })
+      }
+    } catch (err) {
+      logger.debug({ err, taskId }, 'Calibration feedback failed (non-fatal)')
+    }
+  })()
+
   return result
 }
 
