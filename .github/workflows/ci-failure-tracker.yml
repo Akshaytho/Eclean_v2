@@ -1,7 +1,22 @@
 name: CI Failure Tracker
 
+# ┌───────────────────────────────────────────────────────────────────┐
+# │  Automatically tracks CI failures:                                │
+# │  1. Logs the failure in .claude/CI_FAILURES.md                    │
+# │  2. Opens a GitHub Issue (or comments on existing one)            │
+# │                                                                   │
+# │  Triggers when any of these workflows FAIL:                       │
+# │  - CI — Quality Gate                                              │
+# │  - Build Debug APK                                                │
+# └───────────────────────────────────────────────────────────────────┘
+
 on:
-  workflow_dispatch: # Disabled — re-enable for Sprint 6 CI
+  workflow_run:
+    workflows:
+      - "CI — Quality Gate"
+      - "Build Debug APK"
+    types:
+      - completed
 
 permissions:
   contents: write
@@ -9,11 +24,13 @@ permissions:
 
 jobs:
   track:
+    name: Track CI Failure
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -23,16 +40,17 @@ jobs:
           WORKFLOW="${{ github.event.workflow_run.name }}"
           RUN_URL="${{ github.event.workflow_run.html_url }}"
           COMMIT="${{ github.event.workflow_run.head_sha }}"
-          MSG="${{ github.event.workflow_run.head_commit.message }}"
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
           DATE=$(date -u '+%Y-%m-%d %H:%M UTC')
 
           cat >> .claude/CI_FAILURES.md << ENTRY
 
           ## ❌ FAILURE: $DATE
           - **Workflow:** $WORKFLOW
-          - **Commit:** \`${COMMIT:0:7}\` — $MSG
+          - **Branch:** $BRANCH
+          - **Commit:** \`${COMMIT:0:7}\`
           - **Run:** $RUN_URL
-          - **Status:** Unresolved — add fix description when fixed
+          - **Status:** Unresolved
           ENTRY
 
           git config user.email "ci@eclean.app"
@@ -41,14 +59,14 @@ jobs:
           git commit -m "ci: record failure in $WORKFLOW [skip ci]" || true
           git push || true
 
-      - name: Open GitHub Issue for failure
+      - name: Open or update GitHub Issue
         uses: actions/github-script@v7
         with:
           script: |
             const workflow = context.payload.workflow_run.name;
             const runUrl = context.payload.workflow_run.html_url;
             const commit = context.payload.workflow_run.head_sha.slice(0, 7);
-            const msg = context.payload.workflow_run.head_commit.message;
+            const branch = context.payload.workflow_run.head_branch;
 
             // Check if issue already open for this workflow
             const issues = await github.rest.issues.listForRepo({
@@ -65,15 +83,30 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: existing.number,
-                body: `## New failure\n- Commit: \`${commit}\` — ${msg}\n- Run: ${runUrl}`
+                body: `## New failure on \`${branch}\`\n- Commit: \`${commit}\`\n- Run: ${runUrl}`
               });
+              console.log(`Commented on issue #${existing.number}`);
             } else {
               // Open new issue
-              await github.rest.issues.create({
+              const issue = await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 title: `🔴 CI Failure: ${workflow}`,
-                body: `## CI is failing\n\n- **Workflow:** ${workflow}\n- **Commit:** \`${commit}\` — ${msg}\n- **Run:** ${runUrl}\n\n## Steps to fix\n1. Click the run link above\n2. Check which step failed\n3. Fix the code\n4. Push — CI will close this issue automatically when it passes`,
+                body: [
+                  `## CI is failing`,
+                  ``,
+                  `- **Workflow:** ${workflow}`,
+                  `- **Branch:** ${branch}`,
+                  `- **Commit:** \`${commit}\``,
+                  `- **Run:** ${runUrl}`,
+                  ``,
+                  `## How to fix`,
+                  `1. Click the run link above`,
+                  `2. Check which step failed`,
+                  `3. Fix the code and push`,
+                  `4. CI will auto-close this issue when it passes`,
+                ].join('\n'),
                 labels: ['ci-failure', 'bug']
               });
+              console.log(`Created issue #${issue.data.number}`);
             }

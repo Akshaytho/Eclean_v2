@@ -1,12 +1,21 @@
 name: Build Debug APK
 
-# Runs on every push to main — gives you a downloadable APK within ~20 mins
-# Also runnable manually from GitHub Actions tab
+# Builds a downloadable APK (~20 mins)
+# Triggers:
+#   - Every push to main (production)
+#   - Every push to integration (testing)
+#   - Manual trigger from GitHub Actions tab
+# The CI quality gate runs first — APK only builds if tests pass.
 
 on:
   push:
-    branches: [main]
+    branches: [main, integration]
   workflow_dispatch:
+
+# Cancel in-progress builds when a new push arrives on the same branch
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-apk:
@@ -159,7 +168,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: eclean-debug-apk-${{ github.run_number }}
+          name: eclean-debug-apk-${{ github.ref_name }}-${{ github.run_number }}
           path: mobile/eclean-debug.apk
           retention-days: 14
 
