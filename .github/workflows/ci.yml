@@ -1,77 +1,85 @@
 name: CI — Quality Gate
 
-# ┌──────────────────────────────────────────────────────────────────────┐
-# │  Runs on every push to integration and every PR to main/integration  │
-# │  Must pass before merging. Fast feedback (~5 min).                   │
-# │                                                                      │
-# │  2 independent job tracks (run in parallel):                         │
-# │    1. Mobile: typecheck → unit tests                                 │
-# │    2. Backend: postgres + redis → migrate → vitest                   │
-# │  Screen tests disabled until UI is finalized (Sprint 5+).           │
-# │  Final gate job checks all results.                                  │
-# └──────────────────────────────────────────────────────────────────────┘
+# Only runs what changed. Skips entirely on docs/config-only changes.
+# Mobile-only change? Backend skipped. Backend-only? Mobile skipped.
+# Saves ~50% Actions minutes vs running everything every time.
 
 on:
   push:
     branches: [integration]
+    paths-ignore:
+      - '**.md'
+      - '.claude/**'
+      - 'docs/**'
+      - '.vscode/**'
+      - 'LICENSE'
   pull_request:
     branches: [main, integration]
+    paths-ignore:
+      - '**.md'
+      - '.claude/**'
+      - 'docs/**'
+      - '.vscode/**'
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # ── Mobile: TypeScript + Tests ─────────────────────────────────────
-  mobile:
-    name: 📱 Mobile (typecheck + tests)
+  # ── Detect what changed ───────────────────────────────────
+  changes:
+    name: Detect changes
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 2
+    outputs:
+      mobile:  ${{ steps.filter.outputs.mobile }}
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            mobile:
+              - 'mobile/**'
+            backend:
+              - 'backend/**'
+
+  # ── Mobile: TypeScript + Tests ────────────────────────────
+  mobile:
+    name: 📱 Mobile
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: mobile
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
 
-      - name: Cache node modules
-        uses: actions/cache@v4
-        with:
-          path: mobile/node_modules
-          key: mobile-node-${{ hashFiles('mobile/package-lock.json') }}
-          restore-keys: mobile-node-
+      - run: npm install --legacy-peer-deps
 
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps
-
-      - name: TypeScript type check
+      - name: TypeScript check
         run: npx tsc --noEmit
 
-      - name: Unit tests (stores + API functions)
+      - name: Unit tests
         run: npx jest tests/unit --no-coverage --ci
 
-      # Screen tests disabled — UI not finalized yet, re-enable in Sprint 5+
-      # - name: Screen tests (component rendering)
-      #   run: npx jest --config jest.screens.config.js --no-coverage --ci
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "## 📱 Mobile Results" >> $GITHUB_STEP_SUMMARY
-          echo "- TypeScript strict check" >> $GITHUB_STEP_SUMMARY
-          echo "- Unit tests: stores, API functions, hooks" >> $GITHUB_STEP_SUMMARY
-
-  # ── Backend: Tests with real Postgres + Redis ──────────────────────
+  # ── Backend: Tests with real DB ───────────────────────────
   backend:
-    name: 🖥️ Backend (tests)
+    name: 🖥️ Backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
 
     services:
       postgres:
@@ -80,23 +88,13 @@ jobs:
           POSTGRES_USER: eclean
           POSTGRES_PASSWORD: eclean_ci
           POSTGRES_DB: eclean_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
       redis:
         image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
 
     defaults:
       run:
@@ -112,62 +110,43 @@ jobs:
       BCRYPT_ROUNDS: 10
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
 
-      - name: Cache node modules
-        uses: actions/cache@v4
-        with:
-          path: backend/node_modules
-          key: backend-node-${{ hashFiles('backend/package-lock.json') }}
-          restore-keys: backend-node-
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npm test
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-
-      - name: Run database migrations
-        run: npx prisma migrate deploy
-
-      - name: Run backend tests
-        run: npm test
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "## 🖥️ Backend Results" >> $GITHUB_STEP_SUMMARY
-          echo "- Vitest against real PostgreSQL 16 + Redis 7" >> $GITHUB_STEP_SUMMARY
-          echo "- Prisma migrations applied to fresh database" >> $GITHUB_STEP_SUMMARY
-
-  # ── Final gate: all checks must pass ───────────────────────────────
+  # ── Gate: pass if relevant jobs passed (or were skipped) ──
   ci-passed:
-    name: ✅ CI Passed
+    name: ✅ CI
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     needs: [mobile, backend]
     if: always()
     steps:
       - name: Check results
         run: |
-          echo "## CI Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Job | Result |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Mobile (typecheck + tests) | ${{ needs.mobile.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Backend (tests) | ${{ needs.backend.result }} |" >> $GITHUB_STEP_SUMMARY
+          MOBILE="${{ needs.mobile.result }}"
+          BACKEND="${{ needs.backend.result }}"
 
-          if [[ "${{ needs.mobile.result }}" != "success" ]] || \
-             [[ "${{ needs.backend.result }}" != "success" ]]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "❌ **CI failed — fix issues before merging**" >> $GITHUB_STEP_SUMMARY
+          echo "Mobile: $MOBILE | Backend: $BACKEND"
+
+          # "skipped" is OK (means no files changed in that area)
+          # "success" is OK
+          # anything else = failure
+          if [[ "$MOBILE" != "success" && "$MOBILE" != "skipped" ]]; then
+            echo "❌ Mobile failed"
             exit 1
           fi
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ **All checks passed — safe to merge**" >> $GITHUB_STEP_SUMMARY
+          if [[ "$BACKEND" != "success" && "$BACKEND" != "skipped" ]]; then
+            echo "❌ Backend failed"
+            exit 1
+          fi
+          echo "✅ All checks passed"
