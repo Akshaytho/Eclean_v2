@@ -197,6 +197,7 @@ model Task {
   razorpayPaymentId  String?   @unique
   aiScore            Float?
   aiReasoning        String?
+  aiModelVersion     String?   // e.g. "claude-sonnet-4-5" — traces which model scored this task
   rejectionReason    String?
   cancellationReason String?
   startedAt          DateTime?
@@ -230,14 +231,15 @@ model Task {
 }
 
 model TaskMedia {
-  id        String    @id @default(uuid())
-  taskId    String
-  url       String
-  publicId  String?
-  mimeType  String?
-  sizeBytes Int?
-  type      MediaType
-  createdAt DateTime  @default(now())
+  id              String    @id @default(uuid())
+  taskId          String
+  url             String
+  publicId        String?
+  mimeType        String?
+  sizeBytes       Int?
+  type            MediaType
+  idempotencyKey  String?   @unique  // prevents duplicate uploads on retry
+  createdAt       DateTime  @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 }

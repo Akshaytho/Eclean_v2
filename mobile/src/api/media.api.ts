@@ -59,11 +59,17 @@ export const mediaApi = {
       if (metadata.photoHash)   formData.append('photoHash', metadata.photoHash)
     }
 
+    // Idempotency key: taskId + mediaType + timestamp — prevents duplicate uploads on retry
+    const idempotencyKey = `${taskId}-${mediaType}-${metadata?.photoHash ?? Date.now()}`
+
     const res = await apiClient.post<{ media: TaskMedia }>(
       `/tasks/${taskId}/media`,
       formData,
       {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Idempotency-Key': idempotencyKey,
+        },
         timeout: 30_000,
       },
     )

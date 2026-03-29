@@ -3,6 +3,7 @@ import { authenticate } from '../../middleware/authenticate'
 import { authorize } from '../../middleware/authorize'
 import { validate } from '../../middleware/validate'
 import { BadRequestError } from '../../lib/errors'
+import { prisma } from '../../lib/prisma'
 import { uploadTaskMedia, getTaskMedia } from './media.service'
 import { emitTaskPhotoAdded } from '../../realtime/socket'
 import {
@@ -69,6 +70,15 @@ export async function mediaRoutes(fastify: FastifyInstance): Promise<void> {
       if (!fileBuffer) throw new BadRequestError('No file provided')
       if (!mediaType)  throw new BadRequestError('mediaType field is required')
 
+      // Idempotency: if client sends same key twice, return existing record
+      const idempotencyKey = request.headers['idempotency-key'] as string | undefined
+      if (idempotencyKey) {
+        const existing = await prisma.taskMedia.findUnique({ where: { idempotencyKey } })
+        if (existing) {
+          return reply.status(200).send({ media: existing, duplicate: true })
+        }
+      }
+
       // Validate mediaType field value
       const parsed = uploadMediaFieldSchema.safeParse({ mediaType })
       if (!parsed.success) {
@@ -85,7 +95,7 @@ export async function mediaRoutes(fastify: FastifyInstance): Promise<void> {
         file:      fileBuffer,
         mimeType,
         sizeBytes,
-        // Device-captured metadata — more reliable than EXIF after compression
+        idempotencyKey: idempotencyKey ?? null,
         deviceMeta: {
           capturedLat,
           capturedLng,

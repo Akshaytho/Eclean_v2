@@ -50,8 +50,10 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
     `{"score":0.85,"label":"GOOD","reasoning":"...","workEvident":true,` +
     `"suspiciousActivity":false,"recommendation":"APPROVE"}`
 
+  const AI_MODEL = 'claude-sonnet-4-5'
+
   const response = await anthropic.messages.create({
-    model:      'claude-sonnet-4-5',
+    model:      AI_MODEL,
     max_tokens: 1024,
     messages: [
       {
@@ -77,12 +79,13 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
     throw new Error('Anthropic returned non-JSON response')
   }
 
-  // Persist score + reasoning to task
+  // Persist score + reasoning + model version to task
   await prisma.task.update({
     where: { id: taskId },
     data:  {
-      aiScore:     result.score,
-      aiReasoning: result.reasoning,
+      aiScore:        result.score,
+      aiReasoning:    result.reasoning,
+      aiModelVersion: AI_MODEL,
     },
   })
 

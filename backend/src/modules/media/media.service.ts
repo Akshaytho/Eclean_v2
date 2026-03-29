@@ -26,6 +26,7 @@ export async function uploadTaskMedia(params: {
   file:      Buffer
   mimeType:  string
   sizeBytes: number
+  idempotencyKey?: string | null
   deviceMeta?: {
     capturedLat: number | null
     capturedLng: number | null
@@ -34,7 +35,7 @@ export async function uploadTaskMedia(params: {
     photoHash:   string | null
   }
 }) {
-  const { userId, userRole, taskId, mediaType, file, mimeType, sizeBytes, deviceMeta } = params
+  const { userId, userRole, taskId, mediaType, file, mimeType, sizeBytes, idempotencyKey, deviceMeta } = params
 
   // Validate file type
   if (!(ALLOWED_MIME_TYPES as readonly string[]).includes(mimeType)) {
@@ -105,11 +106,12 @@ export async function uploadTaskMedia(params: {
   const media = await prisma.taskMedia.create({
     data: {
       taskId,
-      url:       uploadResult.secure_url,
-      publicId:  uploadResult.public_id,
+      url:            uploadResult.secure_url,
+      publicId:       uploadResult.public_id,
       mimeType,
       sizeBytes,
-      type:      mediaType as never,
+      type:           mediaType as never,
+      idempotencyKey: idempotencyKey ?? undefined,
     },
   })
 
