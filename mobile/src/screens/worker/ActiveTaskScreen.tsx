@@ -598,7 +598,7 @@ export function ActiveTaskScreen() {
       <Modal visible={!!galleryPicker} animationType="slide" onRequestClose={() => setGalleryPicker(null)}>
         <View style={styles.gpModal}>
           <View style={styles.gpHeader}>
-            <TouchableOpacity onPress={() => setGalleryPicker(null)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <TouchableOpacity onPress={() => setGalleryPicker(null)} hitSlop={12}>
               <X size={22} color={W.text.primary} />
             </TouchableOpacity>
             <Text style={styles.gpTitle}>Select from My Photos</Text>

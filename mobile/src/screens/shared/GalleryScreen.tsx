@@ -108,7 +108,7 @@ export function GalleryScreen() {
       {/* Header */}
       <View style={[s.header, { paddingTop: insets.top }]}>
         <View style={s.headerRow}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} hitSlop={12}>
             <ArrowLeft size={22} color={COLORS.neutral[900]} />
           </TouchableOpacity>
           <View>

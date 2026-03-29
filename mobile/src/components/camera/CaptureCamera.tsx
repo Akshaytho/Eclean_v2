@@ -192,13 +192,13 @@ export function CaptureCamera({ taskId, photoType, onCapture, onClose }: Capture
 
       {/* Top bar */}
       <View style={[s.topBar, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={onClose} style={s.iconBtn} hitSlop={{ top:12,bottom:12,left:12,right:12 }}>
+        <TouchableOpacity onPress={onClose} style={s.iconBtn} hitSlop={12}>
           <X size={22} color="white" />
         </TouchableOpacity>
         <View style={[s.typeBadge, { backgroundColor: cfg.color }]}>
           <Text style={s.typeLabel}>{cfg.label}</Text>
         </View>
-        <TouchableOpacity onPress={() => setFlash(f => !f)} style={s.iconBtn} hitSlop={{ top:12,bottom:12,left:12,right:12 }}>
+        <TouchableOpacity onPress={() => setFlash(f => !f)} style={s.iconBtn} hitSlop={12}>
           {flash
             ? <Zap size={22} color="#FFD700" fill="#FFD700" />
             : <ZapOff size={22} color="white" />
