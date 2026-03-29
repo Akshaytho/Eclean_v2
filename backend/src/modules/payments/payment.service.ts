@@ -61,7 +61,7 @@ export async function createOrder(
   const order = await rzp.orders.create({
     amount:   amountCents,          // Razorpay expects paise (same as our cents)
     currency: 'INR',
-    receipt:  `task_${buyerId}_${Date.now()}`,
+    receipt:  `ec_${buyerId.slice(0, 8)}_${Date.now()}`,
     notes: {
       buyerId,
       taskTitle,
