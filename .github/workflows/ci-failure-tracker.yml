@@ -15,6 +15,7 @@ on:
     workflows:
       - "CI — Quality Gate"
       - "Build Debug APK"
+      - "Release — Build + Publish"
     types:
       - completed
 
