@@ -4,92 +4,116 @@
 
 ---
 
-## Last Session: 2026-03-28 (Session 3-4 — Live Testing + Major Redesign)
+## Last Session: 2026-03-29 (Session 5 — Full Audit + Buyer Redesign + Camera + Optimizations)
 
-### Status: MAJOR PROGRESS — Buyer Experience Redesigned
+### Status: MASSIVE SESSION — 50+ files changed, 3 commits on ecleanpro_checks
 
 ### What was completed:
 
-**SDK & Build Fixes:**
-- Expo SDK 53 → 54 upgrade + react-native-worklets installed
-- expo-updates removed (crashed Expo Go)
-- expo-file-system → expo-file-system/legacy (SDK 54 deprecation)
-- SafeAreaView → react-native-safe-area-context in ScreenWrapper
+**Codebase Audit (75 issues found):**
+- Full audit of mobile (41 issues) + backend (25 issues) + config (9 issues)
+- Prioritized by severity: 8 critical, 14 high, 18 medium, 10 low
 
-**Camera & Evidence System:**
-- CaptureCamera hooks crash fixed (Rules of Hooks violation)
-- SHA-256 photo hashing added via expo-crypto — tamper-proof evidence
-- ActiveTaskScreen: gallery access REMOVED — camera-only for worker evidence
-- Photo source picker: clean bottom sheet with "Take Photo" / "My Photos" cards
-- Buyer reference photo: PostTaskScreen Step 2 has camera for buyers to show task area
-- Worker TaskDetailScreen: shows buyer's reference photo before accepting
+**Bug Fixes (19 applied):**
+- App.tsx: network errors no longer force-logout users (was logging out on any /auth/me failure)
+- backgroundLocation.ts: guard against double TaskManager registration
+- socketStore.ts: reconnection capped at 20 attempts + jitter (was Infinity)
+- AIScoreCard.tsx: auto-normalizes 0-1 and 0-100 scores
+- StatusTimeline.tsx: complete status mapping (was Partial, caused undefined)
+- useSocket.ts: ref-based handler prevents stale closures
+- offlineSync.ts: persisted replay lock survives app crashes (was in-memory only)
+- Input.tsx: parent callbacks fire before internal state update
+- NotificationsScreen.tsx: removed unsafe `as any` cast
+- LiveTrackScreen.tsx: map auto-follows worker with smooth animation
+- Backend env.ts: startup warnings for missing service keys (Cloudinary, Anthropic, Razorpay)
+- Backend payouts.routes.ts: webhook signature mandatory in production
+- Backend schema.prisma: 4 new DB indexes (status+urgency, status+createdAt, buyerId+status, workerId+status)
+- Backend tasks.schema.ts: geofence radius min 100m, rate min ₹1 (100 paise)
 
-**ActiveTaskScreen Redesign:**
-- Map shrunk to 200px, bottom panel scrollable
-- Cancel task: proper bottom sheet modal (replaced Alert.prompt)
-- Task details card with description + address
-- Chat with Buyer button
-- Photo source picker with "Recommended" tag on camera option
+**Performance Optimizations:**
+- React.memo on TaskCard, CaptureCamera, Button, Badge, AppHeader
+- useMemo on filtered task arrays (MyTasksScreen, BuyerHomeScreen)
+- Image compression before upload (1200px, 75% JPEG via expo-image-manipulator)
+- Lazy screen loading in both navigators (6 buyer + 7 worker screens)
+- Hermes JS engine enabled in app.json
+- Deduplicated haversineKm (was in ActiveTaskScreen + utils) and formatElapsed (was in 3 files)
 
-**Buyer Theme System:**
-- Created `buyerTheme.ts` — navy (#0A2463) + gold (#D4A843) palette
-- ALL buyer screens themed: Home, Dashboard, PostTask, TaskDetail, BuyerTasks, LiveTrack, Rating
-- Tab bar: navy active icons
-- Worker screens untouched (still green COLORS)
-- Modular: change buyerTheme.ts → all buyer screens update
+**Buyer Redesign (Zomato/Uber/Rapido style):**
+- New buyerTheme.ts: rose CTA (#F43F5E), slate headers (#1E293B), indigo accents (#6366F1)
+- BuyerHomeScreen: dark hero, category pills, LIVE cards, compact stats, trust strip
+- All buyer screens auto-themed via B tokens (Dashboard, Tasks, TaskDetail, PostTask, LiveTrack, Rating)
+- Removed ScreenWrapper double-padding from BuyerHome + BuyerTasks
 
-**Buyer Navigation Redesign:**
-- 4 tabs: Home · Post Task · My Tasks · Dashboard (was 5 with Profile + Notifications)
-- AppHeader component: logo + bell (unread badge) + avatar on all screens
-- Notifications moved to bell icon → slides in from right with back button
-- Dashboard: profile card + stats + quick actions + settings + logout
-- Gallery screen registered in both Worker + Buyer navigators
+**Auth & Onboarding Redesign:**
+- SplashScreen: dark slate (#0F172A) + blue logo (was ugly green square #0F2B1A)
+- OnboardingScreen: 4 slides with per-slide accent colors (blue, green, purple, amber)
+- LoginScreen: neutral blue (#3B82F6), dark header, white form card
+- RegisterScreen: role-colored CTA (green worker, blue buyer, purple citizen)
+- ForgotPasswordScreen: clean minimal, success state with checkmark
+- app.json splash backgroundColor updated to #0F172A
 
-**BuyerHomeScreen — Premium Redesign:**
-- Time-aware greeting ("Good afternoon, Ravi")
-- "What needs cleaning?" CTA card (Uber pattern)
-- Smart sections: Needs Review (gold), In Progress (with Track/Chat/Details), Waiting for Workers
-- Stats strip: Total / Completed / Spent
-- Quick Post categories: horizontal scroll (Street, Drain, Park, Garbage, Toilet)
-- Daily rotating tip in warm yellow card
-- "How eClean Works" 4-step visual with connected dots
-- Trust badges: Verified Workers, AI Verification, Escrow Payment, Real-time Tracking
-- Empty state: "Your areas are clean" with icon + CTA
+**Camera Overhaul:**
+- CaptureCamera: minimal UI, removed viewfinder corners, subtle "Verified capture" badge, haptic on shutter
+- PhotoPreview: hidden raw GPS/hash from user, shows "Location verified" badge instead
+- CRITICAL FIX: device metadata (GPS, hash, deviceId, timestamp) now sent to backend as form fields
+- Backend media.routes.ts reads capturedLat/Lng/At/deviceId/photoHash from multipart
+- Backend media.service.ts uses device GPS as primary (EXIF as fallback since compression strips it)
+- New Prisma migration: 5 columns added to analytics_photo_meta
 
-**Test Data Seeded:**
-- testbuyer@eclean.app / Test@1234 (Ravi Kumar)
-- testworker@eclean.app / Test@1234 (Suresh Babu)
-- 4 tasks near Lingampally, Hyderabad (user's location)
-- 3 tasks in Bengaluru
+**Header/Footer Fixes:**
+- All buyer screens use useSafeAreaInsets (removed hardcoded paddingTop: 52/56)
+- Tab bar bottom padding for Android phones with nav buttons (Platform.OS check)
+- AppHeader memoized with React.memo
+
+**Idempotency + modelVersion (CLAUDE.md rules #10 and #11):**
+- TaskMedia gets idempotencyKey column (unique) — prevents duplicate uploads on retry
+- Media upload route checks Idempotency-Key header, returns existing if duplicate
+- Mobile sends taskId-mediaType-photoHash as idempotency key
+- Task gets aiModelVersion column — ai.service.ts stores "claude-sonnet-4-5" on every verification
+- Migration auto-runs on Railway deploy
+
+**CI/CD Optimization:**
+- Path-based change detection (dorny/paths-filter) — only runs what changed
+- Mobile-only push → backend skipped. Backend-only → mobile skipped.
+- Skips entirely on docs/markdown/.claude changes
+- ~50% Actions minutes savings
 
 ### What needs to happen next:
 
-**Priority 1 — Worker screens need same treatment:**
-- WorkerHomeScreen redesign (same premium feel as buyer)
-- Worker theme file (keep green but modernize)
-- Worker navigation: add Dashboard tab, move notifications to header
+**Priority 1 — Worker screens redesign:**
+- WorkerHomeScreen premium redesign (same treatment as BuyerHomeScreen got)
+- Worker theme modernization (keep green but make it Rapido/Uber quality)
+- WorkerDashboardScreen polish
+- FindWorkScreen, MyTasksScreen, WalletScreen visual refresh
+- TaskDetailScreen, ActiveTaskScreen, SubmitProofScreen polish
 
 **Priority 2 — Sprint 4 screens:**
 - SupervisorHomeScreen (real zone map)
 - CitizenHomeScreen + CreateReportScreen
-- ProfileScreen with real data
+- ProfileScreen with real data from GET /auth/me
 
-**Priority 3 — Polish:**
-- All Alert.prompt usage → replace with bottom sheet modals
-- PostTaskScreen Step 0 back button fix (tab screen edge case)
-- Skeleton loading states instead of spinners
-- ScreenWrapper background override for buyer screens using it
+**Priority 3 — Play Store readiness:**
+- EAS production build
+- App icon (blue rounded square with "e")
+- Play Store screenshots
+- Privacy Policy + Terms of Service
+
+### Branch: ecleanpro_checks (3 commits ahead of main)
 
 ### Dev environment:
 - Backend: Railway production — healthy
-- Mobile: Expo SDK 54, dev server via `npx expo start --clear`
+- Mobile: Expo SDK 54, Hermes enabled, dev server via `npx expo start --clear`
 - User tests on iPhone via Expo Go (Lingampally, Hyderabad)
-- Emulator available but slow (use phone instead)
+- Docker not running locally — migrations need Railway deploy or Docker start
 
-### Key files:
-- Buyer theme: `mobile/src/constants/buyerTheme.ts`
-- AppHeader: `mobile/src/components/layout/AppHeader.tsx`
-- BuyerHomeScreen: `mobile/src/screens/buyer/BuyerHomeScreen.tsx` (premium redesign)
-- BuyerDashboardScreen: `mobile/src/screens/buyer/BuyerDashboardScreen.tsx`
-- CaptureCamera: `mobile/src/components/camera/CaptureCamera.tsx` (SHA-256 + hooks fix)
-- ActiveTaskScreen: `mobile/src/screens/worker/ActiveTaskScreen.tsx` (camera-only + cancel modal)
+### Key files changed this session:
+- Buyer theme: `mobile/src/constants/buyerTheme.ts` (rose/slate/indigo palette)
+- AppHeader: `mobile/src/components/layout/AppHeader.tsx` (memoized, consistent height)
+- BuyerHomeScreen: `mobile/src/screens/buyer/BuyerHomeScreen.tsx` (full redesign)
+- CaptureCamera: `mobile/src/components/camera/CaptureCamera.tsx` (minimal UI)
+- PhotoPreview: `mobile/src/components/camera/PhotoPreview.tsx` (hidden metadata)
+- Auth screens: `mobile/src/screens/auth/` (all 4 redesigned)
+- Media API: `mobile/src/api/media.api.ts` (compression + metadata + idempotency)
+- AI service: `backend/src/modules/ai/ai.service.ts` (modelVersion)
+- Media routes: `backend/src/modules/media/media.routes.ts` (idempotency + device meta)
+- CI: `.github/workflows/ci.yml` (path-based filtering)
