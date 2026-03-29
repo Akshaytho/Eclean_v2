@@ -2,19 +2,20 @@ name: Build Debug APK
 
 # Builds a downloadable APK (~20 mins)
 # Triggers:
-#   - Every push to main (production)
-#   - Every push to integration (testing)
+#   - ONLY after CI Quality Gate passes (not on every push)
 #   - Manual trigger from GitHub Actions tab
-# The CI quality gate runs first — APK only builds if tests pass.
+# This ensures we never waste ~20 min building a broken APK.
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI — Quality Gate"]
+    types: [completed]
     branches: [main, integration]
   workflow_dispatch:
 
 # Cancel in-progress builds when a new push arrives on the same branch
 concurrency:
-  group: build-apk-${{ github.ref }}
+  group: build-apk-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -22,6 +23,10 @@ jobs:
     name: Build Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    # Only build if CI passed (or if manually triggered)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
 
     steps:
       # ── Checkout ──────────────────────────────────────────────────────────
