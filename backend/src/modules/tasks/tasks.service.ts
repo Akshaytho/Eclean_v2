@@ -23,6 +23,14 @@ import type {
   StartTaskInput,
 } from './tasks.schema'
 
+// ─── Worker scheduling constants ─────────────────────────────────────────────
+// Sequential queue model: workers do ONE task at a time, queue up to 5 per day
+const MAX_QUEUED_TASKS       = 5     // max ACCEPTED tasks (worker's daily queue)
+const COOLDOWN_MINUTES       = 30    // rest + travel time between tasks
+const WORK_WINDOW_START_HOUR = 7     // 7:00 AM — earliest task start
+const WORK_WINDOW_END_HOUR   = 16    // 4:00 PM — latest task start (4:30 PM buffer)
+const WORK_WINDOW_END_MIN    = 30    // 4:30 PM
+
 // ─── Haversine distance (km) ──────────────────────────────────────────────────
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -175,41 +183,66 @@ export async function cancelTaskAsBuyer(
   if (task.buyerId !== buyerId) throw new ForbiddenError('Not your task')
   assertTransition(task.status, 'CANCELLED', 'BUYER')
 
-  const result = await prisma.$transaction(async (tx) => {
-    const updated = await tx.task.update({
-      where: { id: taskId },
-      data: {
-        status:             'CANCELLED',
-        cancellationReason: input.reason,
-        cancelledAt:        new Date(),
+  let result: Task
+  try {
+    result = await prisma.$transaction(
+      async (tx) => {
+        // Re-read inside transaction to prevent TOCTOU race
+        const fresh = await tx.task.findUnique({ where: { id: taskId } })
+        if (!fresh) throw new NotFoundError('Task not found')
+        if (fresh.status === 'CANCELLED') throw new ConflictError('Task is already cancelled')
+        assertTransition(fresh.status, 'CANCELLED', 'BUYER')
+
+        const updated = await tx.task.update({
+          where: { id: taskId },
+          data: {
+            status:             'CANCELLED',
+            cancellationReason: input.reason,
+            cancelledAt:        new Date(),
+          },
+        })
+
+        if (fresh.workerId) {
+          await tx.workerProfile.update({
+            where: { userId: fresh.workerId },
+            data:  { activeTaskId: null },
+          })
+
+          await tx.notification.create({
+            data: {
+              userId: fresh.workerId,
+              type:   'TASK_REJECTED',
+              title:  'Task Cancelled by Buyer',
+              body:   `Task "${fresh.title}" was cancelled by the buyer: ${input.reason}`,
+              data:   { taskId },
+            },
+          })
+        }
+
+        await recordEvent(tx, taskId, buyerId, 'BUYER', fresh.status, 'CANCELLED', input.reason)
+        return updated
       },
-    })
-
-    if (task.workerId) {
-      await tx.workerProfile.update({
-        where: { userId: task.workerId },
-        data:  { activeTaskId: null },
-      })
-
-      await tx.notification.create({
-        data: {
-          userId: task.workerId,
-          type:   'TASK_REJECTED',
-          title:  'Task Cancelled by Buyer',
-          body:   `Task "${task.title}" was cancelled by the buyer: ${input.reason}`,
-          data:   { taskId },
-        },
-      })
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    )
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+      throw new ConflictError('Task state changed — please try again')
     }
-
-    await recordEvent(tx, taskId, buyerId, 'BUYER', task.status, 'CANCELLED', input.reason)
-    return updated
-  })
+    throw err
+  }
 
   // ── Refund buyer if task had a Razorpay payment ──────────────────────────
+  // Guard: only refund if task actually has a payment AND isn't already refunded
   if (task.razorpayPaymentId) {
     try {
-      await refundPayment(task.razorpayPaymentId, task.rateCents)
+      // Check if refund already exists (prevents double-refund on concurrent cancels)
+      const existingRefund = await prisma.task.findUnique({
+        where: { id: taskId },
+        select: { status: true, razorpayPaymentId: true },
+      })
+      if (existingRefund?.status === 'CANCELLED') {
+        await refundPayment(task.razorpayPaymentId, task.rateCents)
+      }
     } catch (err) {
       // Log but don't block — cancellation succeeded, refund can be retried manually
       logger.error({ taskId, paymentId: task.razorpayPaymentId, err }, 'Auto-refund failed on task cancel')
@@ -232,71 +265,92 @@ export async function approveTask(buyerId: string, taskId: string) {
   const platformFeeCents  = Math.floor(task.rateCents * 0.10)
   const workerAmountCents = task.rateCents - platformFeeCents
 
-  const { updatedTask, payoutId } = await prisma.$transaction(async (tx) => {
-    const updated = await tx.task.update({
-      where: { id: taskId },
-      data:  { status: 'APPROVED', completedAt: new Date() },
-    })
+  let updatedTask: Task
+  let payoutId: string
 
-    const payout = await tx.payout.create({
-      data: {
-        taskId,
-        workerId:          task.workerId!,
-        buyerId,
-        amountCents:       task.rateCents,
-        platformFeeCents,
-        workerAmountCents,
-        status:            'PENDING',
+  try {
+    const result = await prisma.$transaction(
+      async (tx) => {
+        // Re-read inside SERIALIZABLE tx to prevent approve+dispute race
+        const fresh = await tx.task.findUnique({ where: { id: taskId } })
+        if (!fresh) throw new NotFoundError('Task not found')
+        if (fresh.status === 'APPROVED') throw new ConflictError('Task is already approved')
+        assertTransition(fresh.status, 'APPROVED', 'BUYER')
+
+        const updated = await tx.task.update({
+          where: { id: taskId },
+          data:  { status: 'APPROVED', completedAt: new Date() },
+        })
+
+        const payout = await tx.payout.create({
+          data: {
+            taskId,
+            workerId:          task.workerId!,
+            buyerId,
+            amountCents:       task.rateCents,
+            platformFeeCents,
+            workerAmountCents,
+            status:            'PENDING',
+          },
+        })
+
+        await tx.workerProfile.update({
+          where: { userId: task.workerId! },
+          data:  { activeTaskId: null, completedTasks: { increment: 1 } },
+        })
+
+        const buyer = await tx.user.findUnique({ where: { id: buyerId } })
+        if (buyer?.role === 'BUYER') {
+          await tx.buyerProfile.update({
+            where: { userId: buyerId },
+            data:  { totalSpentCents: { increment: task.rateCents } },
+          })
+        }
+
+        await recordEvent(tx, taskId, buyerId, 'BUYER', fresh.status, 'APPROVED')
+
+        await tx.notification.create({
+          data: {
+            userId: task.workerId!,
+            type:   'PAYMENT_RECEIVED',
+            title:  'Task Approved!',
+            body:   `Your work has been approved. ₹${workerAmountCents / 100} will be credited to your wallet.`,
+            data:   { taskId },
+          },
+        })
+
+        // If this task originated from a citizen report, mark it resolved and notify the citizen
+        const linkedReport = await tx.citizenReport.findFirst({
+          where: { linkedTaskId: taskId },
+        })
+        if (linkedReport) {
+          await tx.citizenReport.update({
+            where: { id: linkedReport.id },
+            data:  { status: 'RESOLVED' },
+          })
+          await tx.notification.create({
+            data: {
+              userId: linkedReport.reporterId,
+              type:   'REPORT_UPDATED',
+              title:  'Your Reported Issue Has Been Resolved!',
+              body:   `The cleaning task for your report on "${task.title}" has been completed and approved.`,
+              data:   { reportId: linkedReport.id, taskId },
+            },
+          })
+        }
+
+        return { updatedTask: updated, payoutId: payout.id }
       },
-    })
-
-    await tx.workerProfile.update({
-      where: { userId: task.workerId! },
-      data:  { activeTaskId: null, completedTasks: { increment: 1 } },
-    })
-
-    const buyer = await tx.user.findUnique({ where: { id: buyerId } })
-    if (buyer?.role === 'BUYER') {
-      await tx.buyerProfile.update({
-        where: { userId: buyerId },
-        data:  { totalSpentCents: { increment: task.rateCents } },
-      })
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    )
+    updatedTask = result.updatedTask
+    payoutId = result.payoutId
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+      throw new ConflictError('Task state changed — please try again')
     }
-
-    await recordEvent(tx, taskId, buyerId, 'BUYER', task.status, 'APPROVED')
-
-    await tx.notification.create({
-      data: {
-        userId: task.workerId!,
-        type:   'PAYMENT_RECEIVED',
-        title:  'Task Approved!',
-        body:   `Your work has been approved. ₹${workerAmountCents / 100} will be credited to your wallet.`,
-        data:   { taskId },
-      },
-    })
-
-    // If this task originated from a citizen report, mark it resolved and notify the citizen
-    const linkedReport = await tx.citizenReport.findFirst({
-      where: { linkedTaskId: taskId },
-    })
-    if (linkedReport) {
-      await tx.citizenReport.update({
-        where: { id: linkedReport.id },
-        data:  { status: 'RESOLVED' },
-      })
-      await tx.notification.create({
-        data: {
-          userId: linkedReport.reporterId,
-          type:   'REPORT_UPDATED',
-          title:  'Your Reported Issue Has Been Resolved!',
-          body:   `The cleaning task for your report on "${task.title}" has been completed and approved.`,
-          data:   { reportId: linkedReport.id, taskId },
-        },
-      })
-    }
-
-    return { updatedTask: updated, payoutId: payout.id }
-  })
+    throw err
+  }
 
   // Enqueue after transaction commits — jobId ensures idempotency on retry
   await payoutQueue.add(
@@ -317,33 +371,48 @@ export async function rejectTask(buyerId: string, taskId: string, input: ReasonI
   if (task.buyerId !== buyerId) throw new ForbiddenError('Not your task')
   assertTransition(task.status, 'REJECTED', 'BUYER')
 
-  const result = await prisma.$transaction(async (tx) => {
-    const updated = await tx.task.update({
-      where: { id: taskId },
-      data:  { status: 'REJECTED', rejectionReason: input.reason },
-    })
+  let result: Task
+  try {
+    result = await prisma.$transaction(
+      async (tx) => {
+        const fresh = await tx.task.findUnique({ where: { id: taskId } })
+        if (!fresh) throw new NotFoundError('Task not found')
+        if (fresh.status === 'REJECTED') throw new ConflictError('Task is already rejected')
+        assertTransition(fresh.status, 'REJECTED', 'BUYER')
 
-    if (task.workerId) {
-      // Free the worker so they can accept other tasks while deciding whether to retry
-      await tx.workerProfile.update({
-        where: { userId: task.workerId },
-        data:  { activeTaskId: null },
-      })
+        const updated = await tx.task.update({
+          where: { id: taskId },
+          data:  { status: 'REJECTED', rejectionReason: input.reason },
+        })
 
-      await tx.notification.create({
-        data: {
-          userId: task.workerId,
-          type:   'TASK_REJECTED',
-          title:  'Submission Rejected',
-          body:   `Your submission for "${task.title}" was rejected: ${input.reason}`,
-          data:   { taskId },
-        },
-      })
+        if (fresh.workerId) {
+          await tx.workerProfile.update({
+            where: { userId: fresh.workerId },
+            data:  { activeTaskId: null },
+          })
+
+          await tx.notification.create({
+            data: {
+              userId: fresh.workerId,
+              type:   'TASK_REJECTED',
+              title:  'Submission Rejected',
+              body:   `Your submission for "${fresh.title}" was rejected: ${input.reason}`,
+              data:   { taskId },
+            },
+          })
+        }
+
+        await recordEvent(tx, taskId, buyerId, 'BUYER', fresh.status, 'REJECTED', input.reason)
+        return updated
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    )
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+      throw new ConflictError('Task state changed — please try again')
     }
-
-    await recordEvent(tx, taskId, buyerId, 'BUYER', task.status, 'REJECTED', input.reason)
-    return updated
-  })
+    throw err
+  }
   emitTaskUpdated(taskId, 'REJECTED')
   logTaskEvent(taskId, 'status_changed', buyerId, 'BUYER', { from: task.status, to: 'REJECTED', reason: input.reason })
   return result
@@ -420,11 +489,17 @@ export async function acceptTask(workerId: string, taskId: string) {
 
         const profile = await tx.workerProfile.findUnique({ where: { userId: workerId } })
         if (!profile) throw new NotFoundError('Worker profile not found')
-        // Allow up to 3 concurrent tasks
-        const activeTasks = await tx.task.count({
-          where: { workerId, status: { in: ['ACCEPTED', 'IN_PROGRESS'] } },
-        })
-        if (activeTasks >= 3) throw new ConflictError('You can have at most 3 active tasks')
+        // Sequential queue: max 5 ACCEPTED tasks, only 1 IN_PROGRESS at a time
+        const [queuedCount] = await Promise.all([
+          tx.task.count({
+            where: { workerId, status: { in: ['ACCEPTED', 'IN_PROGRESS'] } },
+          }),
+          tx.task.count({
+            where: { workerId, status: 'IN_PROGRESS' },
+          }),
+        ])
+        if (queuedCount >= MAX_QUEUED_TASKS)
+          throw new ConflictError(`You can queue at most ${MAX_QUEUED_TASKS} tasks. Complete or cancel a task first.`)
 
         const updated = await tx.task.update({
           where: { id: taskId },
@@ -471,7 +546,22 @@ export async function startTask(workerId: string, taskId: string, input?: StartT
   if (task.workerId !== workerId) throw new ForbiddenError('Not your task')
   assertTransition(task.status, 'IN_PROGRESS', 'WORKER')
 
-  // Geofence: if task has a location and worker sent their GPS, enforce 2km radius
+  // ── Work window check: can only start between 7:00 AM and 4:30 PM (IST) ──
+  const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+  const hour = nowIST.getHours()
+  const min  = nowIST.getMinutes()
+  if (hour < WORK_WINDOW_START_HOUR) {
+    throw new BadRequestError(
+      `Work starts at ${WORK_WINDOW_START_HOUR}:00 AM. Please wait until then.`,
+    )
+  }
+  if (hour > WORK_WINDOW_END_HOUR || (hour === WORK_WINDOW_END_HOUR && min >= WORK_WINDOW_END_MIN)) {
+    throw new BadRequestError(
+      'Work window has ended for today (4:30 PM). You can start tasks again tomorrow at 7:00 AM.',
+    )
+  }
+
+  // ── Geofence: if task has a location and worker sent GPS, enforce 2km radius ──
   if (
     task.locationLat !== null &&
     task.locationLng !== null &&
@@ -486,26 +576,71 @@ export async function startTask(workerId: string, taskId: string, input?: StartT
     }
   }
 
-  const result = await prisma.$transaction(async (tx) => {
-    const updated = await tx.task.update({
-      where: { id: taskId },
-      data:  { status: 'IN_PROGRESS', startedAt: new Date() },
-    })
+  let result: Task
+  try {
+    result = await prisma.$transaction(
+      async (tx) => {
+        // Re-read inside SERIALIZABLE tx to prevent double-start race
+        const fresh = await tx.task.findUnique({ where: { id: taskId } })
+        if (!fresh) throw new NotFoundError('Task not found')
+        if (fresh.status === 'IN_PROGRESS') throw new ConflictError('Task is already in progress')
+        assertTransition(fresh.status, 'IN_PROGRESS', 'WORKER')
 
-    await recordEvent(tx, taskId, workerId, 'WORKER', 'ACCEPTED', 'IN_PROGRESS')
+        // ── One task at a time: block if another task is IN_PROGRESS ──
+        const inProgress = await tx.task.findFirst({
+          where: { workerId, status: 'IN_PROGRESS', id: { not: taskId } },
+          select: { id: true, title: true },
+        })
+        if (inProgress) {
+          throw new ConflictError(
+            `Complete your current task first: "${inProgress.title}". You can only work on one task at a time.`,
+          )
+        }
 
-    await tx.notification.create({
-      data: {
-        userId: task.buyerId,
-        type:   'TASK_STARTED',
-        title:  'Work Started',
-        body:   `Worker has started cleaning for "${task.title}".`,
-        data:   { taskId },
+        // ── Cooldown: 30 min rest after last task submission ──
+        const lastSubmitted = await tx.task.findFirst({
+          where: { workerId, status: { in: ['SUBMITTED', 'APPROVED', 'REJECTED'] } },
+          orderBy: { submittedAt: 'desc' },
+          select: { submittedAt: true, title: true },
+        })
+        if (lastSubmitted?.submittedAt) {
+          const elapsedMs = Date.now() - lastSubmitted.submittedAt.getTime()
+          const cooldownMs = COOLDOWN_MINUTES * 60 * 1000
+          if (elapsedMs < cooldownMs) {
+            const remainMin = Math.ceil((cooldownMs - elapsedMs) / 60_000)
+            throw new BadRequestError(
+              `Take a ${COOLDOWN_MINUTES}-minute break between tasks. You can start in ${remainMin} minute${remainMin > 1 ? 's' : ''}.`,
+            )
+          }
+        }
+
+        const updated = await tx.task.update({
+          where: { id: taskId },
+          data:  { status: 'IN_PROGRESS', startedAt: new Date() },
+        })
+
+        await recordEvent(tx, taskId, workerId, 'WORKER', fresh.status, 'IN_PROGRESS')
+
+        await tx.notification.create({
+          data: {
+            userId: fresh.buyerId,
+            type:   'TASK_STARTED',
+            title:  'Work Started',
+            body:   `Worker has started cleaning for "${fresh.title}".`,
+            data:   { taskId },
+          },
+        })
+
+        return updated
       },
-    })
-
-    return updated
-  })
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    )
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+      throw new ConflictError('Task state changed — please try again')
+    }
+    throw err
+  }
   emitTaskUpdated(taskId, 'IN_PROGRESS')
   logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'ACCEPTED', to: 'IN_PROGRESS' })
   return result
@@ -522,35 +657,51 @@ export async function cancelTaskAsWorker(
   if (task.workerId !== workerId) throw new ForbiddenError('Not your task')
   assertTransition(task.status, 'CANCELLED', 'WORKER')
 
-  const result = await prisma.$transaction(async (tx) => {
-    const updated = await tx.task.update({
-      where: { id: taskId },
-      data:  {
-        status:             'CANCELLED',
-        cancellationReason: input.reason,
-        cancelledAt:        new Date(),
+  let result: Task
+  try {
+    result = await prisma.$transaction(
+      async (tx) => {
+        const fresh = await tx.task.findUnique({ where: { id: taskId } })
+        if (!fresh) throw new NotFoundError('Task not found')
+        if (fresh.status === 'CANCELLED') throw new ConflictError('Task is already cancelled')
+        assertTransition(fresh.status, 'CANCELLED', 'WORKER')
+
+        const updated = await tx.task.update({
+          where: { id: taskId },
+          data:  {
+            status:             'CANCELLED',
+            cancellationReason: input.reason,
+            cancelledAt:        new Date(),
+          },
+        })
+
+        await tx.workerProfile.update({
+          where: { userId: workerId },
+          data:  { activeTaskId: null },
+        })
+
+        await recordEvent(tx, taskId, workerId, 'WORKER', fresh.status, 'CANCELLED', input.reason)
+
+        await tx.notification.create({
+          data: {
+            userId: fresh.buyerId,
+            type:   'TASK_REJECTED',
+            title:  'Task Cancelled by Worker',
+            body:   `Worker cancelled task "${fresh.title}": ${input.reason}`,
+            data:   { taskId },
+          },
+        })
+
+        return updated
       },
-    })
-
-    await tx.workerProfile.update({
-      where: { userId: workerId },
-      data:  { activeTaskId: null },
-    })
-
-    await recordEvent(tx, taskId, workerId, 'WORKER', task.status, 'CANCELLED', input.reason)
-
-    await tx.notification.create({
-      data: {
-        userId: task.buyerId,
-        type:   'TASK_REJECTED',
-        title:  'Task Cancelled by Worker',
-        body:   `Worker cancelled task "${task.title}": ${input.reason}`,
-        data:   { taskId },
-      },
-    })
-
-    return updated
-  })
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    )
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+      throw new ConflictError('Task state changed — please try again')
+    }
+    throw err
+  }
   emitTaskUpdated(taskId, 'CANCELLED')
   logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: task.status, to: 'CANCELLED', reason: input.reason })
   return result
@@ -563,47 +714,64 @@ export async function submitTask(workerId: string, taskId: string) {
   if (task.workerId !== workerId) throw new ForbiddenError('Not your task')
   assertTransition(task.status, 'SUBMITTED', 'WORKER')
 
-  const result = await prisma.$transaction(async (tx) => {
-    // Require BEFORE + AFTER + PROOF media — checked inside transaction to avoid TOCTOU
-    const media = await tx.taskMedia.findMany({ where: { taskId } })
-    const types = new Set(media.map((m) => m.type))
-    if (!types.has('BEFORE') || !types.has('AFTER') || !types.has('PROOF')) {
-      throw new BadRequestError('Submit requires BEFORE, AFTER, and PROOF photos')
+  let result: Task
+  try {
+    result = await prisma.$transaction(
+      async (tx) => {
+        // Re-read inside SERIALIZABLE tx to prevent double-submit
+        const fresh = await tx.task.findUnique({ where: { id: taskId } })
+        if (!fresh) throw new NotFoundError('Task not found')
+        if (fresh.status === 'SUBMITTED') throw new ConflictError('Task is already submitted')
+        assertTransition(fresh.status, 'SUBMITTED', 'WORKER')
+
+        // Require BEFORE + AFTER + PROOF media — checked inside transaction to avoid TOCTOU
+        const media = await tx.taskMedia.findMany({ where: { taskId } })
+        const types = new Set(media.map((m) => m.type))
+        if (!types.has('BEFORE') || !types.has('AFTER') || !types.has('PROOF')) {
+          throw new BadRequestError('Submit requires BEFORE, AFTER, and PROOF photos')
+        }
+
+        const timeSpentSecs = fresh.startedAt
+          ? Math.floor((Date.now() - fresh.startedAt.getTime()) / 1000)
+          : null
+
+        const updated = await tx.task.update({
+          where: { id: taskId },
+          data:  {
+            status:       'SUBMITTED',
+            submittedAt:  new Date(),
+            timeSpentSecs,
+          },
+        })
+
+        // Clear activeTaskId so worker can accept new tasks while this one is in review
+        await tx.workerProfile.update({
+          where: { userId: workerId },
+          data:  { activeTaskId: null },
+        })
+
+        await recordEvent(tx, taskId, workerId, 'WORKER', fresh.status, 'SUBMITTED')
+
+        await tx.notification.create({
+          data: {
+            userId: fresh.buyerId,
+            type:   'TASK_SUBMITTED',
+            title:  'Work Submitted',
+            body:   `Worker has submitted work for "${fresh.title}". AI verification in progress.`,
+            data:   { taskId },
+          },
+        })
+
+        return updated
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    )
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+      throw new ConflictError('Task state changed — please try again')
     }
-
-    const timeSpentSecs = task.startedAt
-      ? Math.floor((Date.now() - task.startedAt.getTime()) / 1000)
-      : null
-
-    const updated = await tx.task.update({
-      where: { id: taskId },
-      data:  {
-        status:       'SUBMITTED',
-        submittedAt:  new Date(),
-        timeSpentSecs,
-      },
-    })
-
-    // Clear activeTaskId so worker can accept new tasks while this one is in review
-    await tx.workerProfile.update({
-      where: { userId: workerId },
-      data:  { activeTaskId: null },
-    })
-
-    await recordEvent(tx, taskId, workerId, 'WORKER', 'IN_PROGRESS', 'SUBMITTED')
-
-    await tx.notification.create({
-      data: {
-        userId: task.buyerId,
-        type:   'TASK_SUBMITTED',
-        title:  'Work Submitted',
-        body:   `Worker has submitted work for "${task.title}". AI verification in progress.`,
-        data:   { taskId },
-      },
-    })
-
-    return updated
-  })
+    throw err
+  }
   emitTaskUpdated(taskId, 'SUBMITTED')
   logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'IN_PROGRESS', to: 'SUBMITTED' })
   return result
@@ -659,26 +827,43 @@ export async function disputeTask(workerId: string, taskId: string, input: Reaso
   if (task.workerId !== workerId) throw new ForbiddenError('Not your task')
   assertTransition(task.status, 'DISPUTED', 'WORKER')
 
-  const result = await prisma.$transaction(async (tx) => {
-    const updated = await tx.task.update({
-      where: { id: taskId },
-      data:  { status: 'DISPUTED', rejectionReason: input.reason },
-    })
+  let result: Task
+  try {
+    result = await prisma.$transaction(
+      async (tx) => {
+        // Re-read inside SERIALIZABLE tx to prevent approve+dispute race
+        const fresh = await tx.task.findUnique({ where: { id: taskId } })
+        if (!fresh) throw new NotFoundError('Task not found')
+        if (fresh.status === 'DISPUTED') throw new ConflictError('Task is already disputed')
+        assertTransition(fresh.status, 'DISPUTED', 'WORKER')
 
-    await recordEvent(tx, taskId, workerId, 'WORKER', task.status, 'DISPUTED', input.reason)
+        const updated = await tx.task.update({
+          where: { id: taskId },
+          data:  { status: 'DISPUTED', rejectionReason: input.reason },
+        })
 
-    await tx.notification.create({
-      data: {
-        userId: task.buyerId,
-        type:   'TASK_DISPUTED',
-        title:  'Task Disputed',
-        body:   `Worker has raised a dispute for "${task.title}": ${input.reason}`,
-        data:   { taskId },
+        await recordEvent(tx, taskId, workerId, 'WORKER', fresh.status, 'DISPUTED', input.reason)
+
+        await tx.notification.create({
+          data: {
+            userId: fresh.buyerId,
+            type:   'TASK_DISPUTED',
+            title:  'Task Disputed',
+            body:   `Worker has raised a dispute for "${fresh.title}": ${input.reason}`,
+            data:   { taskId },
+          },
+        })
+
+        return updated
       },
-    })
-
-    return updated
-  })
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    )
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+      throw new ConflictError('Task state changed — please try again')
+    }
+    throw err
+  }
   emitTaskUpdated(taskId, 'DISPUTED')
   logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: task.status, to: 'DISPUTED', reason: input.reason })
   return result
@@ -718,17 +903,17 @@ export async function rateTask(buyerId: string, taskId: string, input: RateTaskI
   if (task.status !== 'APPROVED') throw new BadRequestError('Task must be approved before rating')
   if (!task.workerId) throw new BadRequestError('Task has no assigned worker')
 
-  // Compute rolling average rating for the worker
-  const profile = await prisma.workerProfile.findUnique({ where: { userId: task.workerId } })
-  if (profile) {
-    const current = profile.rating ?? 0
-    const total   = profile.completedTasks ?? 1
-    const newRating = Math.round(((current * (total - 1)) + input.rating) / total * 10) / 10
-    await prisma.workerProfile.update({
-      where: { userId: task.workerId },
-      data:  { rating: newRating },
-    })
-  }
+  // Atomic rating update — uses SQL to prevent read-modify-write race condition
+  // Formula: newRating = ((currentRating * (completedTasks - 1)) + newRating) / completedTasks
+  await prisma.$executeRaw`
+    UPDATE "WorkerProfile"
+    SET rating = ROUND(
+      ((COALESCE(rating, 0) * GREATEST("completedTasks" - 1, 0)) + ${input.rating})
+      / GREATEST("completedTasks", 1)::numeric,
+      1
+    )
+    WHERE "userId" = ${task.workerId}
+  `
 
   return { rated: true }
 }
