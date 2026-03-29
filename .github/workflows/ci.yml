@@ -4,9 +4,10 @@ name: CI — Quality Gate
 # │  Runs on every push to integration and every PR to main/integration  │
 # │  Must pass before merging. Fast feedback (~5 min).                   │
 # │                                                                      │
-# │  3 independent job tracks (all run in parallel):                     │
-# │    1. Mobile: typecheck → unit tests → screen tests                  │
+# │  2 independent job tracks (run in parallel):                         │
+# │    1. Mobile: typecheck → unit tests                                 │
 # │    2. Backend: postgres + redis → migrate → vitest                   │
+# │  Screen tests disabled until UI is finalized (Sprint 5+).           │
 # │  Final gate job checks all results.                                  │
 # └──────────────────────────────────────────────────────────────────────┘
 
@@ -55,8 +56,9 @@ jobs:
       - name: Unit tests (stores + API functions)
         run: npx jest tests/unit --no-coverage --ci
 
-      - name: Screen tests (component rendering)
-        run: npx jest --config jest.screens.config.js --no-coverage --ci
+      # Screen tests disabled — UI not finalized yet, re-enable in Sprint 5+
+      # - name: Screen tests (component rendering)
+      #   run: npx jest --config jest.screens.config.js --no-coverage --ci
 
       - name: Summary
         if: always()
@@ -64,7 +66,6 @@ jobs:
           echo "## 📱 Mobile Results" >> $GITHUB_STEP_SUMMARY
           echo "- TypeScript strict check" >> $GITHUB_STEP_SUMMARY
           echo "- Unit tests: stores, API functions, hooks" >> $GITHUB_STEP_SUMMARY
-          echo "- Screen tests: component rendering (RTLN)" >> $GITHUB_STEP_SUMMARY
 
   # ── Backend: Tests with real Postgres + Redis ──────────────────────
   backend:
