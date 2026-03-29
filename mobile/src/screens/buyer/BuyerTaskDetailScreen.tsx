@@ -145,13 +145,15 @@ export function BuyerTaskDetailScreen() {
 
   const handleApprove = () => {
     if (isActing.current) return
+    isActing.current = true
     Alert.alert(
       'Approve & Release Payment?',
       `${formatMoney(task?.rateCents ?? 0)} will be released to the worker immediately.`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel', onPress: () => { isActing.current = false } },
         { text: 'Approve & Pay', onPress: () => approveMutation.mutate() },
       ],
+      { cancelable: false },
     )
   }
 
