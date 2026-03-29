@@ -2,6 +2,7 @@ import Constants from 'expo-constants'
 
 // During Maestro testing, swap this to 'http://localhost:3000'
 // For development on device, use your local IP: 'http://192.168.x.x:3000'
+// For local testing: change app.json extra.apiUrl to 'http://YOUR_IP:3000'
 export const API_URL: string =
   (Constants.expoConfig?.extra?.apiUrl as string) ?? 'https://ecleanfuture-production.up.railway.app'
 
