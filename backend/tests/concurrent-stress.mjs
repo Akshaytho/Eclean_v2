@@ -73,7 +73,7 @@ async function test1_doubleAccept() {
     `Status: ${final.data?.status ?? final.data?.task?.status}`)
 
   // cleanup
-  await api('POST', `/worker/tasks/${taskId}/cancel`, { reason: 'test' }, workerToken)
+  await api('POST', `/worker/tasks/${taskId}/cancel`, { reason: 'stress test cleanup' }, workerToken)
 }
 
 // ─── TEST 2: Cancel vs Accept race ─────────────────────────────────────
@@ -82,7 +82,7 @@ async function test2_cancelVsAccept() {
   const taskId = await createTask('Cancel vs Accept race')
 
   const [cancelR, acceptR] = await Promise.allSettled([
-    api('POST', `/buyer/tasks/${taskId}/cancel`, { reason: 'race test' }, buyerToken),
+    api('POST', `/buyer/tasks/${taskId}/cancel`, { reason: 'stress test race cleanup' }, buyerToken),
     api('POST', `/worker/tasks/${taskId}/accept`, {}, workerToken),
   ])
 
@@ -103,7 +103,7 @@ async function test2_cancelVsAccept() {
 
   // Cleanup
   if (status === 'ACCEPTED') {
-    await api('POST', `/worker/tasks/${taskId}/cancel`, { reason: 'cleanup' }, workerToken)
+    await api('POST', `/worker/tasks/${taskId}/cancel`, { reason: 'stress test cleanup' }, workerToken)
   }
 }
 
@@ -113,8 +113,8 @@ async function test3_doubleCancel() {
   const taskId = await createTask('Double cancel refund race')
 
   const [r1, r2] = await Promise.allSettled([
-    api('POST', `/buyer/tasks/${taskId}/cancel`, { reason: 'cancel 1' }, buyerToken),
-    api('POST', `/buyer/tasks/${taskId}/cancel`, { reason: 'cancel 2' }, buyerToken),
+    api('POST', `/buyer/tasks/${taskId}/cancel`, { reason: 'double cancel test attempt 1' }, buyerToken),
+    api('POST', `/buyer/tasks/${taskId}/cancel`, { reason: 'double cancel test attempt 2' }, buyerToken),
   ])
 
   const s1 = r1.value?.status, s2 = r2.value?.status
@@ -137,7 +137,7 @@ async function test4_doubleApprove() {
   const submitR = await api('POST', `/worker/tasks/${taskId}/submit`, {}, workerToken)
   if (submitR.status !== 200) {
     console.log(`  ⚠️  Cannot submit without media — skipping (expected)`)
-    await api('POST', `/worker/tasks/${taskId}/cancel`, { reason: 'cleanup' }, workerToken)
+    await api('POST', `/worker/tasks/${taskId}/cancel`, { reason: 'stress test cleanup' }, workerToken)
     return
   }
 
@@ -169,9 +169,9 @@ async function test5_bulkAccept() {
   const successes = accepts.filter(r => r.value?.status === 200).length
   const failures = accepts.filter(r => r.value?.status !== 200)
 
-  // Worker has max 3 concurrent tasks limit
-  test(`Accepted tasks (max 3 allowed)`, successes <= 3,
-    successes > 3 ? `🚨 RACE BUG: ${successes} accepted, limit is 3!` : `${successes} accepted — correct`)
+  // Worker has max 5 queued tasks limit (sequential queue model)
+  test(`Accepted tasks (max 5 allowed)`, successes <= 5,
+    successes > 5 ? `🚨 RACE BUG: ${successes} accepted, limit is 5!` : `${successes} accepted — correct`)
 
   // Check for any tasks stuck in bad state
   for (const id of taskIds) {
@@ -182,11 +182,20 @@ async function test5_bulkAccept() {
     }
   }
 
-  // Cleanup
+  // Cleanup — cancel accepted tasks as worker, open tasks as buyer
+  let cleaned = 0
   for (const id of taskIds) {
-    await api('POST', `/worker/tasks/${id}/cancel`, { reason: 'cleanup' }, workerToken)
+    const t = await api('GET', `/buyer/tasks/${id}`, null, buyerToken)
+    const status = t.data?.status ?? t.data?.task?.status
+    if (status === 'ACCEPTED') {
+      const r = await api('POST', `/worker/tasks/${id}/cancel`, { reason: 'stress test cleanup' }, workerToken)
+      if (r.status === 200) cleaned++
+    } else if (status === 'OPEN') {
+      const r = await api('POST', `/buyer/tasks/${id}/cancel`, { reason: 'stress test cleanup' }, buyerToken)
+      if (r.status === 200) cleaned++
+    }
   }
-  test('All tasks cleaned up', true, '')
+  test(`All tasks cleaned up (${cleaned}/10)`, cleaned === 10, `Only ${cleaned} cleaned`)
 }
 
 // ─── TEST 6: Concurrent payment orders (Razorpay rate limit test) ──────
@@ -258,7 +267,7 @@ async function test8_staleRead() {
   }
 
   // Cleanup
-  await api('POST', `/worker/tasks/${taskId}/cancel`, { reason: 'cleanup' }, workerToken)
+  await api('POST', `/worker/tasks/${taskId}/cancel`, { reason: 'stress test cleanup' }, workerToken)
 }
 
 // ─── TEST 9: Rapid accept-start-cancel cycle ───────────────────────────
@@ -276,14 +285,14 @@ async function test9_rapidCycle() {
     // Immediately start and cancel without waiting
     const [startR, cancelR] = await Promise.allSettled([
       api('POST', `/worker/tasks/${taskId}/start`, { lat: 17.38, lng: 78.48 }, workerToken),
-      api('POST', `/worker/tasks/${taskId}/cancel`, { reason: 'rapid test' }, workerToken),
+      api('POST', `/worker/tasks/${taskId}/cancel`, { reason: 'rapid cycle cleanup test' }, workerToken),
     ])
 
     await sleep(300)
     const final = await api('GET', `/buyer/tasks/${taskId}`, null, buyerToken)
     const status = final.data?.status ?? final.data?.task?.status
 
-    const valid = ['OPEN', 'IN_PROGRESS', 'ACCEPTED'].includes(status)
+    const valid = ['OPEN', 'IN_PROGRESS', 'ACCEPTED', 'CANCELLED'].includes(status)
     test(`Cycle #${i+1}: final state valid (${status})`, valid,
       `Start=${startR.value?.status}, Cancel=${cancelR.value?.status}, Final=${status}`)
   }
