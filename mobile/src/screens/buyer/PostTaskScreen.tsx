@@ -1,5 +1,5 @@
 // PostTaskScreen — 4-step wizard: Type → Details → Location → Confirm + Pay
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, TextInput, Image, Modal,
@@ -136,7 +136,11 @@ export function PostTaskScreen() {
     },
   })
 
+  const isCreatingOrder = useRef(false)
+
   const handlePayAndPost = async () => {
+    if (isCreatingOrder.current) return // prevent double-tap
+    isCreatingOrder.current = true
     setPaying(true)
     try {
       // Step 1: Create Razorpay order on backend
@@ -155,8 +159,10 @@ export function PostTaskScreen() {
       })
       setCheckoutVisible(true)
     } catch (err: any) {
-      setPaying(false)
       Alert.alert('Error', err?.response?.data?.error?.message ?? 'Could not create payment order.')
+    } finally {
+      setPaying(false)
+      isCreatingOrder.current = false
     }
   }
 
