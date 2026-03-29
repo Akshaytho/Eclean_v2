@@ -21,7 +21,7 @@ interface BadgeProps {
   small?: boolean
 }
 
-export function StatusBadge({ status, small = false }: BadgeProps) {
+export const StatusBadge = React.memo(function StatusBadge({ status, small = false }: BadgeProps) {
   const c = STATUS_COLORS[status] ?? STATUS_COLORS['OPEN']
   return (
     <View style={[styles.badge, { backgroundColor: c.bg }, small && styles.small]}>
@@ -30,7 +30,7 @@ export function StatusBadge({ status, small = false }: BadgeProps) {
       </Text>
     </View>
   )
-}
+})
 
 const styles = StyleSheet.create({
   badge: {

@@ -153,7 +153,14 @@ export async function payoutsRoutes(fastify: FastifyInstance): Promise<void> {
           logger.warn('Razorpay webhook: missing X-Razorpay-Signature header')
           return reply.status(400).send({ error: 'Missing signature' })
         }
+      } else if (env.NODE_ENV === 'production') {
+        logger.error('Razorpay webhook: RAZORPAY_WEBHOOK_SECRET MUST be set in production — rejecting')
+        return reply.status(500).send({ error: 'Webhook secret not configured' })
+      } else {
+        logger.warn('Razorpay webhook: RAZORPAY_WEBHOOK_SECRET not set — skipping verification (dev only)')
+      }
 
+      if (env.RAZORPAY_WEBHOOK_SECRET && signature) {
         const rawBody = JSON.stringify(body)
         const expected = crypto
           .createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET)
@@ -173,8 +180,6 @@ export async function payoutsRoutes(fastify: FastifyInstance): Promise<void> {
           logger.warn({ signature }, 'Razorpay webhook: invalid signature — rejecting')
           return reply.status(400).send({ error: 'Invalid signature' })
         }
-      } else {
-        logger.warn('Razorpay webhook: RAZORPAY_WEBHOOK_SECRET not set — skipping verification')
       }
 
       // ── Process event — errors here return 200 so Razorpay does not retry ──

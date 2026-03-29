@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
   FlatList, ActivityIndicator,
@@ -69,7 +69,10 @@ export function MyTasksScreen() {
   })
 
   const allTasks = data?.tasks ?? []
-  const tasks = allTasks.filter(t => TAB_STATUSES[activeTab].includes(t.status))
+  const tasks = useMemo(
+    () => allTasks.filter(t => TAB_STATUSES[activeTab].includes(t.status)),
+    [allTasks, activeTab],
+  )
 
   return (
     <View style={styles.container}>

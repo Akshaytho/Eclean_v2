@@ -13,7 +13,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { Search } from 'lucide-react-native'
-import { ScreenWrapper }  from '../../components/layout/ScreenWrapper'
+import { StatusBar } from 'expo-status-bar'
 import { StatusBadge }    from '../../components/ui/Badge'
 import { BUYER_THEME as B } from '../../constants/buyerTheme'
 import { AppHeader }      from '../../components/layout/AppHeader'
@@ -48,7 +48,8 @@ export function BuyerTasksScreen() {
   )
 
   return (
-    <ScreenWrapper backgroundColor={B.background}>
+    <View style={{ flex: 1, backgroundColor: B.background }}>
+      <StatusBar style="dark" />
       <AppHeader title="My Tasks" onNotificationPress={() => navigation.navigate('Notifications' as any)} />
       {/* Tab bar */}
       <View style={s.tabs}>
@@ -124,7 +125,7 @@ export function BuyerTasksScreen() {
           />
         )
       }
-    </ScreenWrapper>
+    </View>
   )
 }
 

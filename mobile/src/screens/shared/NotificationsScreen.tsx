@@ -69,7 +69,7 @@ export function NotificationsScreen() {
                 onPress={() => {
                   if (!n.isRead) markOneMutation.mutate(n.id)
                   // Navigate to relevant screen based on notification data and user role
-                  const taskId = (n.data as any)?.taskId
+                  const taskId = n.data?.taskId as string | undefined
                   if (taskId) {
                     const screen = role === 'WORKER' ? 'ActiveTask' : 'BuyerTaskDetail'
                     try { (navigation as any).navigate(screen, { taskId }) } catch {}

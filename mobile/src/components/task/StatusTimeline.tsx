@@ -12,7 +12,7 @@ const STEPS: { status: TaskStatus; label: string }[] = [
   { status: 'APPROVED',    label: 'Approved' },
 ]
 
-const STATUS_ORDER: Partial<Record<TaskStatus, number>> = {
+const STATUS_ORDER: Record<TaskStatus, number> = {
   OPEN:        0,
   ACCEPTED:    1,
   IN_PROGRESS: 2,

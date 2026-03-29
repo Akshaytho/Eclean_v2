@@ -102,8 +102,15 @@ export default function App() {
           setUser(user)
           connect(accessToken)
         }
-      } catch {
-        await logout()
+      } catch (err: any) {
+        // Only logout on auth errors (401) — network failures should NOT kill the session
+        const status = err?.response?.status
+        if (status === 401 || status === 403) {
+          await logout()
+        } else {
+          // Network error or server down — keep user logged in with cached state
+          setLoading(false)
+        }
       } finally {
         // Always hide splash — no matter what happened above
         setAppReady(true)

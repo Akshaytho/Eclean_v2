@@ -1,19 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { Text, StyleSheet, TextStyle } from 'react-native'
 import { COLORS } from '../../constants/colors'
+import { formatElapsed } from '../../utils/formatTime'
 
 interface TaskTimerProps {
   startedAt:  string | null // ISO timestamp from server
   style?:     TextStyle
   size?:      'sm' | 'md' | 'lg'
-}
-
-function formatElapsed(secs: number): string {
-  const h = Math.floor(secs / 3600)
-  const m = Math.floor((secs % 3600) / 60)
-  const s = secs % 60
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
 export function TaskTimer({ startedAt, style, size = 'md' }: TaskTimerProps) {

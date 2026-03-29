@@ -23,7 +23,8 @@ import { useActiveTaskStore } from '../stores/activeTaskStore'
 const ACTIVE_TASK_KEY = 'eclean_active_task_id'
 
 // ─── Task definition (must be at module level) ────────────────────────────────
-
+// Guard: prevent "task already defined" crash if module is hot-reloaded or imported twice
+if (!TaskManager.isTaskDefined(GPS_TASK_NAME)) {
 TaskManager.defineTask(GPS_TASK_NAME, async ({ data, error }: TaskManager.TaskManagerTaskBody) => {
   if (error) {
     console.warn('[BG Location] error:', error.message)
@@ -51,6 +52,7 @@ TaskManager.defineTask(GPS_TASK_NAME, async ({ data, error }: TaskManager.TaskMa
     // Safe to ignore — store not accessible in background
   }
 })
+} // end guard
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 

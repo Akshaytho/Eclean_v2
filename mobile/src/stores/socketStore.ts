@@ -40,9 +40,10 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     const socket = io(SOCKET_URL, {
       auth:                   { token: accessToken },
       transports:             ['websocket'],
-      reconnectionAttempts:   Infinity,     // always try to reconnect
+      reconnectionAttempts:   20,            // give up after 20 tries (not infinite)
       reconnectionDelay:      1_000,
-      reconnectionDelayMax:   10_000,
+      reconnectionDelayMax:   30_000,        // back off up to 30s (was 10s)
+      randomizationFactor:    0.5,           // jitter to avoid thundering herd
       timeout:                10_000,
     })
 

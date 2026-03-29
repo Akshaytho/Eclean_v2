@@ -7,7 +7,7 @@
  *
  * Shows: full-screen map, GPS trail, worker info overlay, time on site counter
  */
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
 import MapView, { Marker, Polyline, Circle } from 'react-native-maps'
 import { useQuery } from '@tanstack/react-query'
@@ -27,6 +27,7 @@ export function LiveTrackScreen() {
   const route         = useRoute<Route>()
   const { taskId }    = route.params
   const { socket, joinTask, leaveTask } = useSocketStore()
+  const mapRef = useRef<MapView>(null)
   const [trail, setTrail] = useState<GPSCoord[]>([])
   const [last,  setLast]  = useState<GPSCoord | null>(null)
   const [elapsed, setElapsed] = useState(0)  // seconds on site
@@ -55,6 +56,16 @@ export function LiveTrackScreen() {
       leaveTask(taskId)
     }
   }, [taskId, socket])
+
+  // Smoothly animate map camera to follow worker
+  useEffect(() => {
+    if (last) {
+      mapRef.current?.animateToRegion({
+        latitude: last.lat, longitude: last.lng,
+        latitudeDelta: 0.006, longitudeDelta: 0.006,
+      }, 800)
+    }
+  }, [last])
 
   // Time on site counter — computed from task.startedAt
   useEffect(() => {
@@ -85,7 +96,7 @@ export function LiveTrackScreen() {
   return (
     <View style={styles.root}>
       {/* Full-screen map */}
-      <MapView style={styles.map} region={region} showsUserLocation>
+      <MapView ref={mapRef} style={styles.map} initialRegion={region} showsUserLocation>
         {/* Task location pin */}
         {task?.locationLat && task?.locationLng && (
           <Marker

@@ -50,21 +50,9 @@ const PHOTO_TYPES: { type: MediaType; label: string }[] = [
   { type: 'PROOF',  label: 'Proof'  },
 ]
 
-function formatElapsed(secs: number): string {
-  const h   = Math.floor(secs / 3600)
-  const m   = Math.floor((secs % 3600) / 60)
-  const s   = secs % 60
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`
-}
+import { formatElapsed } from '../../utils/formatTime'
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLng = (lng2 - lng1) * Math.PI / 180
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
+import { haversineKm } from '../../utils/distance'
 
 function openMapsNavigation(lat: number, lng: number) {
   const url = Platform.select({
@@ -257,19 +245,27 @@ export function ActiveTaskScreen() {
   const handleCapture = useCallback((result: CaptureResult) => {
     if (!cameraType) return
     setCameraType(null)
-    uploadPhoto(cameraType as MediaType, result.photo.fullUri)
+    // Pass device-captured metadata (GPS, hash, device) to backend
+    uploadPhoto(cameraType as MediaType, result.photo.fullUri, result.photo.metadata)
   }, [cameraType, taskId])
 
   const handleGalleryPick = useCallback((photo: GalleryPhoto) => {
     if (!galleryPicker) return
     setGalleryPicker(null)
-    uploadPhoto(galleryPicker, photo.fullUri)
+    // Gallery photos also have metadata from when they were captured
+    uploadPhoto(galleryPicker, photo.fullUri, photo.metadata)
   }, [galleryPicker, taskId])
 
-  const uploadPhoto = useCallback(async (type: MediaType, uri: string) => {
+  const uploadPhoto = useCallback(async (type: MediaType, uri: string, metadata?: GalleryPhoto['metadata']) => {
     setPhotos((p) => ({ ...p, [type]: { uri, uploading: true, uploaded: false } }))
     try {
-      await mediaApi.upload(taskId, uri, type)
+      await mediaApi.upload(taskId, uri, type, metadata ? {
+        lat:       metadata.lat,
+        lng:       metadata.lng,
+        timestamp: metadata.timestamp,
+        deviceId:  metadata.deviceId,
+        photoHash: metadata.photoHash,
+      } : undefined)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setPhotos((p) => ({ ...p, [type]: { uri, uploading: false, uploaded: true } }))
     } catch {

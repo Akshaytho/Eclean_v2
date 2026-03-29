@@ -50,14 +50,16 @@ const LABEL_CONFIG: Record<ScoreLabel, {
 }
 
 interface AIScoreCardProps {
-  score:      number        // 0.0 - 1.0 from backend
+  score:      number        // Accepts 0-1 OR 0-100 (auto-normalized)
   reasoning?: string | null
 }
 
 export function AIScoreCard({ score, reasoning }: AIScoreCardProps) {
-  const label = getLabel(score)
+  // Normalize: if score > 1 treat as 0-100 scale, otherwise 0-1
+  const normalized = score > 1 ? score / 100 : score
+  const label = getLabel(normalized)
   const cfg   = LABEL_CONFIG[label]
-  const pct   = Math.round(score * 100)
+  const pct   = Math.round(normalized * 100)
 
   return (
     <View style={[s.card, { borderColor: cfg.border, backgroundColor: cfg.bg }]}>

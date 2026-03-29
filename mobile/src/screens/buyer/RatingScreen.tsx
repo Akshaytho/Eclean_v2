@@ -5,6 +5,7 @@ import { useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import { ChevronLeft, Star } from 'lucide-react-native'
 import { LinearGradient } from '../../components/LinearGradientShim'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLORS }        from '../../constants/colors'
 import { BUYER_THEME as B } from '../../constants/buyerTheme'
 import { buyerTasksApi } from '../../api/tasks.api'
@@ -17,6 +18,7 @@ export function RatingScreen() {
   const route      = useRoute<Route>()
   const { taskId } = route.params
   const qc         = useQueryClient()
+  const insets     = useSafeAreaInsets()
   const [rating,   setRating]  = useState(0)
   const [comment,  setComment] = useState('')
 
@@ -37,7 +39,7 @@ export function RatingScreen() {
 
   return (
     <View style={s.root}>
-      <LinearGradient colors={[B.primary, B.primaryDark]} style={s.header}>
+      <LinearGradient colors={B.gradient} style={[s.header, { paddingTop: (insets.top > 0 ? insets.top : 24) + 8 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <ChevronLeft size={22} color="#fff" />
         </TouchableOpacity>
@@ -97,7 +99,7 @@ export function RatingScreen() {
 
 const s = StyleSheet.create({
   root:        { flex: 1, backgroundColor: B.surface },
-  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 56, paddingBottom: 20, paddingHorizontal: 20 },
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 20, paddingHorizontal: 20 },
   backBtn:     { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#fff' },
   body:        { flex: 1, padding: 24 },

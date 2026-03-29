@@ -17,7 +17,7 @@ export const createTaskSchema = z.object({
   category:        z.nativeEnum(TaskCategory),
   dirtyLevel:      z.nativeEnum(DirtyLevel),
   urgency:         z.nativeEnum(TaskUrgency).default('MEDIUM'),
-  rateCents:       z.number().int().positive().optional(), // auto-calc if omitted
+  rateCents:       z.number().int().min(100).optional(), // min ₹1 (100 paise), auto-calc if omitted
   locationLat:     z.number().min(-90).max(90).optional(),
   locationLng:     z.number().min(-180).max(180).optional(),
   locationAddress: z.string().max(500).optional(),
@@ -63,7 +63,7 @@ export const openTasksQuerySchema = z.object({
   urgency:  z.nativeEnum(TaskUrgency).optional(),
   lat:      z.coerce.number().min(-90).max(90).optional(),
   lng:      z.coerce.number().min(-180).max(180).optional(),
-  radiusKm: z.coerce.number().positive().max(50).default(10),
+  radiusKm: z.coerce.number().min(0.1).max(50).default(10), // 100m to 50km
   page:     z.coerce.number().int().positive().default(1),
   limit:    z.coerce.number().int().positive().max(100).default(20),
 })

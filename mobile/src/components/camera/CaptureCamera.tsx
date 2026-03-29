@@ -1,8 +1,7 @@
 /**
- * CaptureCamera — eClean's evidence-grade camera component.
- *
- * ABSTRACTION: Hides expo-camera, expo-location, expo-image-manipulator, expo-device.
- * Screens only receive CaptureResult — never touch underlying libs.
+ * CaptureCamera — eClean's evidence-grade camera.
+ * Clean, minimal UI — Uber/Instagram style.
+ * GPS + hash + timestamp captured silently behind the scenes.
  */
 
 import React, { useRef, useState, useCallback } from 'react'
@@ -12,14 +11,12 @@ import {
 } from 'react-native'
 import { CameraView, useCameraPermissions, CameraType } from 'expo-camera'
 import * as Location from 'expo-location'
-
 import * as Device from 'expo-device'
 import * as Haptics from 'expo-haptics'
 import * as Crypto from 'expo-crypto'
 import * as FileSystem from 'expo-file-system/legacy'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { X, RotateCcw, Zap, ZapOff } from 'lucide-react-native'
-import { COLORS } from '../../constants/colors'
+import { X, RotateCcw, Zap, ZapOff, Shield } from 'lucide-react-native'
 import { saveToGallery, GalleryPhoto } from '../../services/galleryService'
 import { PhotoPreview } from './PhotoPreview'
 
@@ -28,72 +25,65 @@ const { width: SW, height: SH } = Dimensions.get('window')
 export type PhotoType = 'BEFORE' | 'AFTER' | 'PROOF' | 'GENERAL'
 
 export interface CaptureResult {
-  photo:    GalleryPhoto  // saved to in-app gallery
-  uploaded: boolean       // false until uploaded to Cloudinary
+  photo:    GalleryPhoto
+  uploaded: boolean
 }
 
 export interface CaptureMetadata {
   lat:       number | null
   lng:       number | null
-  timestamp: string       // ISO UTC — captured at shutter press moment
+  timestamp: string
   deviceId:  string
   taskId:    string | null
-  photoHash: string       // SHA-256 of raw photo bytes — tamper-proof evidence
+  photoHash: string
 }
 
 interface CaptureCameraProps {
-  taskId:    string | null  // null = dashboard quick capture
+  taskId:    string | null
   photoType: PhotoType
   onCapture: (result: CaptureResult) => void
   onClose:   () => void
 }
 
-const PHOTO_TYPE_CONFIG: Record<PhotoType, { label: string; color: string; hint: string }> = {
-  BEFORE:  { label: 'BEFORE',  color: '#F59E0B', hint: 'Capture the area BEFORE cleaning' },
-  AFTER:   { label: 'AFTER',   color: '#2E8B57', hint: 'Capture the area AFTER cleaning' },
-  PROOF:   { label: 'PROOF',   color: '#3B82F6', hint: 'Capture yourself at the location' },
-  GENERAL: { label: 'CAPTURE', color: '#8B5CF6', hint: 'Take a photo' },
+const TYPE_CONFIG: Record<PhotoType, { label: string; color: string; hint: string }> = {
+  BEFORE:  { label: 'BEFORE',  color: '#F59E0B', hint: 'Show the area before cleaning' },
+  AFTER:   { label: 'AFTER',   color: '#10B981', hint: 'Show the cleaned area' },
+  PROOF:   { label: 'PROOF',   color: '#3B82F6', hint: 'Show yourself at the location' },
+  GENERAL: { label: 'PHOTO',   color: '#8B5CF6', hint: 'Take a photo' },
 }
 
-export function CaptureCamera({ taskId, photoType, onCapture, onClose }: CaptureCameraProps) {
+export const CaptureCamera = React.memo(function CaptureCamera({ taskId, photoType, onCapture, onClose }: CaptureCameraProps) {
   const [permission, requestPermission] = useCameraPermissions()
-  const [facing,    setFacing]          = useState<CameraType>('back')
-  const [flash,     setFlash]           = useState(false)
-  const [capturing, setCapturing]       = useState(false)
-  const [saving,    setSaving]          = useState(false)
-  // preview holds both the URI and metadata captured at shutter press
-  const [preview,   setPreview]         = useState<{ uri: string; metadata: CaptureMetadata } | null>(null)
-  const [saved,     setSaved]           = useState(false)
+  const [facing,    setFacing]   = useState<CameraType>('back')
+  const [flash,     setFlash]    = useState(false)
+  const [capturing, setCapturing] = useState(false)
+  const [saving,    setSaving]   = useState(false)
+  const [preview,   setPreview]  = useState<{ uri: string; metadata: CaptureMetadata } | null>(null)
+  const [saved,     setSaved]    = useState(false)
   const cameraRef = useRef<CameraView>(null)
   const insets    = useSafeAreaInsets()
-  const cfg       = PHOTO_TYPE_CONFIG[photoType]
+  const cfg       = TYPE_CONFIG[photoType]
 
-  // ── Shutter press (must be before early returns — Rules of Hooks) ──────────
   const onShutter = useCallback(async () => {
     if (!cameraRef.current || capturing) return
     setCapturing(true)
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
 
     try {
-      // Capture photo + GPS simultaneously at shutter press
       const [photo, locResult] = await Promise.all([
         cameraRef.current.takePictureAsync({ quality: 0.92, skipProcessing: false }),
-        Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        }).catch(() => null),
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).catch(() => null),
       ])
+      if (!photo) throw new Error('Camera failed')
 
-      if (!photo) throw new Error('Camera failed to capture')
-
-      // SHA-256 hash — non-blocking, fallback if it fails
       let photoHash = ''
       try {
-        const photoBase64 = await FileSystem.readAsStringAsync(photo.uri, { encoding: FileSystem.EncodingType.Base64 })
-        photoHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, photoBase64)
+        const b64 = await FileSystem.readAsStringAsync(photo.uri, { encoding: FileSystem.EncodingType.Base64 })
+        photoHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, b64)
       } catch {
         photoHash = `fallback-${Date.now()}`
       }
 
-      // Build metadata at the exact moment of capture
       const metadata: CaptureMetadata = {
         lat:       locResult?.coords.latitude  ?? null,
         lng:       locResult?.coords.longitude ?? null,
@@ -103,68 +93,60 @@ export function CaptureCamera({ taskId, photoType, onCapture, onClose }: Capture
         photoHash,
       }
 
-      // Show preview with metadata attached
       setPreview({ uri: photo.uri, metadata })
       setCapturing(false)
     } catch (err: any) {
       setCapturing(false)
-      console.error('CaptureCamera error:', err?.message ?? err)
-      Alert.alert('Capture failed', err?.message ?? 'Could not take photo. Please try again.')
+      Alert.alert('Capture failed', err?.message ?? 'Could not take photo.')
     }
   }, [capturing, taskId])
 
-  // ── Confirm (after preview) ──────────────────────────────────────────────────
   const onConfirm = useCallback(async (uri: string, metadata: CaptureMetadata) => {
     setSaving(true)
     try {
       const galleryPhoto = await saveToGallery(uri, taskId, photoType, metadata)
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setSaving(false)
       setSaved(true)
-      // Show "Saved!" for 1 second before closing
-      await new Promise(r => setTimeout(r, 1000))
+      await new Promise(r => setTimeout(r, 800))
       setSaved(false)
       setPreview(null)
       onCapture({ photo: galleryPhoto, uploaded: false })
     } catch (err: any) {
       setSaving(false)
-      console.error('Save failed:', err?.message ?? err)
-      Alert.alert('Save failed', err?.message ?? 'Could not save photo. Please retake.')
+      Alert.alert('Save failed', err?.message ?? 'Could not save photo.')
     }
   }, [taskId, photoType, onCapture])
 
-  // ── Permission screen (after all hooks) ────────────────────────────────────
+  // Permission screen
   if (!permission) return <View style={s.bg} />
-
   if (!permission.granted) {
     return (
       <View style={[s.bg, s.center]}>
-        <Text style={s.permTitle}>Camera permission needed</Text>
-        <Text style={s.permSub}>eClean needs camera access to capture evidence photos</Text>
-        <TouchableOpacity style={s.permBtn} onPress={requestPermission}>
-          <Text style={s.permBtnText}>Grant Camera Permission</Text>
+        <View style={s.permIcon}><Shield size={32} color="#3B82F6" /></View>
+        <Text style={s.permTitle}>Camera Access</Text>
+        <Text style={s.permSub}>Required to capture evidence photos for task verification</Text>
+        <TouchableOpacity style={s.permBtn} onPress={requestPermission} activeOpacity={0.85}>
+          <Text style={s.permBtnText}>Allow Camera</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.closeBtn} onPress={onClose}>
-          <X size={24} color="rgba(255,255,255,0.7)" />
+        <TouchableOpacity onPress={onClose} style={s.permSkip}>
+          <Text style={s.permSkipText}>Not now</Text>
         </TouchableOpacity>
       </View>
     )
   }
 
-  // ── Saved confirmation (full screen overlay) ─────────────────────────────────
+  // Saved confirmation
   if (saved) {
     return (
       <View style={[s.bg, s.center]}>
-        <View style={s.savedCircle}>
-          <Text style={s.savedCheck}>✓</Text>
-        </View>
-        <Text style={s.savedTitle}>Photo Saved</Text>
-        <Text style={s.savedSub}>Added to your gallery</Text>
+        <View style={s.savedCircle}><Text style={s.savedCheck}>✓</Text></View>
+        <Text style={s.savedTitle}>Saved</Text>
       </View>
     )
   }
 
-  // ── Preview screen ───────────────────────────────────────────────────────────
+  // Preview
   if (preview) {
     return (
       <PhotoPreview
@@ -178,111 +160,103 @@ export function CaptureCamera({ taskId, photoType, onCapture, onClose }: Capture
     )
   }
 
-  // ── Camera screen ────────────────────────────────────────────────────────────
+  // Camera
   return (
     <View style={s.bg}>
       <StatusBar hidden />
+      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} flash={flash ? 'on' : 'off'} />
 
-      <CameraView
-        ref={cameraRef}
-        style={StyleSheet.absoluteFill}
-        facing={facing}
-        flash={flash ? 'on' : 'off'}
-      />
-
-      {/* Top bar */}
-      <View style={[s.topBar, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={onClose} style={s.iconBtn} hitSlop={12}>
-          <X size={22} color="white" />
+      {/* Top bar — minimal */}
+      <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity onPress={onClose} style={s.topBtn} hitSlop={12}>
+          <X size={20} color="#fff" />
         </TouchableOpacity>
-        <View style={[s.typeBadge, { backgroundColor: cfg.color }]}>
-          <Text style={s.typeLabel}>{cfg.label}</Text>
+
+        <View style={[s.typePill, { backgroundColor: cfg.color }]}>
+          <Text style={s.typeText}>{cfg.label}</Text>
         </View>
-        <TouchableOpacity onPress={() => setFlash(f => !f)} style={s.iconBtn} hitSlop={12}>
-          {flash
-            ? <Zap size={22} color="#FFD700" fill="#FFD700" />
-            : <ZapOff size={22} color="white" />
-          }
+
+        <TouchableOpacity onPress={() => setFlash(f => !f)} style={s.topBtn} hitSlop={12}>
+          {flash ? <Zap size={20} color="#FFD700" fill="#FFD700" /> : <ZapOff size={20} color="rgba(255,255,255,0.7)" />}
         </TouchableOpacity>
       </View>
 
-      {/* Hint */}
-      <View style={s.hintRow}>
-        <Text style={s.hint}>{cfg.hint}</Text>
-      </View>
-
-      {/* Viewfinder corners */}
-      <View style={s.viewfinder} pointerEvents="none">
-        {(['TL','TR','BL','BR'] as const).map(pos => (
-          <View key={pos} style={[
-            s.corner,
-            pos.includes('T') ? s.cornerT : s.cornerB,
-            pos.includes('L') ? s.cornerL : s.cornerR,
-            { borderColor: cfg.color }
-          ]} />
-        ))}
+      {/* Center hint — subtle */}
+      <View style={s.hintWrap}>
+        <Text style={s.hintText}>{cfg.hint}</Text>
       </View>
 
       {/* Bottom controls */}
-      <View style={[s.bottomBar, { paddingBottom: insets.bottom + 24 }]}>
+      <View style={[s.bottomBar, { paddingBottom: insets.bottom + 20 }]}>
+        {/* Flip */}
         <TouchableOpacity style={s.sideBtn} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
-          <RotateCcw size={26} color="white" />
-          <Text style={s.sideBtnText}>Flip</Text>
+          <RotateCcw size={22} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
 
+        {/* Shutter — big, clean */}
         <TouchableOpacity
-          style={[s.shutter, capturing && s.shutterActive]}
+          style={s.shutter}
           onPress={() => void onShutter()}
           activeOpacity={0.8}
           disabled={capturing}
         >
-          {capturing
-            ? <ActivityIndicator color={cfg.color} size="large" />
-            : <View style={[s.shutterInner, { backgroundColor: cfg.color }]} />
-          }
+          {capturing ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <View style={[s.shutterInner, { backgroundColor: cfg.color }]} />
+          )}
         </TouchableOpacity>
 
+        {/* Spacer for symmetry */}
         <View style={s.sideBtn} />
       </View>
 
-      {/* Evidence notice */}
-      <View style={[s.evidenceBar, { bottom: insets.bottom }]}>
-        <Text style={s.evidenceText}>🔒 GPS + timestamp recorded automatically</Text>
+      {/* Subtle secure badge — replaces verbose evidence text */}
+      <View style={[s.secureBadge, { bottom: insets.bottom + 4 }]}>
+        <Shield size={10} color="rgba(255,255,255,0.35)" />
+        <Text style={s.secureText}>Verified capture</Text>
       </View>
     </View>
   )
-}
+})
 
 const s = StyleSheet.create({
-  bg:            { flex: 1, backgroundColor: '#000' },
-  center:        { alignItems: 'center', justifyContent: 'center', padding: 32 },
-  topBar:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, zIndex: 10 },
-  iconBtn:       { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 20 },
-  typeBadge:     { paddingHorizontal: 20, paddingVertical: 7, borderRadius: 20 },
-  typeLabel:     { color: 'white', fontSize: 13, fontWeight: '800', letterSpacing: 1.5 },
-  hintRow:       { alignItems: 'center', marginTop: 12, zIndex: 10 },
-  hint:          { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '500' },
-  viewfinder:    { position: 'absolute', top: SH * 0.18, left: SW * 0.08, right: SW * 0.08, bottom: SH * 0.22 },
-  corner:        { position: 'absolute', width: 28, height: 28, borderWidth: 3 },
-  cornerT:       { top: 0 },
-  cornerB:       { bottom: 0 },
-  cornerL:       { left: 0, borderRightWidth: 0, borderBottomWidth: 0 },
-  cornerR:       { right: 0, borderLeftWidth: 0, borderBottomWidth: 0 },
-  bottomBar:     { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 40, paddingTop: 20 },
-  sideBtn:       { width: 50, alignItems: 'center' },
-  sideBtnText:   { color: 'rgba(255,255,255,0.7)', fontSize: 11, marginTop: 4 },
-  shutter:       { width: 80, height: 80, borderRadius: 40, borderWidth: 4, borderColor: 'white', alignItems: 'center', justifyContent: 'center' },
-  shutterActive: { opacity: 0.7 },
-  shutterInner:  { width: 62, height: 62, borderRadius: 31 },
-  evidenceBar:   { position: 'absolute', left: 0, right: 0, alignItems: 'center', paddingVertical: 6 },
-  evidenceText:  { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '500' },
-  permTitle:     { color: 'white', fontSize: 20, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
-  permSub:       { color: 'rgba(255,255,255,0.6)', fontSize: 14, textAlign: 'center', marginBottom: 32, lineHeight: 20 },
-  permBtn:       { backgroundColor: COLORS.brand.primary, paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12 },
-  permBtnText:   { color: 'white', fontSize: 15, fontWeight: '700' },
-  closeBtn:      { position: 'absolute', top: 60, right: 24 },
-  savedCircle:   { width: 90, height: 90, borderRadius: 45, backgroundColor: '#16A34A', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  savedCheck:    { color: '#fff', fontSize: 40, fontWeight: '800' },
-  savedTitle:    { color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 6 },
-  savedSub:      { color: 'rgba(255,255,255,0.6)', fontSize: 14 },
+  bg:     { flex: 1, backgroundColor: '#000' },
+  center: { alignItems: 'center', justifyContent: 'center', padding: 32 },
+
+  // Top
+  topBar:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, zIndex: 10 },
+  topBtn:  { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 20 },
+  typePill:{ paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
+  typeText:{ color: '#fff', fontSize: 12, fontWeight: '800', letterSpacing: 1.5 },
+
+  // Hint
+  hintWrap: { position: 'absolute', top: SH * 0.15, left: 0, right: 0, alignItems: 'center', zIndex: 5 },
+  hintText: { color: 'rgba(255,255,255,0.5)', fontSize: 14, fontWeight: '500', backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, overflow: 'hidden' },
+
+  // Bottom
+  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 40, paddingTop: 16 },
+  sideBtn:   { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+
+  // Shutter — clean circle
+  shutter:      { width: 76, height: 76, borderRadius: 38, borderWidth: 4, borderColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center' },
+  shutterInner: { width: 60, height: 60, borderRadius: 30 },
+
+  // Secure badge
+  secureBadge: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  secureText:  { color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: '500' },
+
+  // Permission
+  permIcon:     { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(59,130,246,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  permTitle:    { color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 8 },
+  permSub:      { color: 'rgba(255,255,255,0.5)', fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 28, maxWidth: 280 },
+  permBtn:      { backgroundColor: '#3B82F6', paddingHorizontal: 36, paddingVertical: 16, borderRadius: 14 },
+  permBtnText:  { color: '#fff', fontSize: 16, fontWeight: '700' },
+  permSkip:     { marginTop: 16 },
+  permSkipText: { color: 'rgba(255,255,255,0.4)', fontSize: 14 },
+
+  // Saved
+  savedCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#10B981', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  savedCheck:  { color: '#fff', fontSize: 36, fontWeight: '800' },
+  savedTitle:  { color: '#fff', fontSize: 20, fontWeight: '800' },
 })

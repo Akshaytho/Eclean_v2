@@ -16,6 +16,7 @@ import { apiClient } from '../api/client'
 import type { OfflineQueueItem } from '../types'
 
 const QUEUE_KEY = 'eclean_offline_queue'
+const REPLAY_LOCK_KEY = 'eclean_replay_lock'
 const MAX_QUEUE_SIZE = 50
 
 async function readQueue(): Promise<OfflineQueueItem[]> {
@@ -31,7 +32,17 @@ async function writeQueue(items: OfflineQueueItem[]): Promise<void> {
   await SecureStore.setItemAsync(QUEUE_KEY, JSON.stringify(items))
 }
 
-let isReplaying = false
+// Persisted replay lock — survives app crashes (in-memory flag doesn't)
+async function acquireReplayLock(): Promise<boolean> {
+  const lock = await SecureStore.getItemAsync(REPLAY_LOCK_KEY)
+  if (lock === 'true') return false // already replaying (or crashed mid-replay)
+  await SecureStore.setItemAsync(REPLAY_LOCK_KEY, 'true')
+  return true
+}
+
+async function releaseReplayLock(): Promise<void> {
+  await SecureStore.deleteItemAsync(REPLAY_LOCK_KEY)
+}
 
 export const offlineSync = {
   async enqueue(item: Omit<OfflineQueueItem, 'id' | 'createdAt' | 'retries'>): Promise<void> {
@@ -51,8 +62,8 @@ export const offlineSync = {
   },
 
   async replay(): Promise<void> {
-    if (isReplaying) return
-    isReplaying = true
+    const acquired = await acquireReplayLock()
+    if (!acquired) return
 
     try {
       const queue = await readQueue()
@@ -79,7 +90,7 @@ export const offlineSync = {
 
       await writeQueue(remaining)
     } finally {
-      isReplaying = false
+      await releaseReplayLock()
     }
   },
 

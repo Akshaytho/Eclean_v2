@@ -223,6 +223,10 @@ model Task {
   @@index([zoneId])
   @@index([status, category])
   @@index([status, locationLat, locationLng])
+  @@index([status, urgency])       // open task filtering by urgency
+  @@index([status, createdAt])     // sorting OPEN tasks by recency
+  @@index([buyerId, status])       // buyer task list queries
+  @@index([workerId, status])      // worker my-tasks queries
 }
 
 model TaskMedia {
@@ -494,9 +498,16 @@ model AnalyticsPhotoMeta {
   imageHeight            Int?
   taskLat                Float?    // task.locationLat at time of upload (denormalized)
   taskLng                Float?    // task.locationLng at time of upload (denormalized)
-  distanceFromTaskMeters Float?    // haversine(exifGPS, taskGPS) — null if either is missing
+  // Device-captured metadata (from phone — more reliable than EXIF after compression)
+  capturedLat            Float?    // GPS from expo-location at shutter press
+  capturedLng            Float?
+  capturedAt             DateTime? // ISO timestamp from phone clock
+  capturedDeviceId       String?   // Device.modelId from expo-device
+  photoHash              String?   // SHA-256 of raw photo bytes — tamper-proof evidence chain
+  // Fraud detection
+  distanceFromTaskMeters Float?    // haversine(bestGPS, taskGPS) — null if either is missing
   isFlagged              Boolean   @default(false) // true if distance > 500m
-  flagReason             String?   // e.g. "EXIF GPS 2.3km from task location"
+  flagReason             String?   // e.g. "Photo GPS 2.3km from task location"
   createdAt              DateTime  @default(now())
 
   @@index([taskId])

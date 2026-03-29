@@ -33,6 +33,13 @@ export async function mediaRoutes(fastify: FastifyInstance): Promise<void> {
       let sizeBytes  = 0
       let mediaType: string | null = null
 
+      // Device-captured metadata (supplements EXIF which may be stripped by compression)
+      let capturedLat: number | null = null
+      let capturedLng: number | null = null
+      let capturedAt:  string | null = null
+      let deviceId:    string | null = null
+      let photoHash:   string | null = null
+
       for await (const part of parts) {
         if (part.type === 'file') {
           const chunks: Buffer[] = []
@@ -44,6 +51,18 @@ export async function mediaRoutes(fastify: FastifyInstance): Promise<void> {
           sizeBytes  = fileBuffer.length
         } else if (part.fieldname === 'mediaType') {
           mediaType = part.value as string
+        } else if (part.fieldname === 'capturedLat') {
+          const v = parseFloat(part.value as string)
+          if (!isNaN(v)) capturedLat = v
+        } else if (part.fieldname === 'capturedLng') {
+          const v = parseFloat(part.value as string)
+          if (!isNaN(v)) capturedLng = v
+        } else if (part.fieldname === 'capturedAt') {
+          capturedAt = part.value as string
+        } else if (part.fieldname === 'deviceId') {
+          deviceId = part.value as string
+        } else if (part.fieldname === 'photoHash') {
+          photoHash = part.value as string
         }
       }
 
@@ -66,6 +85,14 @@ export async function mediaRoutes(fastify: FastifyInstance): Promise<void> {
         file:      fileBuffer,
         mimeType,
         sizeBytes,
+        // Device-captured metadata — more reliable than EXIF after compression
+        deviceMeta: {
+          capturedLat,
+          capturedLng,
+          capturedAt,
+          deviceId,
+          photoHash,
+        },
       })
 
       emitTaskPhotoAdded(taskId, media)

@@ -1,29 +1,26 @@
 import React, { useState } from 'react'
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
+  View, Text, StyleSheet, TouchableOpacity,
+  KeyboardAvoidingView, Platform,
 } from 'react-native'
-import { LinearGradient } from '../../components/LinearGradientShim'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { AuthStackParamList } from '../../navigation/types'
 import { Input } from '../../components/ui/Input'
-import { Button } from '../../components/ui/Button'
 import { authApi } from '../../api/auth.api'
-import { COLORS } from '../../constants/colors'
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'ForgotPassword'>
 }
+
+const ACCENT = '#3B82F6'
 
 export function ForgotPasswordScreen({ navigation }: Props) {
   const [email,   setEmail]   = useState('')
   const [loading, setLoading] = useState(false)
   const [sent,    setSent]    = useState(false)
   const [error,   setError]   = useState<string | null>(null)
+  const insets = useSafeAreaInsets()
 
   const handleSend = async () => {
     setError(null)
@@ -31,58 +28,50 @@ export function ForgotPasswordScreen({ navigation }: Props) {
       setError('Please enter your email address.')
       return
     }
-
     setLoading(true)
     try {
       await authApi.forgotPassword(email.trim().toLowerCase())
       setSent(true)
     } catch {
-      // Always show success to avoid email enumeration
-      setSent(true)
+      setSent(true) // Always show success to prevent email enumeration
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <LinearGradient colors={[COLORS.brand.primary, COLORS.brand.dark]} style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}>
-          <Text style={styles.backText}>← Back</Text>
+    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Header */}
+      <View style={[s.header, { paddingTop: (insets.top > 0 ? insets.top : 24) + 16 }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+          <Text style={s.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Reset Password</Text>
-      </LinearGradient>
+      </View>
 
-      <View style={styles.form}>
+      <View style={s.form}>
         {sent ? (
-          <View style={styles.successBox}>
-            <Text style={styles.successEmoji}>📧</Text>
-            <Text style={styles.successTitle}>Check your email</Text>
-            <Text style={styles.successBody}>
-              If an account exists for {email}, you'll receive a reset link shortly.
+          <View style={s.successBox}>
+            <View style={s.successIcon}>
+              <Text style={s.successIconText}>✓</Text>
+            </View>
+            <Text style={s.successTitle}>Check your email</Text>
+            <Text style={s.successBody}>
+              If an account exists for {email}, you'll receive a password reset link shortly.
             </Text>
-            <Button
-              label="Back to Login"
-              onPress={() => navigation.navigate('Login')}
-              fullWidth
-              style={styles.backBtn}
-            />
+            <TouchableOpacity style={s.ctaBtn} onPress={() => navigation.navigate('Login')} activeOpacity={0.85}>
+              <Text style={s.ctaText}>Back to Sign In</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <>
-            <Text style={styles.title}>Forgot Password?</Text>
-            <Text style={styles.subtitle}>
-              Enter your email and we'll send you a link to reset your password.
-            </Text>
+            <Text style={s.title}>Forgot Password?</Text>
+            <Text style={s.subtitle}>No worries. Enter your email and we'll send you a reset link.</Text>
 
-            {error ? (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{error}</Text>
+            {error && (
+              <View style={s.errorBox}>
+                <Text style={s.errorText}>{error}</Text>
               </View>
-            ) : null}
+            )}
 
             <Input
               label="Email"
@@ -92,14 +81,14 @@ export function ForgotPasswordScreen({ navigation }: Props) {
               onChangeText={setEmail}
             />
 
-            <Button
-              label="Send Reset Link"
+            <TouchableOpacity
+              style={[s.ctaBtn, loading && s.ctaBtnDisabled]}
               onPress={handleSend}
-              loading={loading}
-              fullWidth
-              size="lg"
-              style={styles.sendBtn}
-            />
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              <Text style={s.ctaText}>{loading ? 'Sending...' : 'Send Reset Link'}</Text>
+            </TouchableOpacity>
           </>
         )}
       </View>
@@ -107,25 +96,35 @@ export function ForgotPasswordScreen({ navigation }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#fff' },
-  header: {
-    paddingTop: 60,
-    paddingBottom: 30,
-    paddingHorizontal: 24,
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#0F172A' },
+
+  header:  { paddingHorizontal: 24 },
+  backBtn: { paddingVertical: 12 },
+  backText:{ color: 'rgba(255,255,255,0.6)', fontSize: 16, fontWeight: '500' },
+
+  form: {
+    flex: 1, padding: 28, marginTop: 8,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
   },
-  back: { marginBottom: 16 },
-  backText: { color: 'rgba(255,255,255,0.8)', fontSize: 16 },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: '#fff' },
-  form: { flex: 1, padding: 24 },
-  title: { fontSize: 22, fontWeight: '700', color: COLORS.neutral[900], marginBottom: 8 },
-  subtitle: { fontSize: 15, color: COLORS.neutral[500], marginBottom: 24, lineHeight: 22 },
-  errorBox: { backgroundColor: '#FFEBEE', borderRadius: 10, padding: 12, marginBottom: 16 },
-  errorText: { color: COLORS.status.error, fontSize: 14 },
-  sendBtn: { marginTop: 8 },
-  successBox: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  successEmoji: { fontSize: 64, marginBottom: 16 },
-  successTitle: { fontSize: 24, fontWeight: '700', color: COLORS.neutral[900], marginBottom: 12 },
-  successBody: { fontSize: 15, color: COLORS.neutral[500], textAlign: 'center', lineHeight: 22, marginBottom: 32 },
-  backBtn: {},
+
+  title:    { fontSize: 26, fontWeight: '800', color: '#0F172A', marginBottom: 8 },
+  subtitle: { fontSize: 15, color: '#64748B', marginBottom: 28, lineHeight: 22 },
+
+  errorBox:  { backgroundColor: '#FEF2F2', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#FECACA' },
+  errorText: { color: '#DC2626', fontSize: 14, fontWeight: '500' },
+
+  ctaBtn: {
+    backgroundColor: ACCENT, borderRadius: 14, paddingVertical: 18, alignItems: 'center', marginTop: 8,
+    shadowColor: ACCENT, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 4,
+  },
+  ctaBtnDisabled: { opacity: 0.6 },
+  ctaText: { fontSize: 17, fontWeight: '700', color: '#fff' },
+
+  successBox:      { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  successIcon:     { width: 64, height: 64, borderRadius: 32, backgroundColor: '#ECFDF5', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  successIconText: { fontSize: 28, color: '#10B981' },
+  successTitle:    { fontSize: 24, fontWeight: '800', color: '#0F172A', marginBottom: 12 },
+  successBody:     { fontSize: 15, color: '#64748B', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
 })

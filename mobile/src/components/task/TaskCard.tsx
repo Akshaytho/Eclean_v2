@@ -25,7 +25,7 @@ interface TaskCardProps {
   showRate?: boolean
 }
 
-export function TaskCard({ task, onPress, showRate = true }: TaskCardProps) {
+export const TaskCard = React.memo(function TaskCard({ task, onPress, showRate = true }: TaskCardProps) {
   const cfg = STATUS_CONFIG[task.status] ?? STATUS_CONFIG.OPEN
 
   return (
@@ -64,7 +64,7 @@ export function TaskCard({ task, onPress, showRate = true }: TaskCardProps) {
       </View>
     </TouchableOpacity>
   )
-}
+})
 
 const s = StyleSheet.create({
   card:      { backgroundColor: COLORS.surface, borderRadius: 16, padding: 16, marginBottom: 10, elevation: 2, shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 6 },
