@@ -17,7 +17,7 @@ interface Props {
 }
 
 export const LinearGradient: React.FC<Props> = ({ colors, style, children, ...rest }) => {
-  const bg = colors && colors.length > 0 ? colors[0] : '#0A2463'
+  const bg = colors && colors.length > 0 ? colors[0] : '#1E293B'
   return (
     <View style={[StyleSheet.flatten(style), { backgroundColor: bg }]} {...rest}>
       {children}

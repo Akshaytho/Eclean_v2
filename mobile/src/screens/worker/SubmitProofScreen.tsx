@@ -19,17 +19,10 @@ import { useBackgroundLocation } from '../../hooks/useBackgroundLocation'
 import { formatMoney } from '../../utils/formatMoney'
 import type { WorkerStackParamList } from '../../navigation/types'
 import type { MediaType } from '../../types'
+import { formatElapsed } from '../../utils/formatTime'
 
 type Nav   = NativeStackNavigationProp<WorkerStackParamList, 'SubmitProof'>
 type Route = RouteProp<WorkerStackParamList, 'SubmitProof'>
-
-function formatElapsed(secs: number): string {
-  const h   = Math.floor(secs / 3600)
-  const m   = Math.floor((secs % 3600) / 60)
-  const s   = secs % 60
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`
-}
 
 export function SubmitProofScreen() {
   const navigation    = useNavigation<Nav>()

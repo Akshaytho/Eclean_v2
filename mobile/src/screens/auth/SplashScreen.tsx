@@ -21,40 +21,34 @@ export function SplashScreen({ navigation }: Props) {
   const { setUser, setLoading } = useAuthStore()
   const { connect } = useSocketStore()
 
-  // Animations
-  const logoScale = useRef(new Animated.Value(0.3)).current
+  const logoScale = useRef(new Animated.Value(0.5)).current
   const logoOpacity = useRef(new Animated.Value(0)).current
-  const taglineOpacity = useRef(new Animated.Value(0)).current
-  const taglineTranslate = useRef(new Animated.Value(20)).current
-  const dotsOpacity = useRef(new Animated.Value(0)).current
-  const pulseAnim = useRef(new Animated.Value(1)).current
+  const textOpacity = useRef(new Animated.Value(0)).current
+  const textTranslate = useRef(new Animated.Value(16)).current
+  const shimmerOpacity = useRef(new Animated.Value(0.3)).current
 
   useEffect(() => {
-    // Logo entrance
+    // Logo pop in
     Animated.parallel([
-      Animated.spring(logoScale, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
-      Animated.timing(logoOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.spring(logoScale, { toValue: 1, friction: 6, tension: 50, useNativeDriver: true }),
+      Animated.timing(logoOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
     ]).start()
 
-    // Tagline fade in
+    // Text slide up
     setTimeout(() => {
       Animated.parallel([
-        Animated.timing(taglineOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.timing(taglineTranslate, { toValue: 0, duration: 500, useNativeDriver: true }),
+        Animated.timing(textOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.spring(textTranslate, { toValue: 0, friction: 8, useNativeDriver: true }),
       ]).start()
-    }, 400)
+    }, 300)
 
-    // Loading dots
-    setTimeout(() => {
-      Animated.timing(dotsOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start()
-      // Pulse loop
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.2, duration: 800, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-        ])
-      ).start()
-    }, 700)
+    // Shimmer pulse
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerOpacity, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        Animated.timing(shimmerOpacity, { toValue: 0.3, duration: 1000, useNativeDriver: true }),
+      ])
+    ).start()
   }, [])
 
   useEffect(() => {
@@ -78,69 +72,57 @@ export function SplashScreen({ navigation }: Props) {
 
   return (
     <View style={s.container}>
-      {/* Background circles */}
-      <View style={s.bgCircle1} />
-      <View style={s.bgCircle2} />
-      <View style={s.bgCircle3} />
+      {/* Subtle background glow */}
+      <View style={s.glowTop} />
+      <View style={s.glowBottom} />
 
-      {/* Logo */}
+      {/* Logo mark */}
       <Animated.View style={[s.logoWrap, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
-        <View style={s.logoIcon}>
-          <View style={s.logoLeaf} />
-          <View style={s.logoLeaf2} />
+        <View style={s.logoCircle}>
+          <Text style={s.logoE}>e</Text>
         </View>
-        <Text style={s.logoText}>eClean</Text>
       </Animated.View>
 
-      {/* Tagline */}
-      <Animated.View style={{ opacity: taglineOpacity, transform: [{ translateY: taglineTranslate }] }}>
-        <Text style={s.tagline}>Clean cities. Real work. Instant pay.</Text>
+      {/* Brand name */}
+      <Animated.View style={{ opacity: textOpacity, transform: [{ translateY: textTranslate }] }}>
+        <Text style={s.brand}>eClean</Text>
+        <Text style={s.tagline}>Clean cities. Verified work.</Text>
       </Animated.View>
 
-      {/* Loading indicator */}
-      <Animated.View style={[s.dotsRow, { opacity: dotsOpacity }]}>
-        <Animated.View style={[s.dot, { transform: [{ scale: pulseAnim }] }]} />
-        <Animated.View style={[s.dot, s.dotDelay1, { transform: [{ scale: pulseAnim }] }]} />
-        <Animated.View style={[s.dot, s.dotDelay2, { transform: [{ scale: pulseAnim }] }]} />
+      {/* Loading bar */}
+      <Animated.View style={[s.loadBar, { opacity: shimmerOpacity }]}>
+        <View style={s.loadBarFill} />
       </Animated.View>
 
-      {/* Bottom branding */}
-      <View style={s.bottomBrand}>
-        <Text style={s.bottomText}>AI-Powered Civic Cleaning</Text>
-        <View style={s.bottomLine} />
-        <Text style={s.versionText}>v1.0</Text>
+      {/* Bottom */}
+      <View style={s.bottom}>
+        <Text style={s.bottomText}>AI-Powered Civic Platform</Text>
       </View>
     </View>
   )
 }
 
 const s = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: '#0F2B1A', alignItems: 'center', justifyContent: 'center' },
+  container: { flex: 1, backgroundColor: '#0F172A', alignItems: 'center', justifyContent: 'center' },
 
-  // Background decoration
-  bgCircle1:   { position: 'absolute', width: SW * 1.5, height: SW * 1.5, borderRadius: SW * 0.75, backgroundColor: 'rgba(22, 163, 74, 0.08)', top: -SW * 0.5, right: -SW * 0.3 },
-  bgCircle2:   { position: 'absolute', width: SW * 1.2, height: SW * 1.2, borderRadius: SW * 0.6, backgroundColor: 'rgba(22, 163, 74, 0.05)', bottom: -SW * 0.4, left: -SW * 0.4 },
-  bgCircle3:   { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(22, 163, 74, 0.12)', top: SH * 0.15, left: SW * 0.6 },
+  // Subtle radial glows
+  glowTop:    { position: 'absolute', top: -SW * 0.3, right: -SW * 0.2, width: SW, height: SW, borderRadius: SW / 2, backgroundColor: 'rgba(244, 63, 94, 0.06)' },
+  glowBottom: { position: 'absolute', bottom: -SW * 0.3, left: -SW * 0.2, width: SW, height: SW, borderRadius: SW / 2, backgroundColor: 'rgba(99, 102, 241, 0.06)' },
 
   // Logo
-  logoWrap:     { alignItems: 'center', marginBottom: 16 },
-  logoIcon:     { width: 72, height: 72, borderRadius: 20, backgroundColor: '#16A34A', alignItems: 'center', justifyContent: 'center', marginBottom: 20, shadowColor: '#16A34A', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 20 },
-  logoLeaf:     { width: 28, height: 28, borderRadius: 14, borderWidth: 3, borderColor: '#fff', borderBottomLeftRadius: 4, transform: [{ rotate: '45deg' }] },
-  logoLeaf2:    { position: 'absolute', width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)', borderBottomLeftRadius: 2, transform: [{ rotate: '45deg' }], top: 14, left: 14 },
-  logoText:     { fontSize: 44, fontWeight: '900', color: '#fff', letterSpacing: -1.5 },
+  logoWrap:   { marginBottom: 24 },
+  logoCircle: { width: 80, height: 80, borderRadius: 24, backgroundColor: '#F43F5E', alignItems: 'center', justifyContent: 'center', shadowColor: '#F43F5E', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 24 },
+  logoE:      { fontSize: 42, fontWeight: '900', color: '#fff', marginTop: -2 },
 
-  // Tagline
-  tagline:      { fontSize: 15, color: 'rgba(255,255,255,0.5)', textAlign: 'center', letterSpacing: 0.5 },
+  // Text
+  brand:   { fontSize: 40, fontWeight: '900', color: '#fff', textAlign: 'center', letterSpacing: -1 },
+  tagline: { fontSize: 15, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: 8, letterSpacing: 0.5 },
 
-  // Loading dots
-  dotsRow:      { flexDirection: 'row', gap: 8, marginTop: 48 },
-  dot:          { width: 8, height: 8, borderRadius: 4, backgroundColor: '#16A34A' },
-  dotDelay1:    { opacity: 0.7 },
-  dotDelay2:    { opacity: 0.4 },
+  // Loading
+  loadBar:     { width: 48, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.1)', marginTop: 48, overflow: 'hidden' },
+  loadBarFill: { width: 48, height: 3, borderRadius: 2, backgroundColor: '#F43F5E' },
 
   // Bottom
-  bottomBrand:  { position: 'absolute', bottom: 60, alignItems: 'center' },
-  bottomText:   { fontSize: 12, color: 'rgba(255,255,255,0.3)', letterSpacing: 1.5, textTransform: 'uppercase' },
-  bottomLine:   { width: 30, height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: 8 },
-  versionText:  { fontSize: 11, color: 'rgba(255,255,255,0.2)' },
+  bottom:     { position: 'absolute', bottom: 60, alignItems: 'center' },
+  bottomText: { fontSize: 11, color: 'rgba(255,255,255,0.2)', letterSpacing: 1.5, textTransform: 'uppercase' },
 })

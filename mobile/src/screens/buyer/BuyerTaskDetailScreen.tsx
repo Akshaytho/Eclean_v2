@@ -28,6 +28,7 @@ import {
   CheckCircle, XCircle, Navigation, Star, Clock,
 } from 'lucide-react-native'
 import * as Haptics from 'expo-haptics'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBadge }    from '../../components/ui/Badge'
 import { Button }         from '../../components/ui/Button'
 import { COLORS }         from '../../constants/colors'
@@ -71,6 +72,7 @@ export function BuyerTaskDetailScreen() {
   const { taskId }   = route.params
   const qc           = useQueryClient()
   const isActing     = useRef(false)
+  const insets       = useSafeAreaInsets()
   const { socket, joinTask, leaveTask } = useSocketStore()
 
   // Reject modal state
@@ -182,7 +184,7 @@ export function BuyerTaskDetailScreen() {
     <View style={s.root}>
 
       {/* ── Header ── */}
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: (insets.top > 0 ? insets.top : 24) + 8 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <ChevronLeft size={22} color={B.text.primary} />
         </TouchableOpacity>
@@ -430,7 +432,7 @@ export function BuyerTaskDetailScreen() {
 const s = StyleSheet.create({
   root:        { flex: 1, backgroundColor: B.surface },
   loading:     { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: B.border },
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: B.border },
   backBtn:     { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: B.text.primary, textAlign: 'center' },
 

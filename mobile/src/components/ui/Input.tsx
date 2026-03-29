@@ -40,8 +40,8 @@ export function Input({
         <TextInput
           {...props}
           secureTextEntry={hidden}
-          onFocus={(e) => { setFocused(true); props.onFocus?.(e) }}
-          onBlur={(e)  => { setFocused(false); props.onBlur?.(e) }}
+          onFocus={(e) => { props.onFocus?.(e); setFocused(true) }}
+          onBlur={(e)  => { props.onBlur?.(e); setFocused(false) }}
           style={[styles.input, props.style]}
           placeholderTextColor={COLORS.neutral[400]}
           autoCapitalize={props.autoCapitalize ?? 'none'}

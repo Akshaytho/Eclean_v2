@@ -26,8 +26,15 @@ export async function uploadTaskMedia(params: {
   file:      Buffer
   mimeType:  string
   sizeBytes: number
+  deviceMeta?: {
+    capturedLat: number | null
+    capturedLng: number | null
+    capturedAt:  string | null
+    deviceId:    string | null
+    photoHash:   string | null
+  }
 }) {
-  const { userId, userRole, taskId, mediaType, file, mimeType, sizeBytes } = params
+  const { userId, userRole, taskId, mediaType, file, mimeType, sizeBytes, deviceMeta } = params
 
   // Validate file type
   if (!(ALLOWED_MIME_TYPES as readonly string[]).includes(mimeType)) {
@@ -106,14 +113,17 @@ export async function uploadTaskMedia(params: {
     },
   })
 
-  // ── Write EXIF analytics (fire-and-forget) ──────────────────────────────────
-  // Captures the photo's GPS, timestamp, device — and flags fraud if GPS
-  // is too far from the task location. This data is irreplaceable.
+  // ── Write analytics (fire-and-forget) ────────────────────────────────────────
+  // Device metadata from phone is MORE RELIABLE than EXIF (which gets stripped
+  // by expo-image-manipulator compression). Use device meta as primary source,
+  // EXIF as fallback.
+  const bestLat = deviceMeta?.capturedLat ?? exif.lat
+  const bestLng = deviceMeta?.capturedLng ?? exif.lng
+
   const { distanceMeters, isFlagged, flagReason } = computePhotoDistance(
-    exif.lat, exif.lng, task.locationLat, task.locationLng,
+    bestLat, bestLng, task.locationLat, task.locationLng,
   )
 
-  // Write AnalyticsPhotoMeta asynchronously — never block the response
   void prisma.analyticsPhotoMeta.create({
     data: {
       mediaId:                media.id,
@@ -121,6 +131,7 @@ export async function uploadTaskMedia(params: {
       uploaderId:             userId,
       uploaderRole:           userRole,
       mediaType,
+      // EXIF data (may be null after compression)
       exifLat:                exif.lat,
       exifLng:                exif.lng,
       exifTimestamp:           exif.timestamp,
@@ -129,25 +140,32 @@ export async function uploadTaskMedia(params: {
       deviceModel:            exif.model,
       imageWidth:             exif.imageWidth,
       imageHeight:            exif.imageHeight,
+      // Device-captured metadata from phone (reliable — from expo-location)
+      capturedLat:            deviceMeta?.capturedLat ?? null,
+      capturedLng:            deviceMeta?.capturedLng ?? null,
+      capturedAt:             deviceMeta?.capturedAt ? new Date(deviceMeta.capturedAt) : null,
+      capturedDeviceId:       deviceMeta?.deviceId ?? null,
+      photoHash:              deviceMeta?.photoHash ?? null,
+      // Fraud detection — uses best available GPS
       taskLat:                task.locationLat,
       taskLng:                task.locationLng,
       distanceFromTaskMeters: distanceMeters,
       isFlagged,
       flagReason,
     },
-  }).catch((err) => {
-    logger.error({ err, mediaId: media.id }, 'AnalyticsPhotoMeta write failed (non-fatal)')
+  }).catch((writeErr: unknown) => {
+    logger.error({ err: writeErr, mediaId: media.id }, 'AnalyticsPhotoMeta write failed (non-fatal)')
   })
 
-  // Log the upload event for the EventLog stream
   logMediaEvent(media.id, 'uploaded', userId, userRole, {
     taskId,
     mediaType,
     mimeType,
     sizeBytes,
     url: uploadResult.secure_url,
-    exifGps: exif.lat !== null ? { lat: exif.lat, lng: exif.lng } : null,
-    exifDevice: exif.model,
+    gps: bestLat !== null ? { lat: bestLat, lng: bestLng, source: deviceMeta?.capturedLat ? 'device' : 'exif' } : null,
+    device: deviceMeta?.deviceId ?? exif.model,
+    photoHash: deviceMeta?.photoHash ?? null,
     isFlagged,
   })
 

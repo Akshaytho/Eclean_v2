@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useSocketStore } from '../stores/socketStore'
 
 /**
  * useSocket — subscribe to a socket event with automatic cleanup.
+ * Uses a ref to always call the latest handler without re-subscribing.
  *
  * Usage:
  *   useSocket('task:updated', (data) => { ... })
@@ -14,12 +15,15 @@ export function useSocket<T = unknown>(
   deps:     unknown[] = [],
 ): void {
   const socket = useSocketStore(s => s.socket)
+  const handlerRef = useRef(handler)
+  handlerRef.current = handler
 
   useEffect(() => {
     if (!socket) return
-    socket.on(event, handler as (...args: unknown[]) => void)
+    const listener = (data: T) => handlerRef.current(data)
+    socket.on(event, listener as (...args: unknown[]) => void)
     return () => {
-      socket.off(event, handler as (...args: unknown[]) => void)
+      socket.off(event, listener as (...args: unknown[]) => void)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, event, ...deps])

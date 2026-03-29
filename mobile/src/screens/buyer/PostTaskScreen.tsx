@@ -16,6 +16,7 @@ import { mediaApi } from '../../api/media.api'
 import { LinearGradient } from '../../components/LinearGradientShim'
 import { COLORS }        from '../../constants/colors'
 import { BUYER_THEME as B } from '../../constants/buyerTheme'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Location from 'expo-location'
 import { buyerTasksApi } from '../../api/tasks.api'
 import { paymentsApi } from '../../api/payments.api'
@@ -58,6 +59,7 @@ const INITIAL: FormState = {
 export function PostTaskScreen() {
   const navigation = useNavigation<Nav>()
   const qc         = useQueryClient()
+  const insets     = useSafeAreaInsets()
   const [step, setStep] = useState(0)
   const [form, setForm] = useState<FormState>(INITIAL)
   const [gpsLoading, setGpsLoading] = useState(false)
@@ -202,7 +204,7 @@ export function PostTaskScreen() {
   return (
     <View style={s.root}>
       {/* Header */}
-      <LinearGradient colors={B.gradient} style={s.header}>
+      <LinearGradient colors={B.gradient} style={[s.header, { paddingTop: (insets.top > 0 ? insets.top : 24) + 8 }]}>
         <TouchableOpacity onPress={() => step > 0 ? setStep(s => s - 1) : navigation.goBack()} style={s.backBtn}>
           <ChevronLeft size={22} color="#fff" />
         </TouchableOpacity>
@@ -446,7 +448,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 
 const s = StyleSheet.create({
   root:     { flex: 1, backgroundColor: B.background },
-  header:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 52, paddingBottom: 16, paddingHorizontal: 20 },
+  header:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 16, paddingHorizontal: 20 },
   backBtn:  { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#fff' },
   stepRow:  { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: B.surface, borderBottomWidth: 1, borderBottomColor: B.border },

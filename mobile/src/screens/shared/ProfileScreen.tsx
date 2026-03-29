@@ -20,7 +20,7 @@ import { COLORS }          from '../../constants/colors'
 
 const ROLE_GRADIENTS: Record<string, string[]> = {
   WORKER:     ['#1A5C3A', '#2E8B57'],
-  BUYER:      ['#061740', '#0A2463'],
+  BUYER:      ['#1E293B', '#334155'],
   SUPERVISOR: ['#1E3A5F', '#2563EB'],
   CITIZEN:    ['#4A1D96', '#7C3AED'],
   ADMIN:      ['#1F2937', '#374151'],
@@ -175,8 +175,8 @@ function buildStats(role: string, wp: any, bp: any) {
     { label: 'Rating',     value: wp?.rating > 0 ? `${wp.rating.toFixed(1)}★` : '—', icon: <Star size={18} color="#F59E0B" />, color: '#F59E0B' },
   ]
   if (role === 'BUYER') return [
-    { label: 'Tasks Posted', value: String(bp?.totalTasksPosted ?? 0), icon: <ClipboardList size={18} color="#0A2463" />, color: '#0A2463' },
-    { label: 'Total Spent',  value: bp?.totalSpentCents ? formatMoney(bp.totalSpentCents) : '₹0', icon: <Wallet size={18} color="#D4A843" />, color: '#D4A843' },
+    { label: 'Tasks Posted', value: String(bp?.totalTasksPosted ?? 0), icon: <ClipboardList size={18} color="#F43F5E" />, color: '#F43F5E' },
+    { label: 'Total Spent',  value: bp?.totalSpentCents ? formatMoney(bp.totalSpentCents) : '₹0', icon: <Wallet size={18} color="#6366F1" />, color: '#6366F1' },
   ]
   return []
 }

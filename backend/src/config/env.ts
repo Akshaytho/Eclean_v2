@@ -11,11 +11,11 @@ const envSchema = z.object({
   BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(14).default(12),
   CORS_ORIGINS: z.string().default('http://localhost:3001'),
   FRONTEND_URL: z.string().default('http://localhost:3001'),
-  // Required when media/AI modules are active — validated at call time
-  CLOUDINARY_CLOUD_NAME: z.string().default(''),
-  CLOUDINARY_API_KEY: z.string().default(''),
-  CLOUDINARY_API_SECRET: z.string().default(''),
-  ANTHROPIC_API_KEY: z.string().default(''),
+  // Media + AI: empty = disabled (logs warning at startup, fails clearly at call time)
+  CLOUDINARY_CLOUD_NAME: z.string().optional().default(''),
+  CLOUDINARY_API_KEY: z.string().optional().default(''),
+  CLOUDINARY_API_SECRET: z.string().optional().default(''),
+  ANTHROPIC_API_KEY: z.string().optional().default(''),
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
@@ -36,3 +36,14 @@ if (!parsed.success) {
 }
 
 export const env: Env = parsed.data
+
+// Warn about missing optional service keys at startup (loud but non-fatal)
+if (!env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY) {
+  console.warn('⚠️  CLOUDINARY keys not set — media uploads will fail')
+}
+if (!env.ANTHROPIC_API_KEY) {
+  console.warn('⚠️  ANTHROPIC_API_KEY not set — AI verification will fail')
+}
+if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
+  console.warn('⚠️  RAZORPAY keys not set — payment features disabled')
+}

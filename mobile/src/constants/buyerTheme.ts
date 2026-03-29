@@ -1,117 +1,83 @@
 // ─────────────────────────────────────────────────────────────
-// eClean — Buyer Theme
+// eClean — Buyer Theme v2
 // ─────────────────────────────────────────────────────────────
 //
-// A self-contained theme object for the BUYER role.
-// Workers keep the existing green COLORS from colors.ts — this
-// file is a parallel palette that buyer screens can import
-// instead. To reskin the buyer experience, change values here;
-// no other file needs editing.
+// Inspired by Zomato, Uber, Rapido, Swiggy — bold, consumer-
+// driven, high-contrast. Designed for quick scanning and one-
+// thumb operation. Vibrant coral CTA draws the eye to the main
+// action; deep ink text is easy to read in bright sunlight.
 //
-// Design rationale
-// ----------------
-// Buyers are *paying clients* — the feel should be corporate,
-// trustworthy, and premium. Deep navy conveys authority and
-// reliability (banks, insurance, enterprise SaaS). The gold
-// accent adds a touch of premium without being flashy.
-// Cool-toned grays replace the warm creams of the worker theme
-// so the two roles feel visually distinct at a glance.
-//
-// The navy primary (#0A2463) is already used as the Android
-// adaptive-icon background and notification accent in app.json,
-// so it is the natural "brand navy" for this app.
+// Palette logic:
+//   • Primary (#1E293B) — deep slate ink for headers & text
+//   • CTA (#F43F5E) — vibrant rose/coral for buttons & actions
+//   • Accent (#6366F1) — indigo for links & interactive elements
+//   • Success green for completed, warm amber for pending
+//   • Pure white cards on soft gray (#F1F5F9) backgrounds
 // ─────────────────────────────────────────────────────────────
 
 export const BUYER_THEME = {
   // ── Primary palette ──────────────────────────────────────
-  // Deep navy — authoritative, trustworthy (matches adaptive icon)
-  primary:      '#0A2463',
-  // Slightly lighter navy for hover / pressed states
-  primaryLight: '#143A8C',
-  // Very dark navy for contrast-heavy text-on-dark situations
-  primaryDark:  '#061740',
-  // Featherweight tint of the primary — use for icon backgrounds,
-  // badges, or subtle highlights on white surfaces
-  primaryTint:  '#E8EDF7',
+  primary:      '#F43F5E',         // vibrant rose — THE main CTA color
+  primaryLight: '#FB7185',         // lighter rose for pressed states
+  primaryDark:  '#E11D48',         // darker rose for contrast
+  primaryTint:  '#FFF1F2',         // whisper-pink background tint
 
   // ── Secondary / accent ───────────────────────────────────
-  // Warm gold — the premium accent. Use sparingly: CTA shimmer,
-  // price tags, "featured" badges. Contrast-safe on dark navy.
-  secondary:    '#D4A843',
-  // Lighter gold for backgrounds (e.g. a "pending review" banner)
-  secondaryLight: '#F5E6B8',
-  // Darker gold for text-on-light where the secondary feels too washed
-  secondaryDark:  '#A17E2E',
+  secondary:    '#6366F1',         // indigo — links, toggles, info badges
+  secondaryLight: '#EEF2FF',       // indigo tint for backgrounds
+  secondaryDark:  '#4F46E5',       // deeper indigo for hover
 
   // ── Gradient ─────────────────────────────────────────────
-  // Two-stop gradient for header banners and hero sections.
-  // Goes from primary navy to a mid-navy — gives depth without
-  // introducing a new hue. Use with LinearGradient.
-  gradient: ['#0A2463', '#143A8C'] as const,
+  gradient: ['#1E293B', '#334155'] as const,  // slate ink gradient for headers
 
   // ── Surfaces ─────────────────────────────────────────────
-  // Cool-toned rather than the warm cream (#FAF8F4) of COLORS.
-  // This makes buyer screens feel crisper and more "business app".
-  surface:    '#FFFFFF',                   // cards, sheets, modals
-  background: '#F4F6FA',                   // screen background — cool blue-gray
-  card:       '#FFFFFF',                   // explicit alias for card bg
-  border:     '#DFE3EC',                   // subtle cool-gray dividers
-  shadow:     'rgba(10, 36, 99, 0.06)',    // navy-tinted shadow for depth
+  surface:    '#FFFFFF',
+  background: '#F8FAFC',           // very light cool gray — Uber-style
+  card:       '#FFFFFF',
+  border:     '#E2E8F0',           // soft slate border
+  shadow:     'rgba(15, 23, 42, 0.08)',
 
   // ── Text ─────────────────────────────────────────────────
   text: {
-    primary:   '#111827',   // near-black — high contrast on white
-    secondary: '#4B5563',   // medium-gray — subtitles, metadata
-    muted:     '#9CA3AF',   // light-gray — timestamps, placeholders
-    inverse:   '#FFFFFF',   // text on dark / gradient backgrounds
+    primary:   '#0F172A',          // near-black slate — max readability
+    secondary: '#475569',          // medium slate
+    muted:     '#94A3B8',          // light slate — timestamps
+    inverse:   '#FFFFFF',
   },
 
   // ── Accent ───────────────────────────────────────────────
-  // A vibrant mid-blue for interactive highlights — links,
-  // focus rings, toggle-on states. Distinct from the deep navy
-  // primary so it reads as "interactive" not "header".
-  accent:     '#3B82F6',
+  accent:     '#6366F1',           // indigo — same as secondary
 
   // ── Status colors ────────────────────────────────────────
-  // Re-declared here so buyer screens can pull everything from
-  // one import. Values match the global COLORS.status palette
-  // for consistency.
   status: {
-    success:  '#16A34A',   // slightly brighter green than worker brand
-    warning:  '#F59E0B',   // golden orange — review-needed banners
-    error:    '#DC2626',   // vibrant red — destructive actions
-    info:     '#3B82F6',   // same as accent — informational toasts
+    success:  '#10B981',           // emerald — bolder than before
+    warning:  '#F59E0B',           // amber
+    error:    '#EF4444',           // red
+    info:     '#3B82F6',           // blue
   },
 
   // ── Tab bar ──────────────────────────────────────────────
-  // Purpose-built tokens for the bottom-tab navigator so the
-  // buyer tab bar is navy-accented rather than green.
   tab: {
-    active:     '#0A2463',    // selected icon + label — navy
-    inactive:   '#9CA3AF',    // unselected icon + label — muted gray
-    background: '#FFFFFF',    // tab bar surface
-    border:     '#DFE3EC',    // thin top-border of the tab bar
+    active:     '#F43F5E',         // rose — selected tab
+    inactive:   '#94A3B8',         // muted slate
+    background: '#FFFFFF',
+    border:     '#E2E8F0',
   },
 
   // ── Stat / dashboard card tints ──────────────────────────
-  // Pre-mixed light backgrounds for dashboard stat cards.
-  // Each is a barely-there wash of the corresponding accent.
   tint: {
-    blue:   '#E8EDF7',   // "Posted" stat — maps to primary
-    gold:   '#FEF9C3',   // "Active" stat — maps to secondary
-    green:  '#DCFCE7',   // "Completed" stat
-    purple: '#F3E8FF',   // "Spent" stat
+    blue:   '#EFF6FF',
+    gold:   '#FEF3C7',
+    green:  '#ECFDF5',
+    purple: '#EEF2FF',
+    rose:   '#FFF1F2',
+    orange: '#FFF7ED',
   },
 
   // ── Misc tokens ──────────────────────────────────────────
-  // Quick-reference values that avoid magic strings in styles.
-  overlay:    'rgba(10, 36, 99, 0.40)',    // modal / bottom-sheet scrim
-  skeleton:   '#E5E7EB',                   // shimmer placeholder color
-  divider:    '#E5E7EB',                   // horizontal rule in lists
+  overlay:    'rgba(15, 23, 42, 0.50)',
+  skeleton:   '#E2E8F0',
+  divider:    '#E2E8F0',
 } as const
 
-// ── Type export ────────────────────────────────────────────
-// Useful if you want to accept the theme as a prop or build
-// a ThemeContext later. `typeof BUYER_THEME` captures every
-// nested literal type automatically.
 export type BuyerTheme = typeof BUYER_THEME

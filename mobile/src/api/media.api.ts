@@ -1,23 +1,71 @@
 import { apiClient } from './client'
+import * as ImageManipulator from 'expo-image-manipulator'
 import type { TaskMedia, MediaType } from '../types'
 
-export const mediaApi = {
-  upload: async (taskId: string, uri: string, mediaType: MediaType): Promise<TaskMedia> => {
-    const formData = new FormData()
+const MAX_DIMENSION = 1200
+const COMPRESS_QUALITY = 0.75
 
-    // React Native FormData accepts { uri, name, type }
-    formData.append('file', {
+async function compressPhoto(uri: string): Promise<string> {
+  try {
+    const result = await ImageManipulator.manipulateAsync(
       uri,
+      [{ resize: { width: MAX_DIMENSION } }],
+      { compress: COMPRESS_QUALITY, format: ImageManipulator.SaveFormat.JPEG },
+    )
+    return result.uri
+  } catch {
+    return uri
+  }
+}
+
+/** Metadata captured on-device — GPS from expo-location, hash from expo-crypto */
+export interface PhotoMetadata {
+  lat:       number | null
+  lng:       number | null
+  timestamp: string        // ISO UTC
+  deviceId:  string
+  photoHash: string        // SHA-256 of raw photo bytes
+}
+
+export const mediaApi = {
+  /**
+   * Upload photo with device-captured metadata.
+   * Backend receives: file + mediaType + lat/lng/timestamp/deviceId/photoHash
+   * This supplements EXIF (which gets stripped by compression).
+   */
+  upload: async (
+    taskId: string,
+    uri: string,
+    mediaType: MediaType,
+    metadata?: PhotoMetadata,
+  ): Promise<TaskMedia> => {
+    const compressedUri = await compressPhoto(uri)
+
+    const formData = new FormData()
+    formData.append('file', {
+      uri: compressedUri,
       name: `${mediaType.toLowerCase()}_${Date.now()}.jpg`,
       type: 'image/jpeg',
     } as unknown as Blob)
 
     formData.append('mediaType', mediaType)
 
+    // Send device-captured metadata alongside the photo
+    if (metadata) {
+      if (metadata.lat != null) formData.append('capturedLat', String(metadata.lat))
+      if (metadata.lng != null) formData.append('capturedLng', String(metadata.lng))
+      if (metadata.timestamp)   formData.append('capturedAt', metadata.timestamp)
+      if (metadata.deviceId)    formData.append('deviceId', metadata.deviceId)
+      if (metadata.photoHash)   formData.append('photoHash', metadata.photoHash)
+    }
+
     const res = await apiClient.post<{ media: TaskMedia }>(
       `/tasks/${taskId}/media`,
       formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } },
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30_000,
+      },
     )
     return res.data.media
   },

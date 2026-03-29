@@ -1,35 +1,32 @@
 import React, { useState } from 'react'
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
+  View, Text, StyleSheet, TouchableOpacity,
+  KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native'
-import { LinearGradient } from '../../components/LinearGradientShim'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { AuthStackParamList } from '../../navigation/types'
 import { Input } from '../../components/ui/Input'
-import { Button } from '../../components/ui/Button'
 import { authApi } from '../../api/auth.api'
 import { saveTokens } from '../../stores/authStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useSocketStore } from '../../stores/socketStore'
 import { requestPushPermission } from '../../utils/permissions'
-import { toast } from '../../stores/toastStore'
-import { COLORS } from '../../constants/colors'
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>
 }
+
+// Neutral blue — not buyer rose or worker green
+const ACCENT = '#3B82F6'
+const ACCENT_BG = '#EFF6FF'
 
 export function LoginScreen({ navigation }: Props) {
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState<string | null>(null)
+  const insets = useSafeAreaInsets()
 
   const { setUser } = useAuthStore()
   const { connect } = useSocketStore()
@@ -40,7 +37,6 @@ export function LoginScreen({ navigation }: Props) {
       setError('Email and password are required.')
       return
     }
-
     setLoading(true)
     try {
       const res = await authApi.login(email.trim().toLowerCase(), password)
@@ -51,14 +47,10 @@ export function LoginScreen({ navigation }: Props) {
       })
       setUser(res.user)
       connect(res.accessToken)
-
-      // Request push permission after login — improves opt-in rate
       const expoPushToken = await requestPushPermission()
       if (expoPushToken) {
         authApi.saveDeviceToken(expoPushToken).catch(() => {})
       }
-
-      // RootNavigator watches isLoggedIn → automatically navigates to role tabs
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: { message?: string } } } })
@@ -71,25 +63,30 @@ export function LoginScreen({ navigation }: Props) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={s.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header */}
-        <LinearGradient colors={[COLORS.brand.primary, COLORS.brand.dark]} style={styles.header}>
-          <Text style={styles.headerLogo}>eClean</Text>
-          <Text style={styles.headerSub}>Welcome back</Text>
-        </LinearGradient>
+        <View style={[s.header, { paddingTop: (insets.top > 0 ? insets.top : 24) + 40 }]}>
+          <View style={s.logoMark}>
+            <Text style={s.logoE}>e</Text>
+          </View>
+          <Text style={s.headerTitle}>Welcome back</Text>
+          <Text style={s.headerSub}>Sign in to your eClean account</Text>
+        </View>
 
         {/* Form */}
-        <View style={styles.form}>
-          <Text style={styles.title}>Sign In</Text>
-
-          {error ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{error}</Text>
+        <View style={s.form}>
+          {error && (
+            <View style={s.errorBox}>
+              <Text style={s.errorText}>{error}</Text>
             </View>
-          ) : null}
+          )}
 
           <Input
             label="Email"
@@ -99,7 +96,6 @@ export function LoginScreen({ navigation }: Props) {
             onChangeText={setEmail}
             autoCapitalize="none"
           />
-
           <Input
             label="Password"
             placeholder="Your password"
@@ -110,24 +106,30 @@ export function LoginScreen({ navigation }: Props) {
 
           <TouchableOpacity
             onPress={() => navigation.navigate('ForgotPassword')}
-            style={styles.forgotBtn}
+            style={s.forgotBtn}
           >
-            <Text style={styles.forgotText}>Forgot password?</Text>
+            <Text style={s.forgotText}>Forgot password?</Text>
           </TouchableOpacity>
 
-          <Button
-            label="Sign In"
+          <TouchableOpacity
+            style={[s.ctaBtn, loading && s.ctaBtnDisabled]}
             onPress={handleLogin}
-            loading={loading}
-            fullWidth
-            size="lg"
-            style={styles.loginBtn}
-          />
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            <Text style={s.ctaText}>{loading ? 'Signing in...' : 'Sign In'}</Text>
+          </TouchableOpacity>
 
-          <View style={styles.registerRow}>
-            <Text style={styles.registerLabel}>Don't have an account? </Text>
+          <View style={s.dividerRow}>
+            <View style={s.dividerLine} />
+            <Text style={s.dividerText}>or</Text>
+            <View style={s.dividerLine} />
+          </View>
+
+          <View style={s.switchRow}>
+            <Text style={s.switchLabel}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-              <Text style={styles.registerLink}>Register</Text>
+              <Text style={s.switchLink}>Create one</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -136,37 +138,45 @@ export function LoginScreen({ navigation }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
-  flex:   { flex: 1, backgroundColor: '#fff' },
+const s = StyleSheet.create({
+  root:   { flex: 1, backgroundColor: '#0F172A' },
   scroll: { flexGrow: 1 },
-  header: {
-    paddingTop:    80,
-    paddingBottom: 32,
-    paddingHorizontal: 24,
-    alignItems: 'center',
+
+  header: { paddingHorizontal: 28, paddingBottom: 36, alignItems: 'center' },
+  logoMark: {
+    width: 60, height: 60, borderRadius: 20,
+    backgroundColor: ACCENT,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 24,
+    shadowColor: ACCENT, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 20,
   },
-  headerLogo: { fontSize: 40, fontWeight: '800', color: '#fff' },
-  headerSub:  { fontSize: 16, color: 'rgba(255,255,255,0.8)', marginTop: 6 },
+  logoE:       { fontSize: 32, fontWeight: '900', color: '#fff' },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+  headerSub:   { fontSize: 15, color: 'rgba(255,255,255,0.45)', marginTop: 6 },
+
   form: {
-    flex: 1,
-    padding: 24,
+    flex: 1, padding: 28,
     backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    marginTop: -20,
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
   },
-  title: { fontSize: 24, fontWeight: '700', color: COLORS.neutral[900], marginBottom: 20 },
-  errorBox: {
-    backgroundColor: '#FFEBEE',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
+
+  errorBox:  { backgroundColor: '#FEF2F2', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#FECACA' },
+  errorText: { color: '#DC2626', fontSize: 14, fontWeight: '500' },
+
+  forgotBtn:  { alignSelf: 'flex-end', marginBottom: 24, marginTop: -8 },
+  forgotText: { color: ACCENT, fontSize: 14, fontWeight: '600' },
+
+  ctaBtn: {
+    backgroundColor: ACCENT, borderRadius: 14, paddingVertical: 18, alignItems: 'center',
+    shadowColor: ACCENT, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 4,
   },
-  errorText: { color: COLORS.status.error, fontSize: 14 },
-  forgotBtn: { alignSelf: 'flex-end', marginBottom: 20, marginTop: -8 },
-  forgotText: { color: COLORS.brand.primary, fontSize: 14 },
-  loginBtn: { marginBottom: 24 },
-  registerRow: { flexDirection: 'row', justifyContent: 'center' },
-  registerLabel: { color: COLORS.neutral[500], fontSize: 14 },
-  registerLink: { color: COLORS.brand.primary, fontSize: 14, fontWeight: '600' },
+  ctaBtnDisabled: { opacity: 0.6 },
+  ctaText: { fontSize: 17, fontWeight: '700', color: '#fff' },
+
+  dividerRow:  { flexDirection: 'row', alignItems: 'center', marginVertical: 24, gap: 12 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
+  dividerText: { fontSize: 13, color: '#94A3B8', fontWeight: '500' },
+
+  switchRow:   { flexDirection: 'row', justifyContent: 'center' },
+  switchLabel: { color: '#64748B', fontSize: 15 },
+  switchLink:  { color: ACCENT, fontSize: 15, fontWeight: '700' },
 })
