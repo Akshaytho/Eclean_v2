@@ -429,3 +429,10 @@ All 4 flows now wait up to 40s after tapping Sign In before asserting
 home screen content.
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23677843527
 - **Status:** Unresolved — add fix description when fixed
+
+## ❌ FAILURE: 2026-03-29 11:08 UTC
+- **Workflow:** CI — Quality Gate
+- **Branch:** integration
+- **Commit:** `f81b20d`
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23707659265
+- **Status:** Unresolved
