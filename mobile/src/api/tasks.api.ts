@@ -60,6 +60,7 @@ export const buyerTasksApi = {
     dirtyLevel: DirtyLevel; urgency?: TaskUrgency; rateCents?: number
     locationLat?: number; locationLng?: number; locationAddress?: string
     zoneId?: string; workWindowStart?: string; workWindowEnd?: string
+    razorpayOrderId?: string; razorpayPaymentId?: string; razorpaySignature?: string
   }) =>
     apiClient.post<{ task: Task }>('/buyer/tasks', input).then((r) => r.data.task),
 

@@ -17,6 +17,7 @@ import { citizenRoutes } from './modules/citizen/citizen.routes'
 import { adminRoutes } from './modules/admin/admin.routes'
 import { notificationsRoutes } from './modules/notifications/notifications.routes'
 import { payoutsRoutes } from './modules/payouts/payouts.routes'
+import { paymentRoutes } from './modules/payments/payment.routes'
 import { analyticsRoutes } from './intelligence/analytics/analytics.routes'
 import { dataExportRoutes } from './intelligence/data-export/export.routes'
 import type { FastifyInstance } from 'fastify'
@@ -70,6 +71,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   void app.register(adminRoutes,         { prefix: '/api/v1/admin' })
   void app.register(notificationsRoutes, { prefix: '/api/v1/notifications' })
   void app.register(payoutsRoutes,       { prefix: '/api/v1' })
+  void app.register(paymentRoutes,       { prefix: '/api/v1/buyer/payments' })
   void app.register(analyticsRoutes,     { prefix: '/api/v1/analytics' }) // analytics + behavior events
   void app.register(dataExportRoutes,    { prefix: '/api/v1/data' })      // B2B data export (API key auth)
 

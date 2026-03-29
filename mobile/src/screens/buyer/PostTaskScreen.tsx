@@ -1,4 +1,4 @@
-// PostTaskScreen — 4-step wizard: Type → Location → Schedule → Confirm + Escrow
+// PostTaskScreen — 4-step wizard: Type → Details → Location → Confirm + Pay
 import React, { useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
@@ -8,6 +8,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { ChevronLeft, ChevronRight, CheckCircle, Camera, X } from 'lucide-react-native'
+import RazorpayCheckout from 'react-native-razorpay'
 import { CaptureCamera } from '../../components/camera/CaptureCamera'
 import type { CaptureResult } from '../../components/camera/CaptureCamera'
 import { mediaApi } from '../../api/media.api'
@@ -16,6 +17,7 @@ import { COLORS }        from '../../constants/colors'
 import { BUYER_THEME as B } from '../../constants/buyerTheme'
 import * as Location from 'expo-location'
 import { buyerTasksApi } from '../../api/tasks.api'
+import { paymentsApi } from '../../api/payments.api'
 import { DIRTY_LEVELS, URGENCY_LEVELS } from '../../constants/taskCategories'
 import type { BuyerStackParamList } from '../../navigation/types'
 import type { TaskCategory, DirtyLevel, TaskUrgency } from '../../types'
@@ -89,21 +91,29 @@ export function PostTaskScreen() {
   const set = (key: keyof FormState, val: any) => setForm(f => ({ ...f, [key]: val }))
 
   const price = DIRTY_LEVELS[form.dirtyLevel]?.priceCents ?? 6000
+  const [paying, setPaying] = useState(false)
 
-  const mutation = useMutation({
-    mutationFn: () => buyerTasksApi.createTask({
+  const createTaskWithPayment = async (paymentData: {
+    razorpayOrderId: string
+    razorpayPaymentId: string
+    razorpaySignature: string
+  }) => {
+    return buyerTasksApi.createTask({
       title:           form.title.trim(),
       description:     form.description.trim(),
       category:        form.category,
       dirtyLevel:      form.dirtyLevel,
       urgency:         form.urgency,
-      // rateCents auto-calculated by backend based on dirtyLevel
       locationAddress: form.address.trim() || undefined,
       locationLat:     form.lat ?? undefined,
       locationLng:     form.lng ?? undefined,
-    }),
+      ...paymentData,
+    })
+  }
+
+  const mutation = useMutation({
+    mutationFn: createTaskWithPayment,
     onSuccess: async (task) => {
-      // Upload reference photo if taken
       if (refPhoto) {
         try {
           await mediaApi.upload(task.id, refPhoto, 'REFERENCE')
@@ -122,6 +132,45 @@ export function PostTaskScreen() {
     },
   })
 
+  const handlePayAndPost = async () => {
+    setPaying(true)
+    try {
+      // Step 1: Create Razorpay order on backend
+      const order = await paymentsApi.createOrder(price, form.title.trim())
+
+      // Step 2: Open Razorpay Checkout
+      const options = {
+        key:         order.keyId,
+        amount:      order.amount,
+        currency:    order.currency,
+        order_id:    order.orderId,
+        name:        'eClean',
+        description: `Task: ${form.title.trim().slice(0, 40)}`,
+        prefill:     {},
+        theme:       { color: B.primary },
+      }
+
+      const paymentResult = await RazorpayCheckout.open(options)
+
+      // Step 3: Create task with payment proof
+      mutation.mutate({
+        razorpayOrderId:   order.orderId,
+        razorpayPaymentId: paymentResult.razorpay_payment_id,
+        razorpaySignature: paymentResult.razorpay_signature,
+      })
+    } catch (err: any) {
+      // User closed checkout or payment failed
+      if (err?.code !== 'PAYMENT_CANCELLED') {
+        Alert.alert(
+          'Payment Failed',
+          err?.description ?? err?.message ?? 'Payment could not be completed. Please try again.',
+        )
+      }
+    } finally {
+      setPaying(false)
+    }
+  }
+
   const canNext = () => {
     if (step === 0) return !!form.category
     if (step === 1) return form.title.trim().length > 3 && form.description.trim().length > 10
@@ -131,7 +180,7 @@ export function PostTaskScreen() {
 
   const next = () => {
     if (step < STEPS.length - 1) setStep(s => s + 1)
-    else mutation.mutate()
+    else handlePayAndPost()
   }
 
   return (
@@ -340,15 +389,15 @@ export function PostTaskScreen() {
         <TouchableOpacity
           style={[s.nextBtn, !canNext() && s.nextBtnDisabled]}
           onPress={next}
-          disabled={!canNext() || mutation.isPending}
+          disabled={!canNext() || paying || mutation.isPending}
           activeOpacity={0.85}
         >
-          {mutation.isPending
+          {paying || mutation.isPending
             ? <ActivityIndicator color="#fff" />
             : (
               <>
                 <Text style={s.nextBtnText}>
-                  {step === STEPS.length - 1 ? `Post Task — ₹${Math.floor(price / 100)}` : 'Continue'}
+                  {step === STEPS.length - 1 ? `Pay & Post — ₹${Math.floor(price / 100)}` : 'Continue'}
                 </Text>
                 {step < STEPS.length - 1 && <ChevronRight size={18} color="#fff" />}
               </>

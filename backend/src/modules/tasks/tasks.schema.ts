@@ -26,6 +26,10 @@ export const createTaskSchema = z.object({
   workWindowEnd:   z.string().regex(/^\d{2}:\d{2}$/).default('11:30'),
   uploadWindowEnd: z.string().regex(/^\d{2}:\d{2}$/).default('12:00'),
   timezone:        z.string().default('Asia/Kolkata'),
+  // Razorpay payment proof (optional — required when Razorpay is configured)
+  razorpayOrderId:   z.string().optional(),
+  razorpayPaymentId: z.string().optional(),
+  razorpaySignature: z.string().optional(),
 })
 
 // ─── Simple reason schemas ────────────────────────────────────────────────────

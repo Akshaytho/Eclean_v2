@@ -11,6 +11,8 @@ import { DIRTY_LEVEL_PRICING } from './tasks.schema'
 import { emitTaskUpdated } from '../../realtime/socket'
 import { logTaskEvent } from '../../lib/event-log'
 import { payoutQueue, PAYOUT_QUEUE } from '../../jobs/payout.job'
+import { verifyPaymentSignature, refundPayment } from '../payments/payment.service'
+import { logger } from '../../lib/logger'
 import type {
   CreateTaskInput,
   ReasonInput,
@@ -74,6 +76,23 @@ export async function createTask(buyerId: string, input: CreateTaskInput) {
     )
   }
 
+  // ── Razorpay payment verification (when payment fields are provided) ─────
+  let razorpayOrderId:   string | null = null
+  let razorpayPaymentId: string | null = null
+
+  if (input.razorpayOrderId && input.razorpayPaymentId && input.razorpaySignature) {
+    const valid = verifyPaymentSignature(
+      input.razorpayOrderId,
+      input.razorpayPaymentId,
+      input.razorpaySignature,
+    )
+    if (!valid) {
+      throw new BadRequestError('Payment verification failed — invalid signature')
+    }
+    razorpayOrderId   = input.razorpayOrderId
+    razorpayPaymentId = input.razorpayPaymentId
+  }
+
   const result = await prisma.$transaction(async (tx) => {
     const task = await tx.task.create({
       data: {
@@ -92,6 +111,8 @@ export async function createTask(buyerId: string, input: CreateTaskInput) {
         workWindowEnd:   input.workWindowEnd,
         uploadWindowEnd: input.uploadWindowEnd,
         timezone:        input.timezone,
+        razorpayOrderId,
+        razorpayPaymentId,
       },
     })
 
@@ -184,6 +205,17 @@ export async function cancelTaskAsBuyer(
     await recordEvent(tx, taskId, buyerId, 'BUYER', task.status, 'CANCELLED', input.reason)
     return updated
   })
+
+  // ── Refund buyer if task had a Razorpay payment ──────────────────────────
+  if (task.razorpayPaymentId) {
+    try {
+      await refundPayment(task.razorpayPaymentId, task.rateCents)
+    } catch (err) {
+      // Log but don't block — cancellation succeeded, refund can be retried manually
+      logger.error({ taskId, paymentId: task.razorpayPaymentId, err }, 'Auto-refund failed on task cancel')
+    }
+  }
+
   emitTaskUpdated(taskId, 'CANCELLED')
   logTaskEvent(taskId, 'status_changed', buyerId, 'BUYER', { from: task.status, to: 'CANCELLED', reason: input.reason })
   return result

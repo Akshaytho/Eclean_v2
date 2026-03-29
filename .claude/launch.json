@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Backend API",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["/Users/thotaakshay/Eclean_v2/.claude/worktrees/elated-torvalds/.claude/run-backend.sh"],
+      "port": 3000
+    },
+    {
+      "name": "Mobile (Expo)",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["/Users/thotaakshay/Eclean_v2/.claude/worktrees/elated-torvalds/.claude/run-expo.sh"],
+      "port": 8081
+    }
+  ]
+}

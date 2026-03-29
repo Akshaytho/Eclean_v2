@@ -193,6 +193,8 @@ model Task {
   workWindowEnd      String      @default("11:30")
   uploadWindowEnd    String      @default("12:00")
   timezone           String      @default("Asia/Kolkata")
+  razorpayOrderId    String?   @unique
+  razorpayPaymentId  String?   @unique
   aiScore            Float?
   aiReasoning        String?
   rejectionReason    String?
