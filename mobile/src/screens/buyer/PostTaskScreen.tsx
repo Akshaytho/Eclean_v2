@@ -8,7 +8,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { ChevronLeft, ChevronRight, CheckCircle, Camera, X } from 'lucide-react-native'
-import RazorpayCheckout from 'react-native-razorpay'
+import { RazorpayWebCheckout } from '../../components/payment/RazorpayCheckout'
+import type { RazorpayPaymentResult, RazorpayCheckoutOptions } from '../../components/payment/RazorpayCheckout'
 import { CaptureCamera } from '../../components/camera/CaptureCamera'
 import type { CaptureResult } from '../../components/camera/CaptureCamera'
 import { mediaApi } from '../../api/media.api'
@@ -92,6 +93,9 @@ export function PostTaskScreen() {
 
   const price = DIRTY_LEVELS[form.dirtyLevel]?.priceCents ?? 6000
   const [paying, setPaying] = useState(false)
+  const [checkoutVisible, setCheckoutVisible] = useState(false)
+  const [checkoutOptions, setCheckoutOptions] = useState<RazorpayCheckoutOptions | null>(null)
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null)
 
   const createTaskWithPayment = async (paymentData: {
     razorpayOrderId: string
@@ -137,38 +141,44 @@ export function PostTaskScreen() {
     try {
       // Step 1: Create Razorpay order on backend
       const order = await paymentsApi.createOrder(price, form.title.trim())
+      setPendingOrderId(order.orderId)
 
-      // Step 2: Open Razorpay Checkout
-      const options = {
-        key:         order.keyId,
+      // Step 2: Open WebView checkout
+      setCheckoutOptions({
+        keyId:       order.keyId,
+        orderId:     order.orderId,
         amount:      order.amount,
         currency:    order.currency,
-        order_id:    order.orderId,
         name:        'eClean',
         description: `Task: ${form.title.trim().slice(0, 40)}`,
-        prefill:     {},
-        theme:       { color: B.primary },
-      }
-
-      const paymentResult = await RazorpayCheckout.open(options)
-
-      // Step 3: Create task with payment proof
-      mutation.mutate({
-        razorpayOrderId:   order.orderId,
-        razorpayPaymentId: paymentResult.razorpay_payment_id,
-        razorpaySignature: paymentResult.razorpay_signature,
+        themeColor:  B.primary,
       })
+      setCheckoutVisible(true)
     } catch (err: any) {
-      // User closed checkout or payment failed
-      if (err?.code !== 'PAYMENT_CANCELLED') {
-        Alert.alert(
-          'Payment Failed',
-          err?.description ?? err?.message ?? 'Payment could not be completed. Please try again.',
-        )
-      }
-    } finally {
       setPaying(false)
+      Alert.alert('Error', err?.response?.data?.error?.message ?? 'Could not create payment order.')
     }
+  }
+
+  const handlePaymentSuccess = (result: RazorpayPaymentResult) => {
+    setCheckoutVisible(false)
+    setPaying(false)
+    mutation.mutate({
+      razorpayOrderId:   pendingOrderId!,
+      razorpayPaymentId: result.razorpay_payment_id,
+      razorpaySignature: result.razorpay_signature,
+    })
+  }
+
+  const handlePaymentError = (error: { code?: string; description?: string }) => {
+    setCheckoutVisible(false)
+    setPaying(false)
+    Alert.alert('Payment Failed', error.description ?? 'Payment could not be completed. Please try again.')
+  }
+
+  const handleCheckoutClose = () => {
+    setCheckoutVisible(false)
+    setPaying(false)
   }
 
   const canNext = () => {
@@ -370,6 +380,17 @@ export function PostTaskScreen() {
 
         <View style={{ height: 120 }} />
       </ScrollView>
+
+      {/* Razorpay WebView Checkout */}
+      {checkoutOptions && (
+        <RazorpayWebCheckout
+          visible={checkoutVisible}
+          options={checkoutOptions}
+          onSuccess={handlePaymentSuccess}
+          onError={handlePaymentError}
+          onClose={handleCheckoutClose}
+        />
+      )}
 
       {/* Reference photo camera */}
       <Modal visible={cameraOpen} animationType="slide" statusBarTranslucent>
