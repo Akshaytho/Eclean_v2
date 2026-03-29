@@ -95,8 +95,21 @@ export const offlineSync = {
 
 // ─── Auto-replay on reconnect ─────────────────────────────────────────────────
 
-NetInfo.addEventListener((state) => {
-  if (state.isConnected && state.isInternetReachable) {
-    offlineSync.replay().catch(() => {})
-  }
-})
+let netInfoUnsub: (() => void) | null = null
+
+export function startNetInfoListener(): void {
+  if (netInfoUnsub) return
+  netInfoUnsub = NetInfo.addEventListener((state) => {
+    if (state.isConnected && state.isInternetReachable) {
+      offlineSync.replay().catch(() => {})
+    }
+  })
+}
+
+export function stopNetInfoListener(): void {
+  netInfoUnsub?.()
+  netInfoUnsub = null
+}
+
+// Start listening immediately on import
+startNetInfoListener()

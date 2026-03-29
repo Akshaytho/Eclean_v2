@@ -29,6 +29,14 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     const existing = get().socket
     if (existing?.connected) return
 
+    // Clean up previous socket if it exists but isn't connected
+    if (existing) {
+      existing.removeAllListeners()
+      existing.disconnect()
+    }
+    // Clean up previous AppState subscription
+    get().appStateSub?.remove()
+
     const socket = io(SOCKET_URL, {
       auth:                   { token: accessToken },
       transports:             ['websocket'],
@@ -61,8 +69,12 @@ export const useSocketStore = create<SocketState>((set, get) => ({
   },
 
   disconnect: () => {
-    get().socket?.disconnect()
-    get().appStateSub?.remove()
+    const { socket, appStateSub } = get()
+    if (socket) {
+      socket.removeAllListeners()
+      socket.disconnect()
+    }
+    appStateSub?.remove()
     set({ socket: null, connected: false, appStateSub: null })
   },
 

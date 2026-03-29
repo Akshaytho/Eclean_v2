@@ -57,6 +57,10 @@ export function RegisterScreen({ navigation }: Props) {
       setError('Password must be at least 8 characters.')
       return
     }
+    if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('Password must include at least one uppercase letter and one number.')
+      return
+    }
 
     setLoading(true)
     try {

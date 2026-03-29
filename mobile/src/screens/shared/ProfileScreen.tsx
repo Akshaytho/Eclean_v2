@@ -57,8 +57,12 @@ export function ProfileScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign Out', style: 'destructive', onPress: async () => {
           setLoggingOut(true)
-          disconnect()
-          await logout()
+          try {
+            disconnect()
+            await logout()
+          } catch {
+            setLoggingOut(false)
+          }
         }
       },
     ])

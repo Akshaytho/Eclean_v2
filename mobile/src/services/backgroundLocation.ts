@@ -55,6 +55,18 @@ TaskManager.defineTask(GPS_TASK_NAME, async ({ data, error }: TaskManager.TaskMa
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function startBackgroundTracking(taskId: string): Promise<void> {
+  // Check permissions before starting
+  const { status: fg } = await Location.requestForegroundPermissionsAsync()
+  if (fg !== 'granted') {
+    console.warn('[BG Location] Foreground permission not granted')
+    return
+  }
+  const { status: bg } = await Location.requestBackgroundPermissionsAsync()
+  if (bg !== 'granted') {
+    console.warn('[BG Location] Background permission not granted')
+    return
+  }
+
   // Persist taskId so the background task can read it
   await SecureStore.setItemAsync(ACTIVE_TASK_KEY, taskId)
 

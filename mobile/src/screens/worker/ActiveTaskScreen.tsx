@@ -294,7 +294,7 @@ export function ActiveTaskScreen() {
     ? { latitude: currentLocation.lat, longitude: currentLocation.lng, latitudeDelta: 0.008, longitudeDelta: 0.008 }
     : task.locationLat
       ? { latitude: task.locationLat, longitude: task.locationLng!, latitudeDelta: 0.008, longitudeDelta: 0.008 }
-      : { latitude: 12.9716, longitude: 77.5946, latitudeDelta: 0.05, longitudeDelta: 0.05 }
+      : { latitude: 17.385, longitude: 78.4867, latitudeDelta: 0.05, longitudeDelta: 0.05 }
 
   return (
     <View style={styles.container}>

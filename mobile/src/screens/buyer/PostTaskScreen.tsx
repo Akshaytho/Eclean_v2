@@ -219,7 +219,7 @@ export function PostTaskScreen() {
                     {DIRTY_LEVELS[level].label}
                   </Text>
                   <Text style={[s.optionPrice, form.dirtyLevel === level && { color: DIRTY_LEVELS[level].color }]}>
-                    ₹{DIRTY_LEVELS[level].priceCents / 100}
+                    ₹{Math.floor(DIRTY_LEVELS[level].priceCents / 100)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -227,7 +227,7 @@ export function PostTaskScreen() {
             {/* Live pricing preview */}
             <View style={s.pricingPreview}>
               <Text style={s.pricingLabel}>Estimated cost:</Text>
-              <Text style={s.pricingValue}>₹{DIRTY_LEVELS[form.dirtyLevel]?.priceCents / 100}</Text>
+              <Text style={s.pricingValue}>₹{Math.floor((DIRTY_LEVELS[form.dirtyLevel]?.priceCents ?? 0) / 100)}</Text>
             </View>
 
             <Text style={s.fieldLabel}>Urgency</Text>
@@ -312,7 +312,7 @@ export function PostTaskScreen() {
               <View style={s.divider} />
               <View style={s.priceRow}>
                 <Text style={s.priceLabel}>You pay</Text>
-                <Text style={s.priceValue}>₹{price / 100}</Text>
+                <Text style={s.priceValue}>₹{Math.floor(price / 100)}</Text>
               </View>
               <Text style={s.priceNote}>Held in escrow · Released on approval</Text>
             </View>
@@ -348,7 +348,7 @@ export function PostTaskScreen() {
             : (
               <>
                 <Text style={s.nextBtnText}>
-                  {step === STEPS.length - 1 ? `Post Task — ₹${price / 100}` : 'Continue'}
+                  {step === STEPS.length - 1 ? `Post Task — ₹${Math.floor(price / 100)}` : 'Continue'}
                 </Text>
                 {step < STEPS.length - 1 && <ChevronRight size={18} color="#fff" />}
               </>

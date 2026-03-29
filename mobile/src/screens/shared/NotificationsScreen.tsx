@@ -6,11 +6,13 @@ import { useNavigation } from '@react-navigation/native'
 import { ScreenWrapper }       from '../../components/layout/ScreenWrapper'
 import { COLORS }              from '../../constants/colors'
 import { notificationsApi }    from '../../api/notifications.api'
+import { useAuthStore }        from '../../stores/authStore'
 import { timeAgo }             from '../../utils/timeAgo'
 
 export function NotificationsScreen() {
   const navigation = useNavigation()
   const qc = useQueryClient()
+  const role = useAuthStore(s => s.user?.role)
 
   const query = useQuery({
     queryKey: ['notifications'],
@@ -66,11 +68,11 @@ export function NotificationsScreen() {
                 style={[s.item, !n.isRead && s.itemUnread]}
                 onPress={() => {
                   if (!n.isRead) markOneMutation.mutate(n.id)
-                  // Navigate to relevant screen based on notification data
+                  // Navigate to relevant screen based on notification data and user role
                   const taskId = (n.data as any)?.taskId
                   if (taskId) {
-                    try { (navigation as any).navigate('BuyerTaskDetail', { taskId }) } catch {}
-                    try { (navigation as any).navigate('ActiveTask', { taskId }) } catch {}
+                    const screen = role === 'WORKER' ? 'ActiveTask' : 'BuyerTaskDetail'
+                    try { (navigation as any).navigate(screen, { taskId }) } catch {}
                   }
                 }}
                 activeOpacity={0.8}

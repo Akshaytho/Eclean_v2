@@ -107,19 +107,20 @@ export function BuyerTaskDetailScreen() {
   const approveMutation = useMutation({
     mutationFn: () => buyerTasksApi.approve(taskId),
     onMutate:   () => { isActing.current = true },
+    onSettled:  () => { isActing.current = false },
     onSuccess:  () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       qc.invalidateQueries({ queryKey: ['buyer-task', taskId] })
       qc.invalidateQueries({ queryKey: ['buyer-tasks-active'] })
+      const workerPay = formatMoney(Math.floor((task?.rateCents ?? 0) * 9 / 10))
       Alert.alert(
-        'Approved! 🎉',
-        `₹${((task?.rateCents ?? 0) * 0.9 / 100).toFixed(0)} sent to worker. Task complete.`,
+        'Approved!',
+        `${workerPay} sent to worker. Task complete.`,
         [{ text: 'Rate Worker', onPress: () => navigation.navigate('Rating', { taskId }) },
          { text: 'Done' }],
       )
     },
     onError: (err: any) => {
-      isActing.current = false
       Alert.alert('Error', err?.response?.data?.error?.message ?? 'Could not approve')
     },
   })
@@ -130,6 +131,7 @@ export function BuyerTaskDetailScreen() {
   const rejectMutation = useMutation({
     mutationFn: (reason: string) => buyerTasksApi.reject(taskId, reason),
     onMutate:   () => { isActing.current = true },
+    onSettled:  () => { isActing.current = false },
     onSuccess:  () => {
       setRejectModal(false)
       setRejectReason('')
@@ -137,7 +139,6 @@ export function BuyerTaskDetailScreen() {
       Alert.alert('Rejected', 'Worker has been notified and can re-submit.')
     },
     onError: (err: any) => {
-      isActing.current = false
       Alert.alert('Error', err?.response?.data?.error?.message ?? 'Could not reject')
     },
   })
@@ -146,7 +147,7 @@ export function BuyerTaskDetailScreen() {
     if (isActing.current) return
     Alert.alert(
       'Approve & Release Payment?',
-      `₹${(task?.rateCents ?? 0) / 100} will be released to the worker immediately.`,
+      `${formatMoney(task?.rateCents ?? 0)} will be released to the worker immediately.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Approve & Pay', onPress: () => approveMutation.mutate() },

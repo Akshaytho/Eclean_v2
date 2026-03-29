@@ -69,7 +69,9 @@ export function LiveTrackScreen() {
 
   const region = last
     ? { latitude: last.lat, longitude: last.lng, latitudeDelta: 0.006, longitudeDelta: 0.006 }
-    : { latitude: 17.385, longitude: 78.4867, latitudeDelta: 0.05, longitudeDelta: 0.05 }
+    : task?.locationLat && task?.locationLng
+      ? { latitude: task.locationLat, longitude: task.locationLng, latitudeDelta: 0.01, longitudeDelta: 0.01 }
+      : { latitude: 17.385, longitude: 78.4867, latitudeDelta: 0.05, longitudeDelta: 0.05 }
 
   const formatElapsed = (secs: number) => {
     const h = Math.floor(secs / 3600)

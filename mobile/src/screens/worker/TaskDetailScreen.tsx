@@ -171,8 +171,8 @@ export function TaskDetailScreen() {
               value={`${task.workWindowStart} – ${task.workWindowEnd}`}
             />
           )}
-          {(task as any).buyer && (
-            <DetailRow icon={<Briefcase size={16} color={W.text.secondary} />} label="Posted by" value={(task as any).buyer.name} />
+          {task.buyer && (
+            <DetailRow icon={<Briefcase size={16} color={W.text.secondary} />} label="Posted by" value={task.buyer.name} />
           )}
         </View>
       </ScrollView>

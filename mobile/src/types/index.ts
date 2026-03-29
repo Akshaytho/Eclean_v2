@@ -91,6 +91,7 @@ export interface Task {
   // Populated on detail endpoints
   media?:          TaskMedia[]
   worker?:         { id: string; name: string; email: string } | null
+  buyer?:          { id: string; name: string; email: string } | null
   payout?:         Payout | null
   events?:         TaskEvent[]
 }
