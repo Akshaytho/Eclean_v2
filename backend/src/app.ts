@@ -37,14 +37,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // ── Plugins ──────────────────────────────────────────────────────────────────
   void app.register(cors, {
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true) // server-to-server / curl
-      const allowed = env.CORS_ORIGINS.split(',').map(s => s.trim())
-      const isAllowed = allowed.includes(origin)
-        || /^https?:\/\/localhost(:\d+)?$/.test(origin)
-        || /^https?:\/\/(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(origin)
-      cb(null, isAllowed)
-    },
+    origin: true, // allow all origins (pre-launch — tighten before production)
     credentials: true,
   })
   void app.register(helmet, { contentSecurityPolicy: false })
