@@ -576,20 +576,8 @@ export async function startTask(workerId: string, taskId: string, input?: StartT
   if (task.workerId !== workerId) throw new ForbiddenError('Not your task')
   assertTransition(task.status, 'IN_PROGRESS', 'WORKER')
 
-  // ── Work window check: can only start between 7:00 AM and 4:30 PM (IST) ──
-  const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
-  const hour = nowIST.getHours()
-  const min  = nowIST.getMinutes()
-  if (hour < WORK_WINDOW_START_HOUR) {
-    throw new BadRequestError(
-      `Work starts at ${WORK_WINDOW_START_HOUR}:00 AM. Please wait until then.`,
-    )
-  }
-  if (hour > WORK_WINDOW_END_HOUR || (hour === WORK_WINDOW_END_HOUR && min >= WORK_WINDOW_END_MIN)) {
-    throw new BadRequestError(
-      'Work window has ended for today (4:30 PM). You can start tasks again tomorrow at 7:00 AM.',
-    )
-  }
+  // Work window check disabled — will be re-enabled with configurable per-task windows
+  // TODO: restore with task.workWindowStart / task.workWindowEnd from DB instead of hardcoded constants
 
   // ── Geofence: if task has a location and worker sent GPS, enforce 2km radius ──
   if (
