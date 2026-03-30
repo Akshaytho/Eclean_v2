@@ -4,116 +4,105 @@
 
 ---
 
-## Last Session: 2026-03-29 (Session 5 — Full Audit + Buyer Redesign + Camera + Optimizations)
+## Last Session: 2026-03-30/31 (Session 6 — Image Capture Redesign + Silent Witness Protocol)
 
-### Status: MASSIVE SESSION — 50+ files changed, 3 commits on ecleanpro_checks
+### Status: MASSIVE BUILD — 40+ files, 8 phases, 34 tests, deployed to Railway
 
 ### What was completed:
 
-**Codebase Audit (75 issues found):**
-- Full audit of mobile (41 issues) + backend (25 issues) + config (9 issues)
-- Prioritized by severity: 8 critical, 14 high, 18 medium, 10 low
+**Image Capture Redesign — Full 8-Phase Implementation:**
 
-**Bug Fixes (19 applied):**
-- App.tsx: network errors no longer force-logout users (was logging out on any /auth/me failure)
-- backgroundLocation.ts: guard against double TaskManager registration
-- socketStore.ts: reconnection capped at 20 attempts + jitter (was Infinity)
-- AIScoreCard.tsx: auto-normalizes 0-1 and 0-100 scores
-- StatusTimeline.tsx: complete status mapping (was Partial, caused undefined)
-- useSocket.ts: ref-based handler prevents stale closures
-- offlineSync.ts: persisted replay lock survives app crashes (was in-memory only)
-- Input.tsx: parent callbacks fire before internal state update
-- NotificationsScreen.tsx: removed unsafe `as any` cast
-- LiveTrackScreen.tsx: map auto-follows worker with smooth animation
-- Backend env.ts: startup warnings for missing service keys (Cloudinary, Anthropic, Razorpay)
-- Backend payouts.routes.ts: webhook signature mandatory in production
-- Backend schema.prisma: 4 new DB indexes (status+urgency, status+createdAt, buyerId+status, workerId+status)
-- Backend tasks.schema.ts: geofence radius min 100m, rate min ₹1 (100 paise)
+Phase 1: Database schema — TaskReferencePoint, WorkerPointSubmission, TaskEnvironmentFingerprint,
+  WorkerEnvironmentCapture, TaskMotionSummary, CitizenVerification + trust scores on profiles
 
-**Performance Optimizations:**
-- React.memo on TaskCard, CaptureCamera, Button, Badge, AppHeader
-- useMemo on filtered task arrays (MyTasksScreen, BuyerHomeScreen)
-- Image compression before upload (1200px, 75% JPEG via expo-image-manipulator)
-- Lazy screen loading in both navigators (6 buyer + 7 worker screens)
-- Hermes JS engine enabled in app.json
-- Deduplicated haversineKm (was in ActiveTaskScreen + utils) and formatElapsed (was in 3 files)
+Phase 2: Backend APIs — 5 reference point endpoints (buyer CRUD, worker submission, progress
+  with proximity-based verification reveal at 50m)
 
-**Buyer Redesign (Zomato/Uber/Rapido style):**
-- New buyerTheme.ts: rose CTA (#F43F5E), slate headers (#1E293B), indigo accents (#6366F1)
-- BuyerHomeScreen: dark hero, category pills, LIVE cards, compact stats, trust strip
-- All buyer screens auto-themed via B tokens (Dashboard, Tasks, TaskDetail, PostTask, LiveTrack, Rating)
-- Removed ScreenWrapper double-padding from BuyerHome + BuyerTasks
+Phase 3: Pluggable rule engine (8 scoring layers — 5 core + 3 bonus), buyer accountability
+  (falseRejectionCount, auto-flag at 3+), AI paired image mode with two-phase cost optimization
 
-**Auth & Onboarding Redesign:**
-- SplashScreen: dark slate (#0F172A) + blue logo (was ugly green square #0F2B1A)
-- OnboardingScreen: 4 slides with per-slide accent colors (blue, green, purple, amber)
-- LoginScreen: neutral blue (#3B82F6), dark header, white form card
-- RegisterScreen: role-colored CTA (green worker, blue buyer, purple citizen)
-- ForgotPasswordScreen: clean minimal, success state with checkmark
-- app.json splash backgroundColor updated to #0F172A
+Phase 4: Mobile buyer flow — 5-step wizard (Type→Details→Location→Photos→Confirm),
+  multi-photo reference capture grid, parallel uploads (3 at a time), BuyerTaskDetail
+  paired comparison view
 
-**Camera Overhaul:**
-- CaptureCamera: minimal UI, removed viewfinder corners, subtle "Verified capture" badge, haptic on shutter
-- PhotoPreview: hidden raw GPS/hash from user, shows "Location verified" badge instead
-- CRITICAL FIX: device metadata (GPS, hash, deviceId, timestamp) now sent to backend as form fields
-- Backend media.routes.ts reads capturedLat/Lng/At/deviceId/photoHash from multipart
-- Backend media.service.ts uses device GPS as primary (EXIF as fallback since compression strips it)
-- New Prisma migration: 5 columns added to analytics_photo_meta
+Phase 5: Mobile worker flow — side-by-side CaptureCamera with proximity bar,
+  ReferencePointNavigator screen, ActiveTaskScreen conditional routing,
+  SubmitProofScreen per-point progress
 
-**Header/Footer Fixes:**
-- All buyer screens use useSafeAreaInsets (removed hardcoded paddingTop: 52/56)
-- Tab bar bottom padding for Android phones with nav buttons (Platform.OS check)
-- AppHeader memoized with React.memo
+Phase 6: Silent layers — useEnvironmentalDNA hook (magnetometer + barometer + ambient light
+  + cell), motionTracker service (accelerometer classification), wired into worker flow
 
-**Idempotency + modelVersion (CLAUDE.md rules #10 and #11):**
-- TaskMedia gets idempotencyKey column (unique) — prevents duplicate uploads on retry
-- Media upload route checks Idempotency-Key header, returns existing if duplicate
-- Mobile sends taskId-mediaType-photoHash as idempotency key
-- Task gets aiModelVersion column — ai.service.ts stores "claude-sonnet-4-5" on every verification
-- Migration auto-runs on Railway deploy
+Phase 7: Citizen mesh — backend service + routes + CitizenVerifyScreen with reward system
 
-**CI/CD Optimization:**
-- Path-based change detection (dorny/paths-filter) — only runs what changed
-- Mobile-only push → backend skipped. Backend-only → mobile skipped.
-- Skips entirely on docs/markdown/.claude changes
-- ~50% Actions minutes savings
+Phase 8: Adversarial AI — second AI model chained after verifier in BullMQ job
+
+**Tests: 34/34 passing (12 unit + 22 integration)**
+
+**Live testing fixes:**
+- Fixed idempotencyKey null vs undefined (Railway build error)
+- Installed missing exifr package
+- Fixed workers couldn't see reference points for OPEN tasks (403 bug)
+- Fixed React hooks ordering in TaskDetailScreen (render error)
+- Added reference photo previews on worker TaskDetailScreen (horizontal scroll + tap to fullscreen)
+- Added parallel photo uploads for faster PostTaskScreen
+- Disabled hardcoded work window (will use per-task DB fields)
+- GPS accuracy reduced from High to Balanced for faster location (3s → <1s)
+
+### Production DB State (task 5f17f26f):
+- 4 reference points with Cloudinary images
+- 6 worker submissions (4 AFTER + 2 VERIFICATION) — 2 manually inserted
+- 2 verification points selected (points 2 and 3)
+- Task status: IN_PROGRESS
+- Ready for: worker submit → rule engine → buyer review
 
 ### What needs to happen next:
 
-**Priority 1 — Worker screens redesign:**
-- WorkerHomeScreen premium redesign (same treatment as BuyerHomeScreen got)
-- Worker theme modernization (keep green but make it Rapido/Uber quality)
-- WorkerDashboardScreen polish
-- FindWorkScreen, MyTasksScreen, WalletScreen visual refresh
-- TaskDetailScreen, ActiveTaskScreen, SubmitProofScreen polish
+**Priority 1 — Continue live testing:**
+- Worker submits task → verify rule engine scores → buyer reviews paired photos
+- Test rejection + dispute flow with explanation screen
+- Test citizen verification flow
+- Build dev client for camera testing (`npx expo run:ios` or `run:android`)
 
-**Priority 2 — Sprint 4 screens:**
-- SupervisorHomeScreen (real zone map)
-- CitizenHomeScreen + CreateReportScreen
-- ProfileScreen with real data from GET /auth/me
+**Priority 2 — Worker flow redesign (UI/UX):**
+- TaskDetailScreen visual redesign
+- ActiveTaskScreen polish
+- ReferencePointNavigator map integration
+- Side-by-side camera testing with dev client
 
-**Priority 3 — Play Store readiness:**
-- EAS production build
-- App icon (blue rounded square with "e")
-- Play Store screenshots
-- Privacy Policy + Terms of Service
+**Priority 3 — Known issues to fix:**
+- Camera doesn't work in Expo Go — needs dev client build
+- EnvDNA sensors fail silently in Expo Go (need native modules)
+- Work window check disabled — implement per-task configurable windows from DB
+- Labels not saving (users skip them — make label input more prominent)
+- Rejection explanation screen not yet built (launch requirement from plan)
+- Worker dispute flow not yet built (launch requirement from plan)
 
-### Branch: ecleanpro_checks (3 commits ahead of main)
+### Branch: image_capture_workflow (6 commits)
+- `43ed665` feat: image capture redesign — reference points + silent witness protocol
+- `872279e` fix: resolve TS build errors for Railway deploy
+- `c3b71d3` fix: allow workers to view reference points for OPEN tasks
+- `626752f` fix: extend work window for testing
+- `60dbc9c` fix: disable hardcoded work window
+- `82db88f` fix: comment out unused work window constants
 
 ### Dev environment:
-- Backend: Railway production — healthy
-- Mobile: Expo SDK 54, Hermes enabled, dev server via `npx expo start --clear`
-- User tests on iPhone via Expo Go (Lingampally, Hyderabad)
-- Docker not running locally — migrations need Railway deploy or Docker start
+- Backend: Railway production — deployed and healthy with all new endpoints
+- Mobile: Expo SDK 54, dev server via `npx expo start`
+- Docker: Postgres + Redis running locally (for tests)
+- Testing on iPhone via Expo Go (camera needs dev client)
 
-### Key files changed this session:
-- Buyer theme: `mobile/src/constants/buyerTheme.ts` (rose/slate/indigo palette)
-- AppHeader: `mobile/src/components/layout/AppHeader.tsx` (memoized, consistent height)
-- BuyerHomeScreen: `mobile/src/screens/buyer/BuyerHomeScreen.tsx` (full redesign)
-- CaptureCamera: `mobile/src/components/camera/CaptureCamera.tsx` (minimal UI)
-- PhotoPreview: `mobile/src/components/camera/PhotoPreview.tsx` (hidden metadata)
-- Auth screens: `mobile/src/screens/auth/` (all 4 redesigned)
-- Media API: `mobile/src/api/media.api.ts` (compression + metadata + idempotency)
-- AI service: `backend/src/modules/ai/ai.service.ts` (modelVersion)
-- Media routes: `backend/src/modules/media/media.routes.ts` (idempotency + device meta)
-- CI: `.github/workflows/ci.yml` (path-based filtering)
+### Key new files:
+- `backend/src/modules/reference-points/` (4 files — schema, services, routes)
+- `backend/src/modules/verification/rule-engine.ts`
+- `backend/src/modules/environment/` (2 files — service, routes)
+- `backend/src/modules/citizen-verify/` (2 files — service, routes)
+- `backend/src/modules/ai/adversarial-ai.service.ts`
+- `mobile/src/api/referencePoints.api.ts`
+- `mobile/src/hooks/useEnvironmentalDNA.ts`
+- `mobile/src/services/motionTracker.ts`
+- `mobile/src/screens/worker/ReferencePointNavigator.tsx`
+- `mobile/src/screens/citizen/CitizenVerifyScreen.tsx`
+- `docs/eClean_v2_Image_Capture_Complete_Plan.md` (2500+ line spec)
+- `docs/diagrams/` (8 Mermaid workflow diagrams)
+- `backend/tests/rule-engine.test.ts` (12 unit tests)
+- `backend/tests/reference-points.test.ts` (22 integration tests)
