@@ -28,9 +28,9 @@ import type {
 // Sequential queue model: workers do ONE task at a time, queue up to 5 per day
 const MAX_QUEUED_TASKS       = 5     // max ACCEPTED tasks (worker's daily queue)
 const COOLDOWN_MINUTES       = 30    // rest + travel time between tasks
-const WORK_WINDOW_START_HOUR = 7     // 7:00 AM — earliest task start
-const WORK_WINDOW_END_HOUR   = 16    // 4:00 PM — latest task start (4:30 PM buffer)
-const WORK_WINDOW_END_MIN    = 30    // 4:30 PM
+const WORK_WINDOW_START_HOUR = 6     // 6:00 AM — earliest task start
+const WORK_WINDOW_END_HOUR   = 23    // 11:00 PM — latest task start (11:59 PM buffer)
+const WORK_WINDOW_END_MIN    = 59    // 11:59 PM
 
 // ─── Haversine distance (km) ──────────────────────────────────────────────────
 
