@@ -93,11 +93,14 @@ export async function listReferencePoints(taskId: string, userId: string, userRo
   const task = await prisma.task.findUnique({ where: { id: taskId } })
   if (!task) throw new NotFoundError('Task not found')
 
-  // Access control: buyer, assigned worker, supervisor, admin
-  const isBuyer    = task.buyerId === userId
-  const isWorker   = task.workerId === userId
+  // Access control:
+  // - Any worker can view reference points for OPEN tasks (to decide whether to accept)
+  // - After acceptance: only buyer, assigned worker, supervisor, admin
+  const isBuyer      = task.buyerId === userId
+  const isWorker     = task.workerId === userId
   const isPrivileged = userRole === 'SUPERVISOR' || userRole === 'ADMIN'
-  if (!isBuyer && !isWorker && !isPrivileged) {
+  const isWorkerBrowsingOpen = userRole === 'WORKER' && task.status === 'OPEN'
+  if (!isBuyer && !isWorker && !isPrivileged && !isWorkerBrowsingOpen) {
     throw new ForbiddenError('You do not have access to this task')
   }
 
