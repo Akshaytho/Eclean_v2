@@ -103,7 +103,7 @@ export async function uploadTaskMedia(params: {
       mimeType,
       sizeBytes,
       type:           mediaType as never,
-      idempotencyKey: idempotencyKey ?? undefined,
+      idempotencyKey: idempotencyKey ?? null,
     },
   })
 
