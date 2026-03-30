@@ -66,16 +66,8 @@ export async function uploadTaskMedia(params: {
 
   }
 
-  // Deduplication — delete existing media of same type for this task
-  const existing = await prisma.taskMedia.findFirst({
-    where: { taskId, type: mediaType as never },
-  })
-  if (existing) {
-    if (existing.publicId) {
-      await cloudinary.uploader.destroy(existing.publicId)
-    }
-    await prisma.taskMedia.delete({ where: { id: existing.id } })
-  }
+  // Note: Dedup logic removed — reference point system allows multiple photos per type.
+  // Legacy TaskMedia still accepts uploads but no longer deletes previous of same type.
 
   // Guard — ensure Cloudinary is configured before attempting upload
   assertCloudinaryConfigured()

@@ -23,11 +23,13 @@ interface PhotoPreviewProps {
   onConfirm: (uri: string, metadata: CaptureMetadata) => void
 }
 
-const TYPE_CONFIG = {
-  BEFORE:  { label: 'BEFORE',  color: '#F59E0B' },
-  AFTER:   { label: 'AFTER',   color: '#10B981' },
-  PROOF:   { label: 'PROOF',   color: '#3B82F6' },
-  GENERAL: { label: 'PHOTO',   color: '#8B5CF6' },
+const TYPE_CONFIG: Record<string, { label: string; color: string }> = {
+  BEFORE:       { label: 'BEFORE',    color: '#F59E0B' },
+  AFTER:        { label: 'AFTER',     color: '#10B981' },
+  PROOF:        { label: 'PROOF',     color: '#3B82F6' },
+  GENERAL:      { label: 'PHOTO',     color: '#8B5CF6' },
+  REFERENCE:    { label: 'REFERENCE', color: '#F59E0B' },
+  VERIFICATION: { label: 'VERIFY',    color: '#7C3AED' },
 }
 
 export function PhotoPreview({ uri, metadata, photoType, saving, saved, onRetake, onConfirm }: PhotoPreviewProps) {

@@ -16,7 +16,8 @@ import { WorkerDashboardScreen } from '../screens/worker/WorkerDashboardScreen'
 // Stack screens — lazy loaded
 const TaskDetailScreen   = lazy(() => import('../screens/worker/TaskDetailScreen').then(m => ({ default: m.TaskDetailScreen })))
 const ActiveTaskScreen   = lazy(() => import('../screens/worker/ActiveTaskScreen').then(m => ({ default: m.ActiveTaskScreen })))
-const SubmitProofScreen  = lazy(() => import('../screens/worker/SubmitProofScreen').then(m => ({ default: m.SubmitProofScreen })))
+const SubmitProofScreen     = lazy(() => import('../screens/worker/SubmitProofScreen').then(m => ({ default: m.SubmitProofScreen })))
+const ReferencePointScreen = lazy(() => import('../screens/worker/ReferencePointNavigator').then(m => ({ default: m.ReferencePointNavigator })))
 const WalletScreen       = lazy(() => import('../screens/worker/WalletScreen').then(m => ({ default: m.WalletScreen })))
 const ChatScreen         = lazy(() => import('../screens/shared/ChatScreen').then(m => ({ default: m.ChatScreen })))
 const GalleryScreen      = lazy(() => import('../screens/shared/GalleryScreen').then(m => ({ default: m.GalleryScreen })))
@@ -77,8 +78,9 @@ export function WorkerNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="WorkerTabs"    component={WorkerTabs} />
       <Stack.Screen name="TaskDetail"    component={withSuspense(TaskDetailScreen)}    options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="ActiveTask"    component={withSuspense(ActiveTaskScreen)}    options={{ animation: 'slide_from_right', gestureEnabled: false }} />
-      <Stack.Screen name="SubmitProof"   component={withSuspense(SubmitProofScreen)}   options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="ActiveTask"      component={withSuspense(ActiveTaskScreen)}      options={{ animation: 'slide_from_right', gestureEnabled: false }} />
+      <Stack.Screen name="ReferencePoints" component={withSuspense(ReferencePointScreen)} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="SubmitProof"     component={withSuspense(SubmitProofScreen)}     options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="Chat"          component={withSuspense(ChatScreen)}          options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="Gallery"       component={withSuspense(GalleryScreen)}       options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="Wallet"        component={withSuspense(WalletScreen)}        options={{ animation: 'slide_from_right' }} />

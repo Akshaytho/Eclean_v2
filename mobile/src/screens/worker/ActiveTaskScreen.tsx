@@ -80,7 +80,7 @@ export function ActiveTaskScreen() {
   const isCancelling  = useRef(false)
   const isStarting    = useRef(false)
 
-  const [photos, setPhotos] = useState<Record<MediaType, PhotoState>>({
+  const [photos, setPhotos] = useState<Record<string, PhotoState>>({
     BEFORE:    { uri: null, uploading: false, uploaded: false },
     AFTER:     { uri: null, uploading: false, uploaded: false },
     PROOF:     { uri: null, uploading: false, uploaded: false },
@@ -448,9 +448,30 @@ export function ActiveTaskScreen() {
         )}
 
         {/* Photo Evidence (IN_PROGRESS only) */}
-        {isInProgress && (
+        {isInProgress && (task.totalReferencePoints ?? 0) > 0 && (
           <>
-            {/* Progress indicator */}
+            {/* Reference Point flow — new system */}
+            <View style={styles.progressRow}>
+              <Text style={styles.sectionLabel}>Reference Points</Text>
+              <Text style={styles.progressText}>{task.totalReferencePoints} points</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.refPointBtn}
+              onPress={() => navigation.navigate('ReferencePoints', { taskId })}
+              activeOpacity={0.85}
+            >
+              <Camera size={20} color={W.primary} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.refPointBtnTitle}>Capture Reference Points</Text>
+                <Text style={styles.refPointBtnSub}>Match buyer's photos to prove your work</Text>
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {isInProgress && (task.totalReferencePoints ?? 0) === 0 && (
+          <>
+            {/* Legacy 3-photo flow */}
             <View style={styles.progressRow}>
               <Text style={styles.sectionLabel}>Evidence Photos</Text>
               <View style={styles.progressPills}>
@@ -463,7 +484,6 @@ export function ActiveTaskScreen() {
               </Text>
             </View>
 
-            {/* Photo grid — taller boxes with labels inside */}
             <View style={styles.photoGrid}>
               {PHOTO_TYPES.map(({ type, label }) => (
                 <PhotoBox
@@ -475,7 +495,6 @@ export function ActiveTaskScreen() {
               ))}
             </View>
 
-            {/* Submit */}
             <TouchableOpacity
               style={[styles.submitBtn, !allUploaded && styles.btnDisabled]}
               onPress={() => navigation.navigate('SubmitProof', { taskId })}
@@ -799,4 +818,8 @@ const styles = StyleSheet.create({
   gpThumbImg:     { width: '100%', height: '100%' },
   gpTypeDot:      { position: 'absolute', top: 4, left: 4, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   gpTypeDotText:  { color: '#fff', fontSize: 9, fontWeight: '800' },
+  // Reference points button
+  refPointBtn:      { flexDirection: 'row', alignItems: 'center', backgroundColor: W.primaryTint, borderRadius: 14, padding: 16, borderWidth: 1.5, borderColor: W.primary + '30' },
+  refPointBtnTitle: { fontSize: 15, fontWeight: '700', color: W.primary },
+  refPointBtnSub:   { fontSize: 12, color: W.text.secondary, marginTop: 2 },
 })

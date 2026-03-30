@@ -11,6 +11,7 @@ import { DIRTY_LEVEL_PRICING } from './tasks.schema'
 import { emitTaskUpdated } from '../../realtime/socket'
 import { logTaskEvent } from '../../lib/event-log'
 import { payoutQueue, PAYOUT_QUEUE } from '../../jobs/payout.job'
+import { selectVerificationPoints } from '../reference-points/reference-points.service'
 import { verifyPaymentSignature, refundPayment } from '../payments/payment.service'
 import { logger } from '../../lib/logger'
 import type {
@@ -415,6 +416,29 @@ export async function rejectTask(buyerId: string, taskId: string, input: ReasonI
   }
   emitTaskUpdated(taskId, 'REJECTED')
   logTaskEvent(taskId, 'status_changed', buyerId, 'BUYER', { from: task.status, to: 'REJECTED', reason: input.reason })
+
+  // Buyer accountability: flag if rejecting AI-approved work
+  if (task.aiScore != null && task.aiScore >= 0.85) {
+    prisma.buyerProfile.update({
+      where: { userId: buyerId },
+      data: {
+        falseRejectionCount: { increment: 1 },
+        buyerTrustScore:     { decrement: 5 },
+      },
+    }).then(async (profile) => {
+      // Auto-flag after 3+ false rejections
+      if (profile.falseRejectionCount >= 3 && !profile.isFlaggedForReview) {
+        await prisma.buyerProfile.update({
+          where: { userId: buyerId },
+          data: { isFlaggedForReview: true },
+        })
+        logger.warn({ buyerId, falseRejections: profile.falseRejectionCount }, 'Buyer flagged for review — repeated rejection of AI-approved work')
+      }
+    }).catch((err) => {
+      logger.error({ buyerId, err }, 'Failed to update buyer accountability')
+    })
+  }
+
   return result
 }
 
@@ -529,6 +553,12 @@ export async function acceptTask(workerId: string, taskId: string) {
     )
     emitTaskUpdated(taskId, 'ACCEPTED')
     logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'OPEN', to: 'ACCEPTED' })
+
+    // Select 2 random verification points (fire-and-forget, non-blocking)
+    selectVerificationPoints(taskId).catch((err) => {
+      logger.error({ taskId, err }, 'Failed to select verification points')
+    })
+
     return result
   } catch (err) {
     // P2034: transaction conflict under SERIALIZABLE — safely retry as 409
@@ -724,11 +754,40 @@ export async function submitTask(workerId: string, taskId: string) {
         if (fresh.status === 'SUBMITTED') throw new ConflictError('Task is already submitted')
         assertTransition(fresh.status, 'SUBMITTED', 'WORKER')
 
-        // Require BEFORE + AFTER + PROOF media — checked inside transaction to avoid TOCTOU
-        const media = await tx.taskMedia.findMany({ where: { taskId } })
-        const types = new Set(media.map((m) => m.type))
-        if (!types.has('BEFORE') || !types.has('AFTER') || !types.has('PROOF')) {
-          throw new BadRequestError('Submit requires BEFORE, AFTER, and PROOF photos')
+        // ── Media validation ─────────────────────────────────────────────────
+        // Tasks with reference points use the new per-point submission system.
+        // Legacy tasks (0 reference points) use the old BEFORE + AFTER + PROOF check.
+        const refPointCount = await tx.taskReferencePoint.count({ where: { taskId } })
+
+        if (refPointCount > 0) {
+          // New flow: check WorkerPointSubmission completeness
+          const refPoints = await tx.taskReferencePoint.findMany({ where: { taskId } })
+          const submissions = await tx.workerPointSubmission.findMany({ where: { taskId, workerId } })
+
+          // All verification points must have VERIFICATION submissions
+          const verificationPoints = refPoints.filter((p) => p.isVerificationPoint)
+          const verificationSubs = submissions.filter((s) => s.mediaType === 'VERIFICATION')
+          if (verificationSubs.length < verificationPoints.length) {
+            throw new BadRequestError(
+              `Must complete all ${verificationPoints.length} verification photos before submitting (${verificationSubs.length} done)`,
+            )
+          }
+
+          // At least 70% of all points must have AFTER submissions, minimum 3
+          const afterSubs = submissions.filter((s) => s.mediaType === 'AFTER')
+          const minRequired = Math.max(3, Math.ceil(refPoints.length * 0.7))
+          if (afterSubs.length < minRequired) {
+            throw new BadRequestError(
+              `Must upload at least ${minRequired} after photos (${afterSubs.length} uploaded)`,
+            )
+          }
+        } else {
+          // Legacy flow: require BEFORE + AFTER + PROOF in TaskMedia
+          const media = await tx.taskMedia.findMany({ where: { taskId } })
+          const types = new Set(media.map((m) => m.type))
+          if (!types.has('BEFORE') || !types.has('AFTER') || !types.has('PROOF')) {
+            throw new BadRequestError('Submit requires BEFORE, AFTER, and PROOF photos')
+          }
         }
 
         const timeSpentSecs = fresh.startedAt

@@ -7,12 +7,15 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { ChevronLeft, ChevronRight, CheckCircle, Camera, X } from 'lucide-react-native'
+import { ChevronLeft, ChevronRight, CheckCircle, Camera, X, Plus } from 'lucide-react-native'
 import { RazorpayWebCheckout } from '../../components/payment/RazorpayCheckout'
 import type { RazorpayPaymentResult, RazorpayCheckoutOptions } from '../../components/payment/RazorpayCheckout'
 import { CaptureCamera } from '../../components/camera/CaptureCamera'
 import type { CaptureResult } from '../../components/camera/CaptureCamera'
 import { mediaApi } from '../../api/media.api'
+import { referencePointsApi } from '../../api/referencePoints.api'
+import { useEnvironmentalDNA } from '../../hooks/useEnvironmentalDNA'
+import { apiClient } from '../../api/client'
 import { LinearGradient } from '../../components/LinearGradientShim'
 import { COLORS }        from '../../constants/colors'
 import { BUYER_THEME as B } from '../../constants/buyerTheme'
@@ -37,7 +40,19 @@ const CATEGORIES: { value: TaskCategory; label: string; emoji: string }[] = [
   { value: 'OTHER',              label: 'Other',               emoji: '📦' },
 ]
 
-const STEPS = ['Type', 'Details', 'Location', 'Confirm']
+const STEPS = ['Type', 'Details', 'Location', 'Photos', 'Confirm']
+
+const MAX_REF_PHOTOS = 10
+const MIN_REF_PHOTOS = 2 // minimum for any size
+
+interface ReferencePhoto {
+  id: string
+  uri: string
+  label: string
+  lat: number | null
+  lng: number | null
+  photoHash: string | null
+}
 
 interface FormState {
   title:       string
@@ -65,6 +80,9 @@ export function PostTaskScreen() {
   const [gpsLoading, setGpsLoading] = useState(false)
   const [refPhoto, setRefPhoto] = useState<string | null>(null)
   const [cameraOpen, setCameraOpen] = useState(false)
+  const [refPhotos, setRefPhotos] = useState<ReferencePhoto[]>([])
+  const [editingLabel, setEditingLabel] = useState<string | null>(null)
+  const { capture: captureEnvDNA } = useEnvironmentalDNA()
 
   const useMyLocation = async () => {
     setGpsLoading(true)
@@ -74,7 +92,7 @@ export function PostTaskScreen() {
         Alert.alert('Permission denied', 'Enable location in Settings to use this feature.')
         return
       }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
       set('lat', loc.coords.latitude)
       set('lng', loc.coords.longitude)
       // Reverse geocode to get address
@@ -120,16 +138,41 @@ export function PostTaskScreen() {
   const mutation = useMutation({
     mutationFn: createTaskWithPayment,
     onSuccess: async (task) => {
-      if (refPhoto) {
+      // Capture buyer's environmental DNA (silent, fire-and-forget)
+      if (refPhotos.length > 0) {
+        captureEnvDNA().then((envDNA) => {
+          apiClient.post(`/tasks/${task.id}/environment`, {
+            captureType: 'BUYER_CREATION', ...envDNA,
+          }).catch(() => {})
+        }).catch(() => {})
+      }
+
+      // Upload reference point photos in parallel (3 at a time for speed)
+      const BATCH_SIZE = 3
+      for (let i = 0; i < refPhotos.length; i += BATCH_SIZE) {
+        const batch = refPhotos.slice(i, i + BATCH_SIZE)
+        await Promise.allSettled(
+          batch.map((rp, batchIdx) =>
+            referencePointsApi.upload(
+              task.id,
+              i + batchIdx + 1, // pointIndex: 1-based
+              rp.uri,
+              rp.label || undefined,
+              rp.lat != null ? { lat: rp.lat, lng: rp.lng!, timestamp: new Date().toISOString(), deviceId: 'mobile', photoHash: rp.photoHash ?? '' } : undefined,
+            ).catch(() => {}),
+          ),
+        )
+      }
+      // Legacy single reference photo (backward compat)
+      if (refPhoto && refPhotos.length === 0) {
         try {
           await mediaApi.upload(task.id, refPhoto, 'REFERENCE')
-        } catch {
-          // photo upload failed but task is created — not critical
-        }
+        } catch { /* non-critical */ }
       }
       qc.invalidateQueries({ queryKey: ['buyer-tasks-active'] })
       setForm(INITIAL)
       setRefPhoto(null)
+      setRefPhotos([])
       setStep(0)
       navigation.navigate('BuyerTaskDetail', { taskId: task.id })
     },
@@ -193,6 +236,7 @@ export function PostTaskScreen() {
     if (step === 0) return !!form.category
     if (step === 1) return form.title.trim().length > 3 && form.description.trim().length > 10
     if (step === 2) return true // location optional
+    if (step === 3) return refPhotos.length >= MIN_REF_PHOTOS // Document Area — min photos required
     return true
   }
 
@@ -362,8 +406,60 @@ export function PostTaskScreen() {
           </View>
         )}
 
-        {/* Step 3: Confirm */}
+        {/* Step 3: Document the Area (NEW — Reference Points) */}
         {step === 3 && (
+          <View style={s.formGroup}>
+            <Text style={s.stepTitle}>Document the Area</Text>
+            <Text style={s.stepSub}>
+              Take photos of the spots that need cleaning.{'\n'}
+              Workers will match these exact locations after cleaning.
+            </Text>
+
+            {/* Photo grid */}
+            <View style={s.refPhotoGrid}>
+              {refPhotos.map((rp, idx) => (
+                <View key={rp.id} style={s.refGridItem}>
+                  <Image source={{ uri: rp.uri }} style={s.refGridImg} />
+                  <TouchableOpacity
+                    style={s.refGridRemove}
+                    onPress={() => setRefPhotos(ps => ps.filter(p => p.id !== rp.id))}
+                  >
+                    <X size={12} color="#fff" />
+                  </TouchableOpacity>
+                  <TextInput
+                    style={s.refGridLabel}
+                    placeholder={`Point ${idx + 1}`}
+                    value={rp.label}
+                    onChangeText={(v) => setRefPhotos(ps => ps.map(p => p.id === rp.id ? { ...p, label: v } : p))}
+                    placeholderTextColor={B.text.muted}
+                    maxLength={50}
+                  />
+                </View>
+              ))}
+
+              {refPhotos.length < MAX_REF_PHOTOS && (
+                <TouchableOpacity
+                  style={s.refGridAdd}
+                  onPress={() => setCameraOpen(true)}
+                  activeOpacity={0.85}
+                >
+                  <Plus size={28} color={B.primary} />
+                  <Text style={s.refGridAddText}>Add</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <Text style={s.refProgress}>
+              {refPhotos.length}/{MAX_REF_PHOTOS} reference points
+              {refPhotos.length < MIN_REF_PHOTOS
+                ? ` (need at least ${MIN_REF_PHOTOS})`
+                : ' \u2714'}
+            </Text>
+          </View>
+        )}
+
+        {/* Step 4: Confirm */}
+        {step === 4 && (
           <View style={s.formGroup}>
             <Text style={s.stepTitle}>Review & Confirm</Text>
 
@@ -373,9 +469,11 @@ export function PostTaskScreen() {
               <SummaryRow label="Condition" value={DIRTY_LEVELS[form.dirtyLevel]?.label + ' dirty'} />
               <SummaryRow label="Urgency"   value={form.urgency} />
               {form.address ? <SummaryRow label="Location" value={form.address} /> : null}
-              {refPhoto ? <SummaryRow label="Photo" value="Reference photo attached" /> : null}
-              <SummaryRow label="Work Window" value="07:00 – 11:30 AM" />
-              <SummaryRow label="Upload By"   value="12:00 PM" />
+              {refPhotos.length > 0
+                ? <SummaryRow label="Reference Photos" value={`${refPhotos.length} points documented`} />
+                : refPhoto ? <SummaryRow label="Photo" value="Reference photo attached" /> : null}
+              <SummaryRow label="Work Window" value="07:00 AM – 04:30 PM" />
+              <SummaryRow label="Upload By"   value="05:00 PM" />
               <View style={s.divider} />
               <View style={s.priceRow}>
                 <Text style={s.priceLabel}>You pay</Text>
@@ -404,10 +502,26 @@ export function PostTaskScreen() {
       <Modal visible={cameraOpen} animationType="slide" statusBarTranslucent>
         <CaptureCamera
           taskId={null}
-          photoType="GENERAL"
+          photoType={step === 3 ? 'REFERENCE' as any : 'GENERAL'}
           onCapture={(result: CaptureResult) => {
             setCameraOpen(false)
-            setRefPhoto(result.photo.fullUri)
+            if (step === 3) {
+              // New flow: add to reference photos array
+              setRefPhotos(ps => [
+                ...ps,
+                {
+                  id: `ref_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                  uri: result.photo.fullUri,
+                  label: '',
+                  lat: result.photo.metadata?.lat ?? null,
+                  lng: result.photo.metadata?.lng ?? null,
+                  photoHash: result.photo.metadata?.photoHash ?? null,
+                },
+              ])
+            } else {
+              // Legacy: single reference photo on Location step
+              setRefPhoto(result.photo.fullUri)
+            }
           }}
           onClose={() => setCameraOpen(false)}
         />
@@ -503,4 +617,13 @@ const s = StyleSheet.create({
   nextBtn:    { backgroundColor: B.primary, borderRadius: 14, paddingVertical: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   nextBtnDisabled: { opacity: 0.5 },
   nextBtnText:{ fontSize: 17, fontWeight: '700', color: '#fff' },
+  // Reference photo grid (Step 3)
+  refPhotoGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
+  refGridItem:   { width: '47%', borderRadius: 12, overflow: 'hidden', backgroundColor: B.surface, borderWidth: 1, borderColor: B.border },
+  refGridImg:    { width: '100%', height: 100, borderTopLeftRadius: 12, borderTopRightRadius: 12 },
+  refGridRemove: { position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
+  refGridLabel:  { fontSize: 12, paddingHorizontal: 8, paddingVertical: 6, color: B.text.primary },
+  refGridAdd:    { width: '47%', height: 130, borderRadius: 12, borderWidth: 1.5, borderColor: B.border, borderStyle: 'dashed' as any, alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: B.primaryTint },
+  refGridAddText:{ fontSize: 13, fontWeight: '600', color: B.primary },
+  refProgress:   { fontSize: 13, color: B.text.secondary, fontWeight: '600', marginTop: 12, textAlign: 'center' },
 })

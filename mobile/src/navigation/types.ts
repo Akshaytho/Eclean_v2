@@ -19,14 +19,15 @@ export type WorkerTabParamList = {
 }
 
 export type WorkerStackParamList = {
-  WorkerTabs:      undefined
-  TaskDetail:      { taskId: string }
-  ActiveTask:      { taskId: string }
-  SubmitProof:     { taskId: string }
-  Chat:            { taskId: string; title: string }
-  Gallery:         undefined
-  Wallet:          undefined
-  Notifications:   undefined
+  WorkerTabs:       undefined
+  TaskDetail:       { taskId: string }
+  ActiveTask:       { taskId: string }
+  ReferencePoints:  { taskId: string }
+  SubmitProof:      { taskId: string }
+  Chat:             { taskId: string; title: string }
+  Gallery:          undefined
+  Wallet:           undefined
+  Notifications:    undefined
 }
 
 // ─── Buyer ───────────────────────────────────────────────────────────────────
@@ -67,6 +68,7 @@ export type SupervisorStackParamList = {
 
 export type CitizenTabParamList = {
   CitizenHome:    undefined
+  VerifyTasks:    undefined
   Notifications:  undefined
   Profile:        undefined
 }

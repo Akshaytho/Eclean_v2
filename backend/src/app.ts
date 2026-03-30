@@ -20,6 +20,9 @@ import { payoutsRoutes } from './modules/payouts/payouts.routes'
 import { paymentRoutes } from './modules/payments/payment.routes'
 import { analyticsRoutes } from './intelligence/analytics/analytics.routes'
 import { dataExportRoutes } from './intelligence/data-export/export.routes'
+import { referencePointRoutes } from './modules/reference-points/reference-points.routes'
+import { environmentRoutes } from './modules/environment/environment.routes'
+import { citizenVerifyRoutes } from './modules/citizen-verify/citizen-verify.routes'
 import type { FastifyInstance } from 'fastify'
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -65,9 +68,12 @@ export async function buildApp(): Promise<FastifyInstance> {
   void app.register(buyerRoutes,         { prefix: '/api/v1/buyer/tasks' })
   void app.register(workerRoutes,        { prefix: '/api/v1/worker' })
   void app.register(mediaRoutes,         { prefix: '/api/v1/tasks' })
+  void app.register(referencePointRoutes, { prefix: '/api/v1/tasks' })
+  void app.register(environmentRoutes,    { prefix: '/api/v1/tasks' })
   void app.register(zoneRoutes,          { prefix: '/api/v1/zones' })
   void app.register(supervisorRoutes,    { prefix: '/api/v1/supervisor' })
   void app.register(citizenRoutes,       { prefix: '/api/v1/citizen' })
+  void app.register(citizenVerifyRoutes, { prefix: '/api/v1/citizen' })
   void app.register(adminRoutes,         { prefix: '/api/v1/admin' })
   void app.register(notificationsRoutes, { prefix: '/api/v1/notifications' })
   void app.register(payoutsRoutes,       { prefix: '/api/v1' })

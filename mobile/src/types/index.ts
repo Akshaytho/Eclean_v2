@@ -24,7 +24,7 @@ export type TaskCategory =
 
 export type DirtyLevel  = 'LIGHT' | 'MEDIUM' | 'HEAVY' | 'CRITICAL'
 export type TaskUrgency = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL'
-export type MediaType   = 'BEFORE' | 'AFTER' | 'PROOF' | 'REFERENCE'
+export type MediaType   = 'BEFORE' | 'AFTER' | 'PROOF' | 'REFERENCE' | 'VERIFICATION' | 'ARRIVAL'
 export type PayoutStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
 
 export interface WorkerProfile {
@@ -36,6 +36,7 @@ export interface WorkerProfile {
   completedTasks:   number
   isAvailable:      boolean
   identityVerified: boolean
+  trustScore:       number  // 0-100, starts at 70
 }
 
 export interface BuyerProfile {
@@ -44,6 +45,9 @@ export interface BuyerProfile {
   companyName:      string | null
   totalTasksPosted: number
   totalSpentCents:  number
+  buyerTrustScore:      number  // 0-100, starts at 70
+  falseRejectionCount:  number
+  isFlaggedForReview:   boolean
 }
 
 export interface User {
@@ -88,12 +92,23 @@ export interface Task {
   aiReasoning:     string | null
   createdAt:       string
   updatedAt:       string
+  // Reference point system
+  indoorOutdoor?:        string | null
+  totalReferencePoints?: number | null
+  areaSizeEstimate?:     string | null
+  workStartedAt?:        string | null
+  workDurationSecs?:     number | null
+  ruleEngineScore?:      number | null
+  ruleEngineBreakdown?:  string | null
+  finalDecision?:        string | null
   // Populated on detail endpoints
   media?:          TaskMedia[]
   worker?:         { id: string; name: string; email: string } | null
   buyer?:          { id: string; name: string; email: string } | null
   payout?:         Payout | null
   events?:         TaskEvent[]
+  referencePoints?:    TaskReferencePoint[]
+  workerSubmissions?:  WorkerPointSubmission[]
 }
 
 export interface TaskMedia {
@@ -219,4 +234,67 @@ export interface GPSCoord {
   lng:       number
   accuracy?: number
   timestamp: number
+}
+
+// ─── Reference Point System ──────────────────────────────────────────────────
+
+export interface TaskReferencePoint {
+  id:                  string
+  taskId:              string
+  pointIndex:          number
+  label:               string | null
+  buyerImageUrl:       string
+  buyerLat:            number | null
+  buyerLng:            number | null
+  buyerHeading:        number | null
+  isVerificationPoint: boolean
+  createdAt:           string
+  workerSubmissions?:  WorkerPointSubmission[]
+  localImageUri?:      string  // for offline cache on device
+}
+
+export interface WorkerPointSubmission {
+  id:                 string
+  taskId:             string
+  referencePointId:   string
+  workerId:           string
+  mediaType:          'AFTER' | 'VERIFICATION'
+  imageUrl:           string
+  workerLat:          number | null
+  workerLng:          number | null
+  workerHeading:      number | null
+  photoHash:          string | null
+  locationMatchScore: number | null
+  status:             string
+  capturedAt:         string | null
+  createdAt:          string
+}
+
+export interface SubmissionProgress {
+  totalPoints:            number
+  verificationRequired:   number
+  verificationCompleted:  number
+  afterCompleted:         number
+  canSubmit:              boolean
+  points: Array<TaskReferencePoint & {
+    distanceFromWorker:         number | null
+    hasAfterSubmission:         boolean
+    hasVerificationSubmission:  boolean
+    afterSubmission:            WorkerPointSubmission | null
+  }>
+  summary: {
+    avgLocationScore: number
+    totalPhotos:      number
+    elapsedMinutes:   number
+  }
+}
+
+export interface RuleEngineBreakdown {
+  verification: number  // /20
+  coverage:     number  // /25
+  gpsProximity: number  // /25
+  timeOnSite:   number  // /15
+  fraudFlags:   number  // /15
+  total:        number  // /100
+  decision:     'AUTO_PASS' | 'MANUAL_REVIEW' | 'REJECT'
 }

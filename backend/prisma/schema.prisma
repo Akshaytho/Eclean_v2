@@ -65,6 +65,8 @@ enum MediaType {
   AFTER
   PROOF
   REFERENCE
+  VERIFICATION  // worker recreates buyer's reference image at spot-check points
+  ARRIVAL       // optional worker arrival image
   REPORT
   PROFILE
 }
@@ -141,6 +143,9 @@ model WorkerProfile {
   isAvailable      Boolean  @default(true)
   identityVerified Boolean  @default(false)
 
+  // Trust score (Silent Witness Protocol)
+  trustScore       Int      @default(70)  // 0-100, starts at 70 (trusted)
+
   user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   activeTask Task? @relation("WorkerActiveTask", fields: [activeTaskId], references: [id])
 }
@@ -151,6 +156,11 @@ model BuyerProfile {
   companyName      String?
   totalTasksPosted Int    @default(0)
   totalSpentCents  Int    @default(0)
+
+  // Buyer accountability (flags dishonest rejections)
+  buyerTrustScore      Int    @default(70)  // 0-100, starts at 70 (trusted)
+  falseRejectionCount  Int    @default(0)   // times buyer rejected AI-approved work
+  isFlaggedForReview   Boolean @default(false)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -190,8 +200,8 @@ model Task {
   locationLng        Float?
   locationAddress    String?
   workWindowStart    String      @default("07:00")
-  workWindowEnd      String      @default("11:30")
-  uploadWindowEnd    String      @default("12:00")
+  workWindowEnd      String      @default("16:30")
+  uploadWindowEnd    String      @default("17:00")
   timezone           String      @default("Asia/Kolkata")
   razorpayOrderId    String?   @unique
   razorpayPaymentId  String?   @unique
@@ -208,6 +218,20 @@ model Task {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
+  // ─── Reference Point System (Image Capture Redesign) ───────────────────────
+  indoorOutdoor         String?    @default("OUTDOOR") // INDOOR | OUTDOOR | MIXED
+  totalReferencePoints  Int?       @default(0)         // how many buyer uploaded (0-10)
+  areaSizeEstimate      String?                        // SMALL | MEDIUM | LARGE
+  workStartedAt         DateTime?                      // when worker pressed "Start Work"
+  workDurationSecs      Int?                           // total seconds worked (from timer)
+
+  // Confidence scoring (populated after submit)
+  ruleEngineScore       Int?                           // 0-100 from rule engine
+  ruleEngineBreakdown   String?                        // JSON: {verification: 20, coverage: 25, ...}
+  adversarialScore      Float?                         // 0-1 fraud probability from adversarial AI
+  adversarialAnomalies  String?                        // JSON: [{type, description, severity}]
+  finalDecision         String?                        // AUTO_PASS | MANUAL_REVIEW | REJECT
+
   buyer          User           @relation("TaskBuyer", fields: [buyerId], references: [id])
   worker         User?          @relation("TaskWorker", fields: [workerId], references: [id])
   zone           Zone?          @relation(fields: [zoneId], references: [id])
@@ -217,6 +241,12 @@ model Task {
   events         TaskEvent[]
   locationLogs   TaskLocationLog[]
   chatMessages   ChatMessage[]
+  referencePoints      TaskReferencePoint[]
+  workerSubmissions    WorkerPointSubmission[]
+  environmentFingerprint TaskEnvironmentFingerprint?
+  workerEnvCaptures    WorkerEnvironmentCapture[]
+  motionSummary        TaskMotionSummary?
+  citizenVerifications CitizenVerification[]
 
   @@index([status])
   @@index([buyerId])
@@ -242,6 +272,152 @@ model TaskMedia {
   createdAt       DateTime  @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+// ─── Reference Point System ──────────────────────────────────────────────────
+// Connects buyer reference images to worker after images.
+// Created when buyer uploads reference photos during task creation.
+
+model TaskReferencePoint {
+  id                 String    @id @default(uuid())
+  taskId             String
+  pointIndex         Int       // 1-10, order of capture
+  label              String?   // buyer's note: "near gate", "drain corner"
+  buyerImageUrl      String    // Cloudinary URL of buyer's reference photo
+  buyerImagePublicId String?   // for Cloudinary deletion
+  buyerLat           Float?    // GPS where buyer took the photo
+  buyerLng           Float?
+  buyerHeading       Float?    // compass direction (future use)
+  isVerificationPoint Boolean  @default(false)  // true for 2 random spot-checks
+  createdAt          DateTime  @default(now())
+
+  task               Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workerSubmissions  WorkerPointSubmission[]
+
+  @@unique([taskId, pointIndex])
+  @@index([taskId])
+}
+
+// Links each worker photo to a specific reference point.
+// Created when worker uploads a photo for a reference point.
+
+model WorkerPointSubmission {
+  id                    String    @id @default(uuid())
+  taskId                String
+  referencePointId      String
+  workerId              String
+  mediaType             MediaType // AFTER or VERIFICATION
+  imageUrl              String    // Cloudinary URL
+  imagePublicId         String?   // for Cloudinary deletion
+  workerLat             Float?
+  workerLng             Float?
+  workerHeading         Float?
+  photoHash             String?   // SHA-256 of image bytes
+  capturedAt            DateTime?
+  deviceId              String?
+  idempotencyKey        String?   @unique  // retry-safe uploads
+  status                String    @default("UPLOADED") // PENDING | UPLOADING | UPLOADED | FAILED
+
+  // Scoring (populated by rule engine)
+  locationMatchScore    Float?    // GPS proximity to buyer point (0-100)
+
+  createdAt             DateTime  @default(now())
+
+  task                  Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  referencePoint        TaskReferencePoint @relation(fields: [referencePointId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([referencePointId])
+  @@index([workerId])
+}
+
+// ─── Silent Witness Protocol — Environmental DNA ─────────────────────────────
+// Buyer's environmental fingerprint captured at task creation site.
+
+model TaskEnvironmentFingerprint {
+  id              String   @id @default(uuid())
+  taskId          String   @unique
+  magX            Float?   // Magnetometer X
+  magY            Float?
+  magZ            Float?
+  barometer       Float?   // atmospheric pressure (hPa)
+  ambientLight    Float?   // 0-1 normalized
+  cellType        String?  // cellular | wifi
+  cellCarrier     String?
+  wifiNetworks    String?  // JSON: [{ssid, bssid, rssi}]
+  capturedAt      DateTime
+  createdAt       DateTime @default(now())
+
+  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+// Worker's environmental DNA captured during task execution.
+
+model WorkerEnvironmentCapture {
+  id              String   @id @default(uuid())
+  taskId          String
+  workerId        String
+  captureType     String   // START | PHOTO | SUBMIT
+  magX            Float?
+  magY            Float?
+  magZ            Float?
+  barometer       Float?
+  ambientLight    Float?
+  cellType        String?
+  cellCarrier     String?
+  wifiNetworks    String?
+  matchScore      Float?   // 0-100 compared to buyer's fingerprint
+  capturedAt      DateTime
+  createdAt       DateTime @default(now())
+
+  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([workerId])
+}
+
+// ─── Silent Witness Protocol — Motion Signature ──────────────────────────────
+// Aggregated accelerometer data from worker's task duration.
+
+model TaskMotionSummary {
+  id              String   @id @default(uuid())
+  taskId          String   @unique
+  workerId        String
+  cleaningPct     Float    // 0-1
+  walkingPct      Float
+  standingPct     Float
+  vehiclePct      Float
+  totalWindows    Int      // number of 30-second windows
+  durationSecs    Int
+  hasRedFlag      Boolean  @default(false)
+  hasYellowFlag   Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+// ─── Silent Witness Protocol — Citizen Mesh ──────────────────────────────────
+// Post-task verification by random citizen walking past.
+
+model CitizenVerification {
+  id              String    @id @default(uuid())
+  taskId          String
+  citizenId       String
+  photoUrl        String?   // Cloudinary URL (optional)
+  photoPublicId   String?
+  rating          String    // CLEAN | PARTIALLY_CLEAN | DIRTY
+  citizenLat      Float?
+  citizenLng      Float?
+  matchesWorker   Boolean?  // AI comparison result
+  rewardAmount    Int       // paise (500 = 5 rupees)
+  rewardPaid      Boolean   @default(false)
+  verifiedAt      DateTime
+  createdAt       DateTime  @default(now())
+
+  task            Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([citizenId])
 }
 
 model Payout {

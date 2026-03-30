@@ -30,7 +30,7 @@ const MAX_FULL_PX = 1200  // px — max dimension for full-res upload
 export interface GalleryPhoto {
   id:           string        // unique — timestamp + random
   taskId:       string | null // null = dashboard quick capture
-  photoType:    'BEFORE' | 'AFTER' | 'PROOF' | 'GENERAL'
+  photoType:    'BEFORE' | 'AFTER' | 'PROOF' | 'GENERAL' | 'REFERENCE' | 'VERIFICATION'
   fullUri:      string        // full-res file path
   thumbUri:     string        // thumbnail file path
   uploadedUri:  string | null // Cloudinary URL after upload

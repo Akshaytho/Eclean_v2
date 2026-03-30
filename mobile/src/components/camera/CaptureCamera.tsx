@@ -7,7 +7,7 @@
 import React, { useRef, useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Dimensions, StatusBar, ActivityIndicator, Alert,
+  Dimensions, StatusBar, ActivityIndicator, Alert, Image,
 } from 'react-native'
 import { CameraView, useCameraPermissions, CameraType } from 'expo-camera'
 import * as Location from 'expo-location'
@@ -22,7 +22,7 @@ import { PhotoPreview } from './PhotoPreview'
 
 const { width: SW, height: SH } = Dimensions.get('window')
 
-export type PhotoType = 'BEFORE' | 'AFTER' | 'PROOF' | 'GENERAL'
+export type PhotoType = 'BEFORE' | 'AFTER' | 'PROOF' | 'GENERAL' | 'REFERENCE' | 'VERIFICATION'
 
 export interface CaptureResult {
   photo:    GalleryPhoto
@@ -43,16 +43,28 @@ interface CaptureCameraProps {
   photoType: PhotoType
   onCapture: (result: CaptureResult) => void
   onClose:   () => void
+  // Side-by-side reference point mode (worker captures matching buyer's angle)
+  referenceImage?: string | null   // buyer's reference photo URL/local URI
+  referenceLabel?: string | null   // "Near the gate", "Drain corner"
+  pointIndex?:     number | null   // which point (1-10)
+  totalPoints?:    number | null   // total reference points in task
+  distanceFromPoint?: number | null // meters from buyer's GPS for this point
 }
 
 const TYPE_CONFIG: Record<PhotoType, { label: string; color: string; hint: string }> = {
-  BEFORE:  { label: 'BEFORE',  color: '#F59E0B', hint: 'Show the area before cleaning' },
-  AFTER:   { label: 'AFTER',   color: '#10B981', hint: 'Show the cleaned area' },
-  PROOF:   { label: 'PROOF',   color: '#3B82F6', hint: 'Show yourself at the location' },
-  GENERAL: { label: 'PHOTO',   color: '#8B5CF6', hint: 'Take a photo' },
+  BEFORE:       { label: 'BEFORE',       color: '#F59E0B', hint: 'Show the area before cleaning' },
+  AFTER:        { label: 'AFTER',        color: '#10B981', hint: 'Show the cleaned area' },
+  PROOF:        { label: 'PROOF',        color: '#3B82F6', hint: 'Show yourself at the location' },
+  GENERAL:      { label: 'PHOTO',        color: '#8B5CF6', hint: 'Take a photo' },
+  REFERENCE:    { label: 'REFERENCE',    color: '#F59E0B', hint: 'Document this dirty spot' },
+  VERIFICATION: { label: 'VERIFY',       color: '#7C3AED', hint: 'Match the reference angle exactly' },
 }
 
-export const CaptureCamera = React.memo(function CaptureCamera({ taskId, photoType, onCapture, onClose }: CaptureCameraProps) {
+export const CaptureCamera = React.memo(function CaptureCamera({
+  taskId, photoType, onCapture, onClose,
+  referenceImage, referenceLabel, pointIndex, totalPoints, distanceFromPoint,
+}: CaptureCameraProps) {
+  const isSideBySide = !!referenceImage
   const [permission, requestPermission] = useCameraPermissions()
   const [facing,    setFacing]   = useState<CameraType>('back')
   const [flash,     setFlash]    = useState(false)
@@ -160,20 +172,36 @@ export const CaptureCamera = React.memo(function CaptureCamera({ taskId, photoTy
     )
   }
 
+  // Proximity bar color
+  const proximityColor = distanceFromPoint == null ? 'rgba(255,255,255,0.3)'
+    : distanceFromPoint <= 15 ? '#10B981'
+    : distanceFromPoint <= 50 ? '#F59E0B'
+    : '#EF4444'
+
+  const proximityText = distanceFromPoint == null ? ''
+    : distanceFromPoint <= 15 ? `${distanceFromPoint}m — at the spot`
+    : `${distanceFromPoint}m away`
+
   // Camera
   return (
     <View style={s.bg}>
       <StatusBar hidden />
-      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} flash={flash ? 'on' : 'off'} />
 
-      {/* Top bar — minimal */}
+      {/* Top bar */}
       <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={onClose} style={s.topBtn} hitSlop={12}>
           <X size={20} color="#fff" />
         </TouchableOpacity>
 
-        <View style={[s.typePill, { backgroundColor: cfg.color }]}>
-          <Text style={s.typeText}>{cfg.label}</Text>
+        <View style={s.topCenter}>
+          <View style={[s.typePill, { backgroundColor: cfg.color }]}>
+            <Text style={s.typeText}>
+              {isSideBySide && pointIndex ? `POINT ${pointIndex}/${totalPoints ?? '?'}` : cfg.label}
+            </Text>
+          </View>
+          {referenceLabel && (
+            <Text style={s.refLabelText}>{referenceLabel}</Text>
+          )}
         </View>
 
         <TouchableOpacity onPress={() => setFlash(f => !f)} style={s.topBtn} hitSlop={12}>
@@ -181,19 +209,62 @@ export const CaptureCamera = React.memo(function CaptureCamera({ taskId, photoTy
         </TouchableOpacity>
       </View>
 
-      {/* Center hint — subtle */}
-      <View style={s.hintWrap}>
-        <Text style={s.hintText}>{cfg.hint}</Text>
-      </View>
+      {/* Side-by-side or full-screen camera */}
+      {isSideBySide ? (
+        <View style={s.sideBySide}>
+          <View style={s.sbs_half}>
+            <Image source={{ uri: referenceImage! }} style={s.sbs_refImg} resizeMode="cover" />
+            <View style={s.sbs_labelWrap}>
+              <Text style={s.sbs_label}>REFERENCE</Text>
+            </View>
+          </View>
+          <View style={s.sbs_half}>
+            <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} flash={flash ? 'on' : 'off'} />
+            <View style={s.sbs_labelWrap}>
+              <Text style={s.sbs_label}>YOUR CAMERA</Text>
+            </View>
+          </View>
+        </View>
+      ) : (
+        <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} flash={flash ? 'on' : 'off'} />
+      )}
+
+      {/* Proximity indicator (side-by-side mode only) */}
+      {isSideBySide && distanceFromPoint != null && (
+        <View style={s.proximityWrap}>
+          <View style={[s.proximityBar, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+            <View style={[
+              s.proximityFill,
+              {
+                backgroundColor: proximityColor,
+                width: `${Math.max(5, Math.min(100, (1 - Math.min(distanceFromPoint, 200) / 200) * 100))}%`,
+              },
+            ]} />
+          </View>
+          <Text style={[s.proximityText, { color: proximityColor }]}>{proximityText}</Text>
+        </View>
+      )}
+
+      {/* Hint (non-side-by-side only) */}
+      {!isSideBySide && (
+        <View style={s.hintWrap}>
+          <Text style={s.hintText}>{cfg.hint}</Text>
+        </View>
+      )}
+
+      {/* Side-by-side hint */}
+      {isSideBySide && (
+        <View style={s.hintWrap}>
+          <Text style={s.hintText}>Match the reference angle</Text>
+        </View>
+      )}
 
       {/* Bottom controls */}
       <View style={[s.bottomBar, { paddingBottom: insets.bottom + 20 }]}>
-        {/* Flip */}
         <TouchableOpacity style={s.sideBtn} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
           <RotateCcw size={22} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
 
-        {/* Shutter — big, clean */}
         <TouchableOpacity
           style={s.shutter}
           onPress={() => void onShutter()}
@@ -207,11 +278,9 @@ export const CaptureCamera = React.memo(function CaptureCamera({ taskId, photoTy
           )}
         </TouchableOpacity>
 
-        {/* Spacer for symmetry */}
         <View style={s.sideBtn} />
       </View>
 
-      {/* Subtle secure badge — replaces verbose evidence text */}
       <View style={[s.secureBadge, { bottom: insets.bottom + 4 }]}>
         <Shield size={10} color="rgba(255,255,255,0.35)" />
         <Text style={s.secureText}>Verified capture</Text>
@@ -254,6 +323,19 @@ const s = StyleSheet.create({
   permBtnText:  { color: '#fff', fontSize: 16, fontWeight: '700' },
   permSkip:     { marginTop: 16 },
   permSkipText: { color: 'rgba(255,255,255,0.4)', fontSize: 14 },
+
+  // Side-by-side mode
+  topCenter:      { alignItems: 'center', gap: 4 },
+  refLabelText:   { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '500' },
+  sideBySide:     { position: 'absolute', top: SH * 0.12, left: 8, right: 8, flexDirection: 'row', gap: 6, height: SH * 0.35, zIndex: 2 },
+  sbs_half:       { flex: 1, borderRadius: 14, overflow: 'hidden', position: 'relative' },
+  sbs_refImg:     { width: '100%', height: '100%' },
+  sbs_labelWrap:  { position: 'absolute', bottom: 6, left: 0, right: 0, alignItems: 'center' },
+  sbs_label:      { color: '#fff', fontSize: 9, fontWeight: '700', letterSpacing: 1, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
+  proximityWrap:  { position: 'absolute', top: SH * 0.49, left: 24, right: 24, alignItems: 'center', gap: 4, zIndex: 5 },
+  proximityBar:   { width: '100%', height: 4, borderRadius: 2, overflow: 'hidden' },
+  proximityFill:  { height: '100%', borderRadius: 2 },
+  proximityText:  { fontSize: 12, fontWeight: '600' },
 
   // Saved
   savedCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#10B981', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },

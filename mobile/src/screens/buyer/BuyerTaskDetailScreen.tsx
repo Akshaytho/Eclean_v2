@@ -34,11 +34,12 @@ import { Button }         from '../../components/ui/Button'
 import { COLORS }         from '../../constants/colors'
 import { BUYER_THEME as B } from '../../constants/buyerTheme'
 import { buyerTasksApi }  from '../../api/tasks.api'
+import { referencePointsApi } from '../../api/referencePoints.api'
 import { useSocketStore } from '../../stores/socketStore'
 import { formatMoney }    from '../../utils/formatMoney'
 import { timeAgo }        from '../../utils/timeAgo'
 import type { BuyerStackParamList } from '../../navigation/types'
-import type { TaskStatus } from '../../types'
+import type { TaskStatus, TaskReferencePoint } from '../../types'
 
 type Nav   = NativeStackNavigationProp<BuyerStackParamList, 'BuyerTaskDetail'>
 type Route = RouteProp<BuyerStackParamList, 'BuyerTaskDetail'>
@@ -87,6 +88,14 @@ export function BuyerTaskDetailScreen() {
     queryFn:     () => buyerTasksApi.getTask(taskId),
     staleTime:   10_000,
     refetchInterval: 30_000, // auto-refresh every 30s for active tasks
+  })
+
+  // ── Fetch reference points (if any) ────────────────────────────────────
+  const { data: refPoints } = useQuery({
+    queryKey:  ['reference-points', taskId],
+    queryFn:   () => referencePointsApi.list(taskId),
+    staleTime: 60_000,
+    enabled:   !!task, // only fetch after task loads
   })
 
   // ── Join socket room — listen for live updates ─────────────────────────
@@ -266,7 +275,56 @@ export function BuyerTaskDetailScreen() {
           </View>
         )}
 
-        {/* ── Photo evidence grid ── */}
+        {/* ── Reference Point Pairs (new flow) ── */}
+        {refPoints && refPoints.length > 0 && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Reference Point Pairs</Text>
+            {refPoints.map((point: TaskReferencePoint) => {
+              const afterSub = point.workerSubmissions?.find((ws) => ws.mediaType === 'AFTER' || ws.mediaType === 'VERIFICATION')
+              return (
+                <View key={point.id} style={s.refPairCard}>
+                  <View style={s.refPairHeader}>
+                    <Text style={s.refPairLabel}>
+                      Point {point.pointIndex}{point.label ? ` · ${point.label}` : ''}
+                    </Text>
+                    {point.isVerificationPoint && (
+                      <View style={s.verifyBadge}>
+                        <Text style={s.verifyBadgeText}>VERIFY</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={s.refPairImages}>
+                    <TouchableOpacity onPress={() => setPhotoUrl(point.buyerImageUrl)} style={s.refPairImgWrap}>
+                      <Image source={{ uri: point.buyerImageUrl }} style={s.refPairImg} />
+                      <Text style={s.refPairImgLabel}>Before</Text>
+                    </TouchableOpacity>
+                    <Text style={s.refPairArrow}>{'\u2192'}</Text>
+                    {afterSub ? (
+                      <TouchableOpacity onPress={() => setPhotoUrl(afterSub.imageUrl)} style={s.refPairImgWrap}>
+                        <Image source={{ uri: afterSub.imageUrl }} style={s.refPairImg} />
+                        <Text style={s.refPairImgLabel}>After</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={[s.refPairImgWrap, s.refPairImgEmpty]}>
+                        <Text style={s.refPairEmptyText}>Pending</Text>
+                      </View>
+                    )}
+                  </View>
+                  {afterSub?.locationMatchScore != null && (
+                    <Text style={[
+                      s.refPairScore,
+                      { color: afterSub.locationMatchScore >= 75 ? '#16A34A' : afterSub.locationMatchScore >= 50 ? '#D97706' : B.status.error },
+                    ]}>
+                      GPS match: {afterSub.locationMatchScore}/100
+                    </Text>
+                  )}
+                </View>
+              )
+            })}
+          </View>
+        )}
+
+        {/* ── Photo evidence grid (legacy) ── */}
         {(beforePhotos.length > 0 || afterPhotos.length > 0 || proofPhotos.length > 0) && (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Photo Evidence</Text>
@@ -501,4 +559,18 @@ const s = StyleSheet.create({
   photoModal:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', alignItems: 'center', justifyContent: 'center' },
   photoFull:     { width: '100%', height: '85%' },
   photoModalHint:{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 16 },
+  // Reference point pairs
+  refPairCard:    { backgroundColor: B.surface, borderRadius: 14, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: B.border },
+  refPairHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  refPairLabel:   { fontSize: 14, fontWeight: '600', color: B.text.primary },
+  verifyBadge:    { backgroundColor: '#7C3AED20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  verifyBadgeText:{ fontSize: 10, fontWeight: '700', color: '#7C3AED' },
+  refPairImages:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  refPairImgWrap: { flex: 1, alignItems: 'center' },
+  refPairImg:     { width: '100%', height: 90, borderRadius: 10 },
+  refPairImgLabel:{ fontSize: 10, color: B.text.muted, fontWeight: '600', marginTop: 4 },
+  refPairArrow:   { fontSize: 18, color: B.text.muted },
+  refPairImgEmpty:{ height: 90, borderRadius: 10, borderWidth: 1.5, borderColor: B.border, borderStyle: 'dashed' as any, alignItems: 'center', justifyContent: 'center' },
+  refPairEmptyText:{ fontSize: 12, color: B.text.muted },
+  refPairScore:   { fontSize: 12, fontWeight: '600', marginTop: 8 },
 })

@@ -14,11 +14,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { workerTasksApi } from '../../api/tasks.api'
 import { mediaApi } from '../../api/media.api'
+import { referencePointsApi } from '../../api/referencePoints.api'
 import { useActiveTaskStore } from '../../stores/activeTaskStore'
 import { useBackgroundLocation } from '../../hooks/useBackgroundLocation'
 import { formatMoney } from '../../utils/formatMoney'
 import type { WorkerStackParamList } from '../../navigation/types'
-import type { MediaType } from '../../types'
+import type { MediaType, SubmissionProgress } from '../../types'
 import { formatElapsed } from '../../utils/formatTime'
 
 type Nav   = NativeStackNavigationProp<WorkerStackParamList, 'SubmitProof'>
@@ -44,6 +45,14 @@ export function SubmitProofScreen() {
   const { data: mediaList, isLoading: mediaLoading } = useQuery({
     queryKey: ['task', 'media', taskId],
     queryFn:  () => mediaApi.list(taskId),
+  })
+
+  // Reference points progress (new flow)
+  const hasRefPoints = (task?.totalReferencePoints ?? 0) > 0
+  const { data: refProgress } = useQuery<SubmissionProgress>({
+    queryKey: ['submission-progress', taskId],
+    queryFn:  () => referencePointsApi.progress(taskId),
+    enabled:  hasRefPoints,
   })
 
   const submitMutation = useMutation({
@@ -100,38 +109,92 @@ export function SubmitProofScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* ── Photos ── */}
-        <Text style={styles.sectionTitle}>Your Photos</Text>
-        {photoTypes.map(({ type, label }) => {
-          const media = getMediaByType(type)
-          return (
-            <View key={type} style={styles.photoRow}>
-              <View style={styles.photoPreview}>
-                {media ? (
-                  <Image source={{ uri: media.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                ) : (
-                  <View style={styles.noPhoto}>
-                    <ImageIcon size={28} color={W.text.muted} />
-                    <Text style={styles.noPhotoText}>Not uploaded</Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.photoInfo}>
-                <Text style={styles.photoLabel}>{label} Photo</Text>
-                {media ? (
-                  <View style={styles.checkRow}>
-                    <CheckCircle size={16} color={W.status.success} />
-                    <Text style={styles.checkText}>Uploaded</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.missingText}>Missing — go back to upload</Text>
-                )}
-              </View>
-            </View>
-          )
-        })}
 
-        {/* ── Checklist ── */}
+        {/* ── Reference Point Pairs (new flow) ── */}
+        {hasRefPoints && refProgress && (
+          <>
+            <Text style={styles.sectionTitle}>Reference Point Pairs</Text>
+            {refProgress.points.map((point) => {
+              const sub = point.afterSubmission
+              return (
+                <View key={point.id} style={styles.photoRow}>
+                  <View style={styles.photoPreview}>
+                    <Image source={{ uri: point.buyerImageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  </View>
+                  <View style={{ width: 8 }} />
+                  <View style={styles.photoPreview}>
+                    {sub ? (
+                      <Image source={{ uri: sub.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.noPhoto}>
+                        <ImageIcon size={20} color={W.text.muted} />
+                        <Text style={styles.noPhotoText}>Pending</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={[styles.photoInfo, { marginLeft: 10 }]}>
+                    <Text style={styles.photoLabel}>
+                      {point.label ?? `Point ${point.pointIndex}`}
+                      {point.isVerificationPoint ? ' \uD83D\uDD12' : ''}
+                    </Text>
+                    {sub?.locationMatchScore != null && (
+                      <Text style={[styles.checkText, {
+                        color: sub.locationMatchScore >= 75 ? W.status.success : sub.locationMatchScore >= 50 ? '#D97706' : W.status.error,
+                      }]}>
+                        GPS: {sub.locationMatchScore}/100
+                      </Text>
+                    )}
+                    {sub ? (
+                      <View style={styles.checkRow}>
+                        <CheckCircle size={14} color={W.status.success} />
+                        <Text style={styles.checkText}>Captured</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.missingText}>Not captured</Text>
+                    )}
+                  </View>
+                </View>
+              )
+            })}
+          </>
+        )}
+
+        {/* ── Legacy Photos (old flow) ── */}
+        {!hasRefPoints && (
+          <>
+            <Text style={styles.sectionTitle}>Your Photos</Text>
+            {photoTypes.map(({ type, label }) => {
+              const media = getMediaByType(type)
+              return (
+                <View key={type} style={styles.photoRow}>
+                  <View style={styles.photoPreview}>
+                    {media ? (
+                      <Image source={{ uri: media.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.noPhoto}>
+                        <ImageIcon size={28} color={W.text.muted} />
+                        <Text style={styles.noPhotoText}>Not uploaded</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.photoInfo}>
+                    <Text style={styles.photoLabel}>{label} Photo</Text>
+                    {media ? (
+                      <View style={styles.checkRow}>
+                        <CheckCircle size={16} color={W.status.success} />
+                        <Text style={styles.checkText}>Uploaded</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.missingText}>Missing — go back to upload</Text>
+                    )}
+                  </View>
+                </View>
+              )
+            })}
+          </>
+        )}
+
+        {/* ── Summary Checklist ── */}
         <Text style={styles.sectionTitle}>Summary</Text>
         <View style={styles.checklist}>
           <CheckRow
@@ -140,12 +203,29 @@ export function SubmitProofScreen() {
             value={`${gpsTrail.length} points`}
             ok={gpsTrail.length > 0}
           />
-          <CheckRow
-            icon={<CheckCircle size={16} color={W.primary} />}
-            label="Photos uploaded"
-            value={`${photoTypes.filter(({ type }) => !!getMediaByType(type)).length} / 3`}
-            ok={photoTypes.every(({ type }) => !!getMediaByType(type))}
-          />
+          {hasRefPoints && refProgress ? (
+            <>
+              <CheckRow
+                icon={<CheckCircle size={16} color={W.primary} />}
+                label="After photos"
+                value={`${refProgress.afterCompleted} / ${refProgress.totalPoints}`}
+                ok={refProgress.afterCompleted >= Math.max(3, Math.ceil(refProgress.totalPoints * 0.7))}
+              />
+              <CheckRow
+                icon={<CheckCircle size={16} color={W.primary} />}
+                label="Verification photos"
+                value={`${refProgress.verificationCompleted} / ${refProgress.verificationRequired}`}
+                ok={refProgress.verificationCompleted >= refProgress.verificationRequired}
+              />
+            </>
+          ) : (
+            <CheckRow
+              icon={<CheckCircle size={16} color={W.primary} />}
+              label="Photos uploaded"
+              value={`${photoTypes.filter(({ type }) => !!getMediaByType(type)).length} / 3`}
+              ok={photoTypes.every(({ type }) => !!getMediaByType(type))}
+            />
+          )}
           <CheckRow
             icon={<Clock size={16} color={W.primary} />}
             label="Time on site"

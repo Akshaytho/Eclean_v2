@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
 
-export const TASK_MEDIA_TYPES = ['BEFORE', 'AFTER', 'PROOF', 'REFERENCE'] as const
+export const TASK_MEDIA_TYPES = ['BEFORE', 'AFTER', 'PROOF', 'REFERENCE', 'VERIFICATION', 'ARRIVAL'] as const
 export type TaskMediaType = (typeof TASK_MEDIA_TYPES)[number]
 
 export const uploadMediaFieldSchema = z.object({

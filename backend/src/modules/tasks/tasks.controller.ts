@@ -2,6 +2,8 @@ import type { FastifyRequest, FastifyReply } from 'fastify'
 import * as svc from './tasks.service'
 import { aiVerifyQueue } from '../../jobs/ai-verify.job'
 import { prisma } from '../../lib/prisma'
+import { computeConfidenceForTask } from '../verification/rule-engine'
+import { logger } from '../../lib/logger'
 import type {
   CreateTaskInput,
   ReasonInput,
@@ -97,6 +99,23 @@ export async function cancelTaskAsWorker(req: FastifyRequest, reply: FastifyRepl
 export async function submitTask(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const { taskId } = req.params as TaskIdParam
   const task = await svc.submitTask(req.user.id, taskId)
+
+  // Rule engine: instant confidence scoring (sync, ~5ms)
+  computeConfidenceForTask(taskId).then(async (result) => {
+    await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        ruleEngineScore:     result.normalizedScore,
+        ruleEngineBreakdown: JSON.stringify(result.breakdown),
+        finalDecision:       result.decision,
+      },
+    })
+    logger.info({ taskId, score: result.normalizedScore, decision: result.decision }, 'Rule engine scored task')
+  }).catch((err) => {
+    logger.error({ taskId, err }, 'Rule engine scoring failed')
+  })
+
+  // AI verification: async job (~10-15s)
   await aiVerifyQueue.add(
     'verify',
     { taskId },

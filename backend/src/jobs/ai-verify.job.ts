@@ -3,6 +3,7 @@ import { logger } from '../lib/logger'
 import { prisma } from '../lib/prisma'
 import { bullmqConnection as connection } from '../lib/bullmq'
 import { verifyTaskSubmission } from '../modules/ai/ai.service'
+import { adversarialCheck } from '../modules/ai/adversarial-ai.service'
 
 // ─── Queue (used by controller to enqueue jobs) ───────────────────────────────
 
@@ -22,6 +23,13 @@ export function createAiVerifyWorker(): Worker {
       try {
         const result = await verifyTaskSubmission(taskId)
         logger.info({ taskId, score: result.score, label: result.label }, 'AI verification complete')
+
+        // Run adversarial check after verifier (fire-and-forget — doesn't block)
+        adversarialCheck(taskId).then((advResult) => {
+          logger.info({ taskId, fraudProb: advResult.fraudProbability, recommendation: advResult.recommendation }, 'Adversarial AI complete')
+        }).catch((err) => {
+          logger.error({ taskId, err }, 'Adversarial AI failed — non-blocking')
+        })
 
         const task = await prisma.task.findUnique({ where: { id: taskId } })
         if (!task) return
