@@ -443,3 +443,10 @@ home screen content.
 - **Commit:** `1e09c3a`
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23707854394
 - **Status:** Unresolved
+
+## ❌ FAILURE: 2026-03-31 12:19 UTC
+- **Workflow:** Build Debug APK
+- **Branch:** image_capture_workflow
+- **Commit:** `f149b31`
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23796705777
+- **Status:** Unresolved
