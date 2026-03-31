@@ -86,16 +86,17 @@ function makeRefPoint(overrides: Partial<TaskReferencePoint> & { id: string; poi
 }
 
 function makeSubmission(overrides: Partial<WorkerPointSubmission> & { referencePointId: string; mediaType: 'AFTER' | 'VERIFICATION' }): WorkerPointSubmission {
+  const uid = Math.random().toString(36).slice(2)
   return {
-    id: `sub-${Math.random().toString(36).slice(2)}`,
+    id: `sub-${uid}`,
     taskId: 'task-1',
     workerId: 'worker-1',
-    imageUrl: 'https://cloudinary.com/worker.jpg',
+    imageUrl: `https://cloudinary.com/worker_${uid}.jpg`,
     imagePublicId: null,
     workerLat: 12.97,
     workerLng: 77.59,
     workerHeading: null,
-    photoHash: 'abc123',
+    photoHash: `hash_${uid}`,
     capturedAt: new Date(),
     deviceId: 'test-device',
     idempotencyKey: null,
@@ -136,10 +137,11 @@ describe('Rule Engine — Perfect Worker', () => {
 
     const result = computeTaskConfidence(ctx)
 
-    expect(result.normalizedScore).toBeGreaterThanOrEqual(85)
-    expect(result.decision).toBe('AUTO_PASS')
     expect(result.breakdown.verification_completeness.score).toBe(20)
     expect(result.breakdown.photo_coverage.score).toBe(25)
+    expect(result.breakdown.duplicate_image_check.score).toBe(15)
+    expect(result.normalizedScore).toBeGreaterThanOrEqual(85)
+    expect(result.decision).toBe('AUTO_PASS')
     expect(result.flags).toHaveLength(0)
   })
 })
@@ -284,7 +286,8 @@ describe('Rule Engine — Legacy Task (0 reference points)', () => {
     // GPS = 0 (no submissions), Time = full, Fraud = full
     expect(result.breakdown.gps_proximity.score).toBe(0)
     expect(result.breakdown.time_on_site.score).toBe(15)
-    expect(result.breakdown.fraud_flags.score).toBe(15)
+    expect(result.breakdown.duplicate_image_check.score).toBe(15) // no submissions = no duplicates
+    expect(result.breakdown.fraud_flags.score).toBe(10)
   })
 })
 

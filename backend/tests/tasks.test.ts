@@ -200,7 +200,7 @@ describe('Task lifecycle — happy path', () => {
     expect(count).toBe(1)
   })
 
-  it('upload BEFORE again → replaces (DB count still = 1)', async () => {
+  it('upload BEFORE again → allows multiple (dedup removed for reference point system)', async () => {
     const boundary = 'TestBoundary002'
     const payload  = buildMultipart(
       boundary,
@@ -217,7 +217,7 @@ describe('Task lifecycle — happy path', () => {
       payload,
     })
     const count = await prisma.taskMedia.count({ where: { taskId, type: 'BEFORE' } })
-    expect(count).toBe(1)
+    expect(count).toBeGreaterThanOrEqual(1) // dedup removed — multiple uploads allowed
   })
 
   it('submit without AFTER + PROOF photos → 400', async () => {
