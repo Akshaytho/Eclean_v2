@@ -137,7 +137,7 @@ const photoCoverageLayer: ScoringLayerConfig = {
 const gpsProximityLayer: ScoringLayerConfig = {
   id: 'gps_proximity',
   name: 'GPS Proximity',
-  maxPoints: 25,
+  maxPoints: 30,
   enabled: true,
   category: 'core',
   fn: (ctx) => {
@@ -146,16 +146,16 @@ const gpsProximityLayer: ScoringLayerConfig = {
       .filter((s): s is number => s !== null)
 
     if (scores.length === 0) {
-      return { layerId: 'gps_proximity', score: 0, maxPoints: 25, explanation: 'No GPS data available' }
+      return { layerId: 'gps_proximity', score: 0, maxPoints: 30, explanation: 'No GPS data available' }
     }
 
     const avg = scores.reduce((a, b) => a + b, 0) / scores.length
-    const score = Math.round((avg / 100) * 25)
+    const score = Math.round((avg / 100) * 30)
     const avgRounded = Math.round(avg)
     return {
       layerId: 'gps_proximity',
       score,
-      maxPoints: 25,
+      maxPoints: 30,
       explanation: `Average GPS match: ${avgRounded}/100 across ${scores.length} photos`,
     }
   },
@@ -164,24 +164,24 @@ const gpsProximityLayer: ScoringLayerConfig = {
 const timeOnSiteLayer: ScoringLayerConfig = {
   id: 'time_on_site',
   name: 'Time on Site',
-  maxPoints: 15,
+  maxPoints: 20,
   enabled: true,
   category: 'core',
   fn: (ctx) => {
     const durationSecs = ctx.task.workDurationSecs ?? ctx.task.timeSpentSecs
     if (!durationSecs || durationSecs <= 0) {
-      return { layerId: 'time_on_site', score: 0, maxPoints: 15, explanation: 'No time data recorded' }
+      return { layerId: 'time_on_site', score: 0, maxPoints: 20, explanation: 'No time data recorded' }
     }
 
     const minutes = durationSecs / 60
     // Expected: at least 5 min, or 3 min per reference point, whichever is larger
     const expectedMin = Math.max(5, ctx.referencePoints.length * 3)
     const ratio = Math.min(minutes / expectedMin, 1)
-    const score = Math.round(ratio * 15)
+    const score = Math.round(ratio * 20)
     return {
       layerId: 'time_on_site',
       score,
-      maxPoints: 15,
+      maxPoints: 20,
       explanation: `${Math.round(minutes)} min on site (expected ~${expectedMin} min)`,
     }
   },
@@ -190,7 +190,7 @@ const timeOnSiteLayer: ScoringLayerConfig = {
 const duplicateImageLayer: ScoringLayerConfig = {
   id: 'duplicate_image_check',
   name: 'Duplicate Image Check',
-  maxPoints: 15,
+  maxPoints: 10,
   enabled: true,
   category: 'core',
   fn: (ctx) => {
@@ -209,12 +209,12 @@ const duplicateImageLayer: ScoringLayerConfig = {
       return {
         layerId: 'duplicate_image_check',
         score: 0,
-        maxPoints: 15,
+        maxPoints: 10,
         explanation: `FRAUD: ${duplicates.length} worker photo(s) are identical to buyer reference photos. ${hashDuplicates.length} duplicate hashes detected.`,
       }
     }
 
-    return { layerId: 'duplicate_image_check', score: 15, maxPoints: 15, explanation: 'All worker photos are unique' }
+    return { layerId: 'duplicate_image_check', score: 10, maxPoints: 10, explanation: 'All worker photos are unique' }
   },
 }
 
@@ -371,9 +371,18 @@ export function computeTaskConfidence(ctx: ScoringContext): RuleEngineResult {
   const results: LayerResult[] = enabledLayers.map((layer) => layer.fn(ctx))
 
   const totalScore = results.reduce((sum, r) => sum + r.score, 0)
-  const maxPossible = enabledLayers.reduce((sum, l) => sum + l.maxPoints, 0)
 
-  // Normalize to 0-100 (in case bonus layers push above 100)
+  // Smart normalization: exclude bonus layers that returned "no data" from maxPossible
+  // This prevents workers from being penalized for missing sensor/citizen data during pilot
+  // Core layers always count. Bonus layers only count if they had data to score.
+  const maxPossible = results.reduce((sum, r, i) => {
+    const layer = enabledLayers[i]
+    if (layer.category === 'bonus' && r.score === 0 && r.explanation.toLowerCase().includes('no ')) {
+      return sum // Don't count bonus layers that had no data
+    }
+    return sum + r.maxPoints
+  }, 0)
+
   const normalizedScore = maxPossible > 0 ? Math.round((totalScore / maxPossible) * 100) : 0
 
   const breakdown: Record<string, { score: number; max: number; explanation: string }> = {}

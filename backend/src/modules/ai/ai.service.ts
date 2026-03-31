@@ -1,12 +1,29 @@
-import OpenAI from 'openai'
+/**
+ * AI Verification Service — Provider-agnostic wrapper
+ *
+ * Single merged call: verification + fraud detection in one JSON response
+ * Provider: configurable (OpenAI by default, can swap to Anthropic/custom)
+ * Fallback: parse failure or timeout → MANUAL_REVIEW (never auto-pass on failure)
+ *
+ * Cost: ~$0.0006 per verification (2 images at 768px + metadata + prompt)
+ * Budget: $14 → ~23,000 verifications
+ */
+
 import { z } from 'zod'
-import { env } from '../../config/env'
 import { prisma } from '../../lib/prisma'
 import { logger } from '../../lib/logger'
+import { OpenAIProvider } from './openai.provider'
+import type { AIVerificationProvider, VerificationImage, VerificationMetadata, VerificationResult } from './verification.interface'
 
-const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY || 'not-configured' })
+// ─── Provider Selection (swap here to change AI provider) ────────────────────
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+function getProvider(): AIVerificationProvider {
+  return new OpenAIProvider()
+  // Future: return new AnthropicProvider()
+  // Future: return new CustomModelProvider()
+}
+
+// ─── Legacy Types (kept for backward compatibility with existing code) ───────
 
 const AiResultSchema = z.object({
   score:              z.number().min(0).max(1),
@@ -19,23 +36,17 @@ const AiResultSchema = z.object({
 
 export type AiVerificationResult = z.infer<typeof AiResultSchema>
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// ─── Main Function ───────────────────────────────────────────────────────────
 
-const AI_MODEL = 'gpt-4o-mini'
+const MAX_RETRIES = 2
 
 export async function verifyTaskSubmission(taskId: string): Promise<AiVerificationResult> {
-  if (!env.OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY not configured')
-  }
-
-  // COST OPTIMIZATION: Only skip AI for terrible metadata → route to human review
-  // >95 skip REMOVED: gameable by workers who spoof metadata perfectly
-  // <40: don't auto-reject (GPS drift could cause false rejection) — flag for human review
-  const existingTask = await prisma.task.findUnique({ where: { id: taskId }, select: { ruleEngineScore: true } })
-  if (existingTask?.ruleEngineScore != null && existingTask.ruleEngineScore < 40) {
-    // Flag for human review, don't auto-reject. Worker might have GPS drift.
+  // Rule engine < 40 → human review queue, don't waste AI cost
+  const preCheck = await prisma.task.findUnique({ where: { id: taskId }, select: { ruleEngineScore: true } })
+  if (preCheck?.ruleEngineScore != null && preCheck.ruleEngineScore < 40) {
     const reviewResult: AiVerificationResult = {
-      score: 0.25, label: 'POOR', reasoning: 'Rule engine score below 40 — flagged for supervisor review (GPS drift possible)',
+      score: 0.25, label: 'POOR',
+      reasoning: 'Rule engine score below 40 — flagged for supervisor review (possible GPS drift or legitimate issue)',
       workEvident: false, suspiciousActivity: true, recommendation: 'REVIEW',
     }
     await prisma.task.update({
@@ -45,138 +56,143 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
     return reviewResult
   }
 
+  // Load task with all related data
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    include: {
-      media: true,
-      referencePoints: true,
-      workerSubmissions: true,
-    },
+    include: { media: true, referencePoints: true, workerSubmissions: true },
   })
   if (!task) throw new Error(`Task ${taskId} not found`)
 
-  // ── Build image content: paired mode (new) or legacy mode ────────────────
-  let imageMessages: Array<{ type: 'image_url'; image_url: { url: string; detail?: string } }>
-  let prompt: string
+  // Build images: send the WEAKEST pair (lowest GPS score) — catches most suspicious point
+  const images = buildImages(task)
 
-  if (task.referencePoints.length > 0 && task.workerSubmissions.length > 0) {
-    // New flow: per-point buyer/worker image pairs
-    const pairs = task.referencePoints
-      .map((refPoint) => {
-        const afterSub = task.workerSubmissions.find(
-          (s) => s.referencePointId === refPoint.id && (s.mediaType === 'AFTER' || s.mediaType === 'VERIFICATION'),
-        )
-        return { refPoint, afterSub }
-      })
-      .filter((p) => p.afterSub != null)
+  // Build metadata context
+  const motionSummary = await prisma.taskMotionSummary.findUnique({ where: { taskId } })
+  const envCaptures = await prisma.workerEnvironmentCapture.findMany({ where: { taskId }, orderBy: { matchScore: 'desc' }, take: 1 })
+  let zoneDirtyScore: number | null = null
+  if (task.zoneId) {
+    const snapshot = await prisma.analyticsZoneSnapshot.findFirst({ where: { zoneId: task.zoneId }, orderBy: { date: 'desc' } })
+    zoneDirtyScore = snapshot?.dirtyScore ?? null
+  }
 
-    // Cost optimization: send only 1 verification pair (2 images = 170 tokens)
-    // If AI flags concern, full analysis can be triggered manually
-    const verificationPairs = pairs.filter((p) => p.refPoint.isVerificationPoint)
-    const pairsToSend = verificationPairs.length >= 1 ? [verificationPairs[0]] : pairs.slice(0, 1)
+  const metadata: VerificationMetadata = {
+    taskTitle: task.title,
+    taskDescription: task.description,
+    taskCategory: task.category,
+    dirtyLevel: task.dirtyLevel,
+    timeSpentSecs: task.workDurationSecs ?? task.timeSpentSecs,
+    totalReferencePoints: task.referencePoints.length,
+    totalSubmissions: task.workerSubmissions.length,
+    gpsScores: task.workerSubmissions.map((s) => s.locationMatchScore).filter((s): s is number => s !== null),
+    motionData: motionSummary ? { cleaningPct: motionSummary.cleaningPct, standingPct: motionSummary.standingPct, vehiclePct: motionSummary.vehiclePct } : null,
+    envMatchScores: envCaptures.map((e) => e.matchScore).filter((s): s is number => s !== null),
+    zoneDirtyScore,
+  }
 
-    // detail: "low" = 512x512 fixed at 85 tokens per image (vs 85,000+ at high)
-    // Cleaning evidence (trash removal, sweeping) is visible at low resolution
-    // This reduces image cost by ~99%
-    imageMessages = pairsToSend.flatMap((pair) => [
-      { type: 'image_url' as const, image_url: { url: pair.refPoint.buyerImageUrl, detail: 'low' as const } },
-      { type: 'image_url' as const, image_url: { url: pair.afterSub!.imageUrl, detail: 'low' as const } },
-    ])
+  // Call AI provider with retry + fallback
+  const provider = getProvider()
+  let aiResult: VerificationResult | null = null
 
-    prompt =
-      `You are a STRICT AI verification system for civic cleanup work. ` +
-      `Task title: "${task.title}". Description: "${task.description}". Category: ${task.category}. Dirty level: ${task.dirtyLevel}. ` +
-      `You are receiving ${pairsToSend.length} pairs of images. ` +
-      `Each pair: first image is buyer's REFERENCE (dirty area), second is worker's AFTER (should be cleaned). ` +
-      `You MUST check ALL of the following: ` +
-      `(1) Do the photos match the task description? If task says "bathroom cleaning" but photos show a street, score 0. ` +
-      `(2) Are the before and after photos taken from APPROXIMATELY THE SAME ANGLE AND DISTANCE? If they show completely different viewpoints, the worker may have photographed a different clean area. ` +
-      `(3) Is the area VISIBLY cleaner in the after photo? Look for actual cleaning evidence. ` +
-      `(4) Are the before and after photos DIFFERENT images? If they look identical, score 0 and set suspiciousActivity to true. ` +
-      `(5) Is there evidence of actual cleaning work (mop marks, wet surfaces, organized debris, removed trash)? ` +
-      `(6) Is there any text, watermark, screenshot artifact, or UI overlay visible in the photos? If yes, photos may be downloaded/screenshotted — set suspiciousActivity to true. ` +
-      `(7) Do both photos appear to be outdoor/indoor consistent with the task category "${task.category}"? A drain cleaning task should show drains, not living rooms. ` +
-      `Be STRICT. Do not give high scores for photos that don't match the task or show no real cleaning. ` +
-      `Return ONLY valid JSON, no other text: ` +
-      `{"score":0.85,"label":"GOOD","reasoning":"...","workEvident":true,` +
-      `"suspiciousActivity":false,"recommendation":"APPROVE"}`
-  } else {
-    // Legacy flow: BEFORE + AFTER + PROOF
-    const beforeMedia = task.media.find((m) => m.type === 'BEFORE')
-    const afterMedia  = task.media.find((m) => m.type === 'AFTER')
-    const proofMedia  = task.media.find((m) => m.type === 'PROOF')
-
-    if (!beforeMedia || !afterMedia || !proofMedia) {
-      throw new Error('Missing required BEFORE, AFTER, or PROOF media for AI verification')
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      aiResult = await provider.verify(images, metadata)
+      break
+    } catch (err) {
+      logger.error({ taskId, attempt, provider: provider.name, err }, 'AI verification call failed')
+      if (attempt === MAX_RETRIES) {
+        // FALLBACK: AI unavailable → MANUAL_REVIEW, never auto-pass
+        logger.warn({ taskId }, 'AI verification exhausted retries — falling back to MANUAL_REVIEW')
+        const fallbackResult: AiVerificationResult = {
+          score: 0.5, label: 'UNCERTAIN',
+          reasoning: 'AI verification unavailable after retries — flagged for manual review',
+          workEvident: false, suspiciousActivity: false, recommendation: 'REVIEW',
+        }
+        await prisma.task.update({
+          where: { id: taskId },
+          data: { aiScore: fallbackResult.score, aiReasoning: fallbackResult.reasoning, aiModelVersion: `${provider.name}-fallback`, finalDecision: 'MANUAL_REVIEW' },
+        })
+        return fallbackResult
+      }
     }
-
-    imageMessages = [
-      { type: 'image_url', image_url: { url: beforeMedia.url, detail: 'low' as const } },
-      { type: 'image_url', image_url: { url: afterMedia.url, detail: 'low' as const } },
-      { type: 'image_url', image_url: { url: proofMedia.url, detail: 'low' as const } },
-    ]
-
-    prompt =
-      `You are a STRICT AI verification system for civic work. ` +
-      `Task title: "${task.title}". Description: "${task.description}". Category: ${task.category}. Dirty level: ${task.dirtyLevel}. ` +
-      `Image 1=BEFORE, Image 2=AFTER, Image 3=PROOF. ` +
-      `Check: (1) Photos match task description? (2) Before/After are DIFFERENT images showing same location? (3) Area visibly cleaner? (4) Actual cleaning evidence? ` +
-      `If photos don't match the task or show no cleaning, score 0. Be strict. ` +
-      `Return ONLY valid JSON with no other text: ` +
-      `{"score":0.85,"label":"GOOD","reasoning":"...","workEvident":true,` +
-      `"suspiciousActivity":false,"recommendation":"APPROVE"}`
   }
 
-  const response = await openai.chat.completions.create({
-    model: AI_MODEL,
-    max_tokens: 1024,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          ...imageMessages as any,
-          { type: 'text', text: prompt },
-        ],
-      },
-    ],
-  })
+  if (!aiResult) throw new Error('Unreachable')
 
-  const text = response.choices[0]?.message?.content
-  if (!text) throw new Error('Empty response from OpenAI')
+  // Persist both verification + fraud results
+  const verScore = aiResult.verification.score
+  const fraudProb = aiResult.fraud.probability
+  const model = provider.name
 
-  // Extract JSON from response (might have markdown wrapping)
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    logger.error({ taskId, raw: text }, 'Failed to extract JSON from AI response')
-    throw new Error('OpenAI returned non-JSON response')
-  }
-
-  let result: AiVerificationResult
-  try {
-    result = AiResultSchema.parse(JSON.parse(jsonMatch[0]))
-  } catch {
-    logger.error({ taskId, raw: text }, 'Failed to parse AI verification JSON')
-    throw new Error('OpenAI returned invalid JSON')
-  }
-
-  // Persist score + reasoning + model version
   await prisma.task.update({
     where: { id: taskId },
     data: {
-      aiScore:        result.score,
-      aiReasoning:    result.reasoning,
-      aiModelVersion: AI_MODEL,
+      aiScore: verScore,
+      aiReasoning: aiResult.verification.reasoning,
+      aiModelVersion: model,
+      adversarialScore: fraudProb,
+      adversarialAnomalies: JSON.stringify(aiResult.fraud.anomalies),
     },
   })
 
-  // If BOTH rule engine passed AND AI approves → upgrade to AUTO_PASS
-  const task2 = await prisma.task.findUnique({ where: { id: taskId } })
-  if (task2?.ruleEngineScore && task2.ruleEngineScore >= 85 && result.score >= 0.75 && result.recommendation === 'APPROVE') {
-    await prisma.task.update({
-      where: { id: taskId },
-      data: { finalDecision: 'AUTO_PASS' },
-    })
+  // Update finalDecision based on BOTH rule engine + AI
+  const ruleScore = preCheck?.ruleEngineScore ?? 0
+  let finalDecision = 'MANUAL_REVIEW'
+  if (ruleScore >= 85 && verScore >= 0.75 && fraudProb < 0.3 && aiResult.verification.recommendation === 'APPROVE') {
+    finalDecision = 'AUTO_PASS'
+  } else if (verScore < 0.3 || aiResult.verification.recommendation === 'REJECT') {
+    // Only auto-reject when AI is very confident it's bad
+    finalDecision = 'REJECT'
   }
 
-  return result
+  await prisma.task.update({ where: { id: taskId }, data: { finalDecision } })
+
+  return {
+    score: verScore,
+    label: aiResult.verification.label as AiVerificationResult['label'],
+    reasoning: aiResult.verification.reasoning,
+    workEvident: aiResult.verification.workEvident,
+    suspiciousActivity: aiResult.verification.suspiciousActivity || fraudProb > 0.5,
+    recommendation: aiResult.verification.recommendation as AiVerificationResult['recommendation'],
+  }
+}
+
+// ─── Image Selection: send the WEAKEST pair ──────────────────────────────────
+
+function buildImages(task: {
+  referencePoints: Array<{ id: string; pointIndex: number; label: string | null; buyerImageUrl: string; isVerificationPoint: boolean }>
+  workerSubmissions: Array<{ referencePointId: string; mediaType: string; imageUrl: string; locationMatchScore: number | null }>
+  media: Array<{ type: string; url: string }>
+}): VerificationImage[] {
+  if (task.referencePoints.length > 0 && task.workerSubmissions.length > 0) {
+    // New flow: find the pair with LOWEST GPS score (most suspicious)
+    const pairs = task.referencePoints
+      .map((rp) => {
+        const sub = task.workerSubmissions.find(
+          (s) => s.referencePointId === rp.id && (s.mediaType === 'AFTER' || s.mediaType === 'VERIFICATION'),
+        )
+        return { rp, sub, gpsScore: sub?.locationMatchScore ?? 999 }
+      })
+      .filter((p) => p.sub != null)
+      .sort((a, b) => a.gpsScore - b.gpsScore) // weakest first
+
+    const weakest = pairs[0]
+    if (weakest) {
+      return [
+        { url: weakest.rp.buyerImageUrl, role: 'reference', pointIndex: weakest.rp.pointIndex, label: weakest.rp.label, gpsScore: weakest.gpsScore },
+        { url: weakest.sub!.imageUrl, role: 'after', pointIndex: weakest.rp.pointIndex, label: weakest.rp.label, gpsScore: weakest.gpsScore },
+      ]
+    }
+  }
+
+  // Legacy flow: BEFORE + AFTER
+  const before = task.media.find((m) => m.type === 'BEFORE')
+  const after = task.media.find((m) => m.type === 'AFTER')
+  if (before && after) {
+    return [
+      { url: before.url, role: 'reference', pointIndex: 1 },
+      { url: after.url, role: 'after', pointIndex: 1 },
+    ]
+  }
+
+  return []
 }
