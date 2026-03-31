@@ -78,10 +78,11 @@ export async function addReferencePoint(params: {
     },
   })
 
-  // Update task reference point count
+  // Update task reference point count (atomic — safe for parallel uploads)
+  const actualCount = await prisma.taskReferencePoint.count({ where: { taskId } })
   await prisma.task.update({
     where: { id: taskId },
-    data:  { totalReferencePoints: existingCount + 1 },
+    data:  { totalReferencePoints: actualCount },
   })
 
   return point

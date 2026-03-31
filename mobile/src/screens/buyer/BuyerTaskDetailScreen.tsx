@@ -18,6 +18,7 @@ import React, { useRef, useEffect, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, Modal, TextInput, Image,
+  KeyboardAvoidingView, Platform,
 } from 'react-native'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -402,7 +403,7 @@ export function BuyerTaskDetailScreen() {
         <View style={s.footer}>
           <Button
             label="Reject"
-            onPress={() => { if (!isActing.current) setRejectModal(true) }}
+            onPress={() => { isActing.current = false; setRejectModal(true) }}
             variant="danger"
             style={s.footerBtn}
           />
@@ -428,8 +429,9 @@ export function BuyerTaskDetailScreen() {
       )}
 
       {/* ── Reject reason modal ── */}
-      <Modal visible={rejectModal} transparent animationType="slide">
-        <View style={s.modalOverlay}>
+      <Modal visible={rejectModal} transparent animationType="slide" onRequestClose={() => { setRejectModal(false); setRejectReason('') }}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => { setRejectModal(false); setRejectReason('') }} />
           <View style={s.modalBox}>
             <Text style={s.modalTitle}>Why are you rejecting?</Text>
             <Text style={s.modalSub}>
@@ -462,7 +464,7 @@ export function BuyerTaskDetailScreen() {
               />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Full-screen photo viewer ── */}

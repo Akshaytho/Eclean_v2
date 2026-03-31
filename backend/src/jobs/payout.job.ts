@@ -99,15 +99,8 @@ export function createPayoutWorker(): Worker {
       // ── PRODUCTION — Razorpay Payout API ─────────────────────────────────
       const rzp = getRazorpay()
       if (!rzp) {
-        // No Razorpay credentials configured outside test_mode — set FAILED
-        logger.error({ payoutId }, 'Razorpay not configured — cannot process payout')
-        await prisma.payout.update({
-          where: { id: payoutId },
-          data:  { status: 'FAILED' },
-        })
-        await notifyAdmins(
-          `Payout ${payoutId} failed — Razorpay not configured. Task: ${payout.task.title}`,
-        )
+        // No Razorpay payout credentials — keep as PENDING for manual processing
+        logger.warn({ payoutId }, 'Razorpay payout SDK not configured — payout stays PENDING for manual processing')
         return
       }
 

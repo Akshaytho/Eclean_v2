@@ -159,8 +159,11 @@ export function ActiveTaskScreen() {
     },
     onError: (err: any) => {
       isStarting.current = false
-      const msg = err?.response?.data?.error?.message ?? 'Could not start task'
-      Alert.alert('Cannot Start', msg)
+      // Only show alert for actual failures, not network hiccups after success
+      const msg = err?.response?.data?.error?.message ?? ''
+      if (msg && !msg.includes('already') && !msg.includes('IN_PROGRESS')) {
+        Alert.alert('Cannot Start', msg)
+      }
     },
   })
 

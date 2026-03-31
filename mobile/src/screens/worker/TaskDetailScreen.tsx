@@ -15,10 +15,11 @@ import { COLORS } from '../../constants/colors'
 import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { DIRTY_LEVELS } from '../../constants/taskCategories'
 import { workerTasksApi } from '../../api/tasks.api'
+import { referencePointsApi } from '../../api/referencePoints.api'
 import { formatMoney } from '../../utils/formatMoney'
 import { useSocketStore } from '../../stores/socketStore'
 import type { WorkerStackParamList } from '../../navigation/types'
-import type { DirtyLevel } from '../../types'
+import type { DirtyLevel, TaskReferencePoint } from '../../types'
 
 type Nav   = NativeStackNavigationProp<WorkerStackParamList, 'TaskDetail'>
 type Route = RouteProp<WorkerStackParamList, 'TaskDetail'>
@@ -40,6 +41,7 @@ export function TaskDetailScreen() {
   const isAccepting = useRef(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
   const { data: task, isLoading, error } = useQuery({
     queryKey: ['worker', 'task', taskId],
@@ -71,6 +73,14 @@ export function TaskDetailScreen() {
     setConfirmOpen(false)
     acceptMutation.mutate()
   }
+
+  // Fetch reference point photos (buyer's documentation)
+  // Must be before early returns to satisfy React hooks rules
+  const { data: refPoints } = useQuery<TaskReferencePoint[]>({
+    queryKey: ['reference-points', taskId],
+    queryFn:  () => referencePointsApi.list(taskId),
+    enabled:  !!task && (task.totalReferencePoints ?? 0) > 0,
+  })
 
   if (isLoading) {
     return (
@@ -142,8 +152,26 @@ export function TaskDetailScreen() {
           </View>
         </View>
 
-        {/* ── Reference Photo (from buyer) ── */}
-        {task.media?.filter(m => m.type === 'REFERENCE').map(m => (
+        {/* ── Reference Point Photos (buyer's documentation of dirty spots) ── */}
+        {refPoints && refPoints.length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Areas to Clean ({refPoints.length} spots)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.refScroll}>
+              {refPoints.map((p) => (
+                <TouchableOpacity key={p.id} style={styles.refThumbWrap} onPress={() => setPreviewUrl(p.buyerImageUrl)} activeOpacity={0.85}>
+                  <Image source={{ uri: p.buyerImageUrl }} style={styles.refThumbImg} />
+                  <Text style={styles.refThumbLabel} numberOfLines={1}>
+                    {p.label ?? `Spot ${p.pointIndex}`}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <Text style={styles.refHint}>You'll match these photos after cleaning</Text>
+          </View>
+        )}
+
+        {/* Legacy single reference photo (old tasks) */}
+        {(!refPoints || refPoints.length === 0) && task.media?.filter(m => m.type === 'REFERENCE').map(m => (
           <View key={m.id} style={styles.refPhotoCard}>
             <Image source={{ uri: m.url }} style={styles.refPhotoImg} resizeMode="cover" />
             <Text style={styles.refPhotoLabel}>Photo from buyer</Text>
@@ -255,6 +283,16 @@ export function TaskDetailScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* ── Fullscreen photo preview ── */}
+      <Modal visible={!!previewUrl} transparent animationType="fade" onRequestClose={() => setPreviewUrl(null)}>
+        <TouchableOpacity style={styles.previewOverlay} activeOpacity={1} onPress={() => setPreviewUrl(null)}>
+          {previewUrl && (
+            <Image source={{ uri: previewUrl }} style={styles.previewImage} resizeMode="contain" />
+          )}
+          <Text style={styles.previewHint}>Tap to close</Text>
+        </TouchableOpacity>
+      </Modal>
     </View>
   )
 }
@@ -293,6 +331,16 @@ const styles = StyleSheet.create({
   refPhotoCard:   { borderRadius: 14, overflow: 'hidden', backgroundColor: W.surface },
   refPhotoImg:    { width: '100%', height: 200, borderRadius: 14 },
   refPhotoLabel:  { fontSize: 12, color: W.text.secondary, textAlign: 'center', paddingVertical: 8 },
+  // Reference point photo grid
+  refScroll:      { marginTop: 10 },
+  refThumbWrap:   { width: 120, marginRight: 10, alignItems: 'center' },
+  refThumbImg:    { width: 120, height: 90, borderRadius: 10 },
+  refThumbLabel:  { fontSize: 11, color: W.text.secondary, fontWeight: '500', marginTop: 4 },
+  refHint:        { fontSize: 12, color: W.text.muted, marginTop: 10, fontStyle: 'italic' },
+  // Fullscreen photo preview
+  previewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  previewImage:   { width: '100%', height: '80%', borderRadius: 12 },
+  previewHint:    { color: 'rgba(255,255,255,0.4)', fontSize: 13, marginTop: 16 },
   rateCard:       {
     flexDirection: 'row',
     alignItems: 'center',

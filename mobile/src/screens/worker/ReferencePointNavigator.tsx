@@ -9,14 +9,14 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Image, Modal, ActivityIndicator,
+  ScrollView, Image, Modal, ActivityIndicator, Linking, Platform,
 } from 'react-native'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { RouteProp } from '@react-navigation/native'
 import {
-  ChevronLeft, CheckCircle, Lock, Camera as CameraIcon, MapPin,
+  ChevronLeft, CheckCircle, Lock, Camera as CameraIcon, MapPin, Navigation2,
 } from 'lucide-react-native'
 import * as Location from 'expo-location'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -35,6 +35,17 @@ import { apiClient } from '../../api/client'
 
 type Nav   = NativeStackNavigationProp<WorkerStackParamList, 'ReferencePoints'>
 type Route = RouteProp<WorkerStackParamList, 'ReferencePoints'>
+
+function openMapsToPoint(lat: number, lng: number, label?: string) {
+  const encodedLabel = encodeURIComponent(label ?? 'Reference Point')
+  const url = Platform.select({
+    ios: `maps://app?daddr=${lat},${lng}&dirflg=w`,
+    android: `google.navigation:q=${lat},${lng}&mode=w`,
+  })
+  if (url) Linking.openURL(url).catch(() => {
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=walking`)
+  })
+}
 
 export function ReferencePointNavigator() {
   const navigation = useNavigation<Nav>()
@@ -222,7 +233,22 @@ export function ReferencePointNavigator() {
                 {isDone ? (
                   <Image source={{ uri: point.afterSubmission?.imageUrl ?? point.buyerImageUrl }} style={s.pointThumb} />
                 ) : (
-                  <Image source={{ uri: point.buyerImageUrl }} style={[s.pointThumb, s.pointThumbRef]} />
+                  <View style={s.pointActions}>
+                    <Image source={{ uri: point.buyerImageUrl }} style={[s.pointThumb, s.pointThumbRef]} />
+                    {point.buyerLat != null && point.buyerLng != null && (
+                      <TouchableOpacity
+                        style={s.navigateBtn}
+                        onPress={(e) => {
+                          e.stopPropagation?.()
+                          openMapsToPoint(point.buyerLat!, point.buyerLng!, point.label ?? `Point ${point.pointIndex}`)
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Navigation2 size={12} color={W.primary} />
+                        <Text style={s.navigateBtnText}>Go</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 )}
               </View>
             </TouchableOpacity>
@@ -315,9 +341,12 @@ const s = StyleSheet.create({
   scoreText:      { fontSize: 11, fontWeight: '700' },
   distanceRow:    { flexDirection: 'row', alignItems: 'center', gap: 3 },
   distanceText:   { fontSize: 11, color: W.text.muted, fontWeight: '500' },
-  pointRight:     { width: 52 },
+  pointRight:     { width: 52, alignItems: 'center' },
+  pointActions:   { alignItems: 'center', gap: 4 },
   pointThumb:     { width: 52, height: 52, borderRadius: 10 },
   pointThumbRef:  { opacity: 0.6 },
+  navigateBtn:    { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: W.primaryTint, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  navigateBtnText:{ fontSize: 10, fontWeight: '700', color: W.primary },
 
   // Footer
   footer:             { padding: 16, paddingBottom: 32, backgroundColor: W.surface, borderTopWidth: 1, borderTopColor: W.border },
