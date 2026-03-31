@@ -32,6 +32,7 @@ import { useBackgroundLocation } from '../../hooks/useBackgroundLocation'
 import { useActiveTaskStore } from '../../stores/activeTaskStore'
 import { useSocketStore } from '../../stores/socketStore'
 import { formatMoney } from '../../utils/formatMoney'
+import { startMotionTracking, isMotionTrackingActive } from '../../services/motionTracker'
 import type { WorkerStackParamList } from '../../navigation/types'
 import type { MediaType } from '../../types'
 
@@ -123,10 +124,15 @@ export function ActiveTaskScreen() {
     return () => clearInterval(id)
   }, [task?.startedAt, setElapsedSecs])
 
-  // ── Restart background tracking if IN_PROGRESS on mount ──────────────────
+  // ── Restart background tracking + motion tracking if IN_PROGRESS on mount ──
   useEffect(() => {
     if (task?.status === 'IN_PROGRESS') {
       startTracking(taskId)
+      // Start motion tracking here (not in ReferencePointNavigator) so it captures
+      // the full task duration from Start Work to Submit
+      if (!isMotionTrackingActive()) {
+        startMotionTracking()
+      }
     }
   }, [task?.status]) // intentionally only on status change
 
@@ -189,18 +195,40 @@ export function ActiveTaskScreen() {
   const isNearTask = distanceKm !== null && distanceKm <= GEOFENCE_RADIUS_KM
   const hasLocation = task?.locationLat != null
 
-  const handleStart = () => {
+  const [gpsRetrying, setGpsRetrying] = useState(false)
+  const gpsRetryCount = useRef(0)
+
+  const handleStart = async () => {
     if (isStarting.current) return
     if (!currentLocation) {
       setGpsWarning(true)
       return
     }
-    // If task has location, enforce geofence
+    // If task has location, enforce geofence with retry
     if (hasLocation && !isNearTask) {
+      // GPS retry mechanism: 3 retries over 15 seconds
+      // Budget phones in congested Indian lanes have 15-50m GPS drift
+      if (gpsRetryCount.current < 3) {
+        setGpsRetrying(true)
+        setGpsWarning(false)
+        gpsRetryCount.current++
+        try {
+          await requestPermissions()
+          // Wait 5 seconds for GPS to converge
+          await new Promise(r => setTimeout(r, 5000))
+        } catch {}
+        setGpsRetrying(false)
+        // Location will update via useBackgroundLocation hook, triggering re-render
+        return
+      }
+      // After 3 retries, show guidance (not a hard block — they can keep trying)
       setGpsWarning(true)
+      gpsRetryCount.current = 0
       return
     }
     setGpsWarning(false)
+    setGpsRetrying(false)
+    gpsRetryCount.current = 0
     isStarting.current = true
     startMutation.mutate()
   }
@@ -412,8 +440,18 @@ export function ActiveTaskScreen() {
               </View>
             )}
 
+            {/* GPS retrying indicator */}
+            {gpsRetrying && (
+              <View style={styles.gpsWarning}>
+                <ActivityIndicator size="small" color={W.primary} />
+                <Text style={styles.gpsWarningText}>
+                  GPS signal is weak. Retrying... ({gpsRetryCount.current}/3)
+                </Text>
+              </View>
+            )}
+
             {/* GPS warning */}
-            {gpsWarning && (
+            {gpsWarning && !gpsRetrying && (
               <View style={styles.gpsWarning}>
                 <AlertTriangle size={14} color={W.status.warning} />
                 <Text style={styles.gpsWarningText}>

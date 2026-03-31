@@ -134,7 +134,7 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
     },
   })
 
-  // Update finalDecision based on BOTH rule engine + AI + fraud
+  // Update finalDecision based on BOTH rule engine + AI + fraud + GPS trail
   const ruleScore = preCheck?.ruleEngineScore ?? 0
   let finalDecision = 'MANUAL_REVIEW'
 
@@ -147,10 +147,26 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
   }
 
   // Fraud score override: high fraud forces MANUAL_REVIEW regardless of other scores
-  // Buyer sees the fraud anomalies alongside photos so they can make informed decision
   if (fraudProb >= 0.8 && finalDecision === 'AUTO_PASS') {
     finalDecision = 'MANUAL_REVIEW'
     logger.warn({ taskId, fraudProb, verScore, ruleScore }, 'High fraud probability overrode AUTO_PASS → MANUAL_REVIEW')
+  }
+
+  // Worker Grace: if MANUAL_REVIEW but GPS trail proves worker was present,
+  // upgrade to WORKER_GRACE (12h auto-release instead of 72h)
+  // Protects honest workers with budget phone GPS drift from lazy buyers
+  if (finalDecision === 'MANUAL_REVIEW' && ruleScore >= 60 && verScore >= 0.3) {
+    try {
+      const { analyzeGPSTrail } = require('../verification/gps-trail-analysis')
+      const trail = await analyzeGPSTrail(taskId)
+      if (trail?.provesPresence) {
+        finalDecision = 'WORKER_GRACE'
+        logger.info({ taskId, presencePercent: trail.presencePercent, ruleScore, verScore },
+          'Worker Grace activated — GPS trail proves presence')
+      }
+    } catch (err) {
+      logger.error({ taskId, err }, 'GPS trail analysis failed — keeping MANUAL_REVIEW')
+    }
   }
 
   await prisma.task.update({ where: { id: taskId }, data: { finalDecision } })

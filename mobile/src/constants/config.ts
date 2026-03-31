@@ -12,7 +12,7 @@ export const GPS_TASK_NAME = 'eclean-background-location'
 
 export const GEOFENCE_RADIUS_KM = 2
 
-export const GPS_INTERVAL_MS = 15_000    // 15 seconds
+export const GPS_INTERVAL_MS = 30_000    // 30 seconds (was 15s — halved for battery savings on budget phones)
 export const GPS_DISTANCE_M  = 10        // or every 10 meters
 
 export const CHAT_PAGE_SIZE  = 50

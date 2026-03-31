@@ -428,22 +428,36 @@ export async function rejectTask(buyerId: string, taskId: string, input: ReasonI
   emitTaskUpdated(taskId, 'REJECTED')
   logTaskEvent(taskId, 'status_changed', buyerId, 'BUYER', { from: task.status, to: 'REJECTED', reason: input.reason })
 
-  // Buyer accountability: flag if rejecting AI-approved work
+  // Buyer accountability: stricter protection for workers
+  // 1st false rejection: warning notification + -10 trust
+  // 2nd: frontend requires 50-char justification
+  // 3rd: account flagged for admin review
   if (task.aiScore != null && task.aiScore >= 0.85) {
     prisma.buyerProfile.update({
       where: { userId: buyerId },
       data: {
         falseRejectionCount: { increment: 1 },
-        buyerTrustScore:     { decrement: 5 },
+        buyerTrustScore:     { decrement: 10 },  // -10 per false rejection (was -5)
       },
     }).then(async (profile) => {
-      // Auto-flag after 3+ false rejections
       if (profile.falseRejectionCount >= 3 && !profile.isFlaggedForReview) {
+        // 3rd strike: flag for admin — all future rejections need admin approval
         await prisma.buyerProfile.update({
           where: { userId: buyerId },
           data: { isFlaggedForReview: true },
         })
-        logger.warn({ buyerId, falseRejections: profile.falseRejectionCount }, 'Buyer flagged for review — repeated rejection of AI-approved work')
+        logger.warn({ buyerId, falseRejections: profile.falseRejectionCount }, 'Buyer flagged — 3rd false rejection of AI-approved work')
+      } else if (profile.falseRejectionCount === 1) {
+        // 1st strike: warning notification
+        await prisma.notification.create({
+          data: {
+            userId: buyerId,
+            type: 'BUYER_WARNING',
+            title: 'Rejection Warning',
+            body: `AI verified this work at ${Math.round(task.aiScore! * 100)}%. Repeated rejections of verified work may result in account review.`,
+            data: { taskId, aiScore: task.aiScore },
+          },
+        }).catch(() => {})
       }
     }).catch((err) => {
       logger.error({ buyerId, err }, 'Failed to update buyer accountability')
@@ -566,10 +580,9 @@ export async function acceptTask(workerId: string, taskId: string) {
   emitTaskUpdated(taskId, 'ACCEPTED')
   logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'OPEN', to: 'ACCEPTED' })
 
-  // Select 2 random verification points (fire-and-forget, non-blocking)
-  selectVerificationPoints(taskId).catch((err) => {
-    logger.error({ taskId, err }, 'Failed to select verification points')
-  })
+  // REMOVED: Hidden verification points dropped — confusing UX for workers
+  // with budget phones and GPS drift. All reference points are now visible.
+  // selectVerificationPoints(taskId) — no longer called
 
   return result
 }

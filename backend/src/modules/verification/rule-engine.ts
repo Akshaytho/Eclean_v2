@@ -84,30 +84,9 @@ export const DECISION_THRESHOLDS = {
 // ─── Scoring Layers ──────────────────────────────────────────────────────────
 // Each layer is a pure function. Add new layers here — that's it.
 
-const verificationCompletenessLayer: ScoringLayerConfig = {
-  id: 'verification_completeness',
-  name: 'Verification Completeness',
-  maxPoints: 20,
-  enabled: true,
-  category: 'core',
-  fn: (ctx) => {
-    const verPoints = ctx.referencePoints.filter((p) => p.isVerificationPoint)
-    const verDone = ctx.submissions.filter((s) => s.mediaType === 'VERIFICATION')
-
-    if (verPoints.length === 0) {
-      return { layerId: 'verification_completeness', score: 20, maxPoints: 20, explanation: 'No verification points required' }
-    }
-
-    const ratio = Math.min(verDone.length / verPoints.length, 1)
-    const score = Math.round(ratio * 20)
-    return {
-      layerId: 'verification_completeness',
-      score,
-      maxPoints: 20,
-      explanation: `${verDone.length}/${verPoints.length} verification photos completed`,
-    }
-  },
-}
+// REMOVED: verificationCompletenessLayer — hidden verification points dropped.
+// 20 pts redistributed: GPS +5 (30→35), Time +5 (20→25).
+// Workers couldn't find hidden points on budget phones with GPS drift.
 
 const photoCoverageLayer: ScoringLayerConfig = {
   id: 'photo_coverage',
@@ -137,7 +116,7 @@ const photoCoverageLayer: ScoringLayerConfig = {
 const gpsProximityLayer: ScoringLayerConfig = {
   id: 'gps_proximity',
   name: 'GPS Proximity',
-  maxPoints: 30,
+  maxPoints: 35,   // increased from 30 — absorbed 5 pts from removed verification layer
   enabled: true,
   category: 'core',
   fn: (ctx) => {
@@ -146,16 +125,16 @@ const gpsProximityLayer: ScoringLayerConfig = {
       .filter((s): s is number => s !== null)
 
     if (scores.length === 0) {
-      return { layerId: 'gps_proximity', score: 0, maxPoints: 30, explanation: 'No GPS data available' }
+      return { layerId: 'gps_proximity', score: 0, maxPoints: 35, explanation: 'No GPS data available' }
     }
 
     const avg = scores.reduce((a, b) => a + b, 0) / scores.length
-    const score = Math.round((avg / 100) * 30)
+    const score = Math.round((avg / 100) * 35)
     const avgRounded = Math.round(avg)
     return {
       layerId: 'gps_proximity',
       score,
-      maxPoints: 30,
+      maxPoints: 35,
       explanation: `Average GPS match: ${avgRounded}/100 across ${scores.length} photos`,
     }
   },
@@ -164,24 +143,24 @@ const gpsProximityLayer: ScoringLayerConfig = {
 const timeOnSiteLayer: ScoringLayerConfig = {
   id: 'time_on_site',
   name: 'Time on Site',
-  maxPoints: 20,
+  maxPoints: 25,   // increased from 20 — absorbed 5 pts from removed verification layer
   enabled: true,
   category: 'core',
   fn: (ctx) => {
     const durationSecs = ctx.task.workDurationSecs ?? ctx.task.timeSpentSecs
     if (!durationSecs || durationSecs <= 0) {
-      return { layerId: 'time_on_site', score: 0, maxPoints: 20, explanation: 'No time data recorded' }
+      return { layerId: 'time_on_site', score: 0, maxPoints: 25, explanation: 'No time data recorded' }
     }
 
     const minutes = durationSecs / 60
     // Expected: at least 5 min, or 3 min per reference point, whichever is larger
     const expectedMin = Math.max(5, ctx.referencePoints.length * 3)
     const ratio = Math.min(minutes / expectedMin, 1)
-    const score = Math.round(ratio * 20)
+    const score = Math.round(ratio * 25)
     return {
       layerId: 'time_on_site',
       score,
-      maxPoints: 20,
+      maxPoints: 25,
       explanation: `${Math.round(minutes)} min on site (expected ~${expectedMin} min)`,
     }
   },
@@ -350,18 +329,18 @@ const citizenMeshLayer: ScoringLayerConfig = {
 // To add a new layer: just push to this array.
 
 export const SCORING_LAYERS: ScoringLayerConfig[] = [
-  // Core layers (always active)
-  verificationCompletenessLayer,
-  photoCoverageLayer,
-  gpsProximityLayer,
-  timeOnSiteLayer,
-  duplicateImageLayer,
-  fraudFlagsLayer,
-  // Bonus layers
-  environmentDNALayer,
-  zoneIntelligenceLayer,
-  motionSignatureLayer,
-  citizenMeshLayer,
+  // Core layers (always active) — total 105 pts
+  photoCoverageLayer,       // 25 pts
+  gpsProximityLayer,        // 35 pts (was 30, absorbed 5 from removed verification)
+  timeOnSiteLayer,          // 25 pts (was 20, absorbed 5 from removed verification)
+  duplicateImageLayer,      // 10 pts
+  fraudFlagsLayer,          // 10 pts
+  // Bonus layers — up to 15 pts extra (never negative)
+  environmentDNALayer,      //  5 pts bonus
+  zoneIntelligenceLayer,    //  5 pts bonus
+  motionSignatureLayer,     //  5 pts bonus — workers told to keep phone in pocket
+  // REMOVED: verificationCompletenessLayer (hidden points dropped — confusing UX)
+  // REMOVED: citizenMeshLayer (not enough users yet — will re-add later)
 ]
 
 // ─── Engine ──────────────────────────────────────────────────────────────────

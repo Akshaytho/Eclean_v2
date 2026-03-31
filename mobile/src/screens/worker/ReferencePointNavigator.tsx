@@ -67,11 +67,8 @@ export function ReferencePointNavigator() {
     distance: number | null
   }>({ visible: false, pointId: null, pointIndex: 0, label: null, buyerImageUrl: null, isVerification: false, distance: null })
 
-  // Silent layers: start motion tracking + capture initial EnvDNA
+  // Silent layers: capture EnvDNA (motion tracking already started in ActiveTaskScreen)
   useEffect(() => {
-    if (!isMotionTrackingActive()) {
-      startMotionTracking()
-    }
     // Fire-and-forget: capture environmental DNA on screen mount
     captureEnvDNA().then((envDNA) => {
       apiClient.post(`/tasks/${taskId}/environment`, {

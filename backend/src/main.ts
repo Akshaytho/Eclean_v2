@@ -7,6 +7,7 @@ import { createAiVerifyWorker } from './jobs/ai-verify.job'
 import { createPayoutWorker } from './jobs/payout.job'
 import { createCleanupWorker, scheduleCleanupJobs } from './jobs/cleanup.job'
 import { createAnalyticsWorker, scheduleAnalyticsJobs } from './jobs/analytics-aggregate.job'
+import { createPaymentReleaseWorker, schedulePaymentReleaseJob } from './jobs/payment-release.job'
 
 if (env.SENTRY_DSN) {
   Sentry.init({
@@ -33,8 +34,10 @@ const start = async (): Promise<void> => {
     const payoutWorker    = createPayoutWorker()
     const cleanupWorker   = createCleanupWorker()
     const analyticsWorker = createAnalyticsWorker()
+    const paymentReleaseWorker = createPaymentReleaseWorker()
     await scheduleCleanupJobs()
     await scheduleAnalyticsJobs()
+    await schedulePaymentReleaseJob()
 
     // Attach Socket.io to Fastify's underlying http.Server before listen
     await app.ready()
@@ -48,6 +51,7 @@ const start = async (): Promise<void> => {
       await payoutWorker.close()
       await cleanupWorker.close()
       await analyticsWorker.close()
+      await paymentReleaseWorker.close()
       await app.close()
       process.exit(0)
     }

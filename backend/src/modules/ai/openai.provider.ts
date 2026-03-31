@@ -17,7 +17,8 @@ import type {
   VerificationResult,
 } from './verification.interface'
 
-const MODEL = 'gpt-4o'
+// Configurable via env, defaults to gpt-4.1
+const MODEL = process.env.AI_MODEL || 'gpt-4.1'
 
 export class OpenAIProvider implements AIVerificationProvider {
   name = 'openai-gpt4o'
