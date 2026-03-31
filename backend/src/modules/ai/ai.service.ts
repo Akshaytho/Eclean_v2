@@ -1,14 +1,10 @@
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import { z } from 'zod'
 import { env } from '../../config/env'
 import { prisma } from '../../lib/prisma'
 import { logger } from '../../lib/logger'
 
-if (!env.ANTHROPIC_API_KEY) {
-  // Deferred — AI verification will return an error at call time, not at startup
-}
-
-const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY || 'not-configured' })
+const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY || 'not-configured' })
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,11 +20,16 @@ const AiResultSchema = z.object({
 export type AiVerificationResult = z.infer<typeof AiResultSchema>
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-// Uses Cloudinary URLs directly — Anthropic fetches from CDN, zero server RAM used.
+
+const AI_MODEL = 'gpt-4o-mini'
 
 export async function verifyTaskSubmission(taskId: string): Promise<AiVerificationResult> {
+  if (!env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY not configured')
+  }
+
   const task = await prisma.task.findUnique({
-    where:   { id: taskId },
+    where: { id: taskId },
     include: {
       media: true,
       referencePoints: true,
@@ -37,10 +38,8 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
   })
   if (!task) throw new Error(`Task ${taskId} not found`)
 
-  const AI_MODEL = 'claude-sonnet-4-5'
-
   // ── Build image content: paired mode (new) or legacy mode ────────────────
-  let imageContent: Array<{ type: 'image'; source: { type: 'url'; url: string } }>
+  let imageMessages: Array<{ type: 'image_url'; image_url: { url: string } }>
   let prompt: string
 
   if (task.referencePoints.length > 0 && task.workerSubmissions.length > 0) {
@@ -54,22 +53,22 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
       })
       .filter((p) => p.afterSub != null)
 
-    // Two-phase cost optimization: send only verification pairs first
+    // Two-phase: send verification pairs first (cost optimization)
     const verificationPairs = pairs.filter((p) => p.refPoint.isVerificationPoint)
     const pairsToSend = verificationPairs.length >= 2 ? verificationPairs : pairs.slice(0, 4)
 
-    imageContent = pairsToSend.flatMap((pair) => [
-      { type: 'image' as const, source: { type: 'url' as const, url: pair.refPoint.buyerImageUrl } },
-      { type: 'image' as const, source: { type: 'url' as const, url: pair.afterSub!.imageUrl } },
+    imageMessages = pairsToSend.flatMap((pair) => [
+      { type: 'image_url' as const, image_url: { url: pair.refPoint.buyerImageUrl } },
+      { type: 'image_url' as const, image_url: { url: pair.afterSub!.imageUrl } },
     ])
 
     prompt =
       `You are an AI verification system for civic cleanup work. ` +
       `Task: ${task.description}. Category: ${task.category}. Dirty level: ${task.dirtyLevel}. ` +
       `You are receiving ${pairsToSend.length} pairs of images. ` +
-      `Each pair: first image is buyer's REFERENCE (dirty), second is worker's AFTER (cleaned). ` +
+      `Each pair: first image is buyer's REFERENCE (dirty area), second is worker's AFTER (should be cleaned). ` +
       `For each pair, assess: (1) same location? (2) area cleaner? (3) work evident? ` +
-      `Return ONLY valid JSON: ` +
+      `Return ONLY valid JSON, no other text: ` +
       `{"score":0.85,"label":"GOOD","reasoning":"...","workEvident":true,` +
       `"suspiciousActivity":false,"recommendation":"APPROVE"}`
   } else {
@@ -82,10 +81,10 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
       throw new Error('Missing required BEFORE, AFTER, or PROOF media for AI verification')
     }
 
-    imageContent = [
-      { type: 'image', source: { type: 'url', url: beforeMedia.url } },
-      { type: 'image', source: { type: 'url', url: afterMedia.url  } },
-      { type: 'image', source: { type: 'url', url: proofMedia.url  } },
+    imageMessages = [
+      { type: 'image_url', image_url: { url: beforeMedia.url } },
+      { type: 'image_url', image_url: { url: afterMedia.url  } },
+      { type: 'image_url', image_url: { url: proofMedia.url  } },
     ]
 
     prompt =
@@ -93,45 +92,61 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
       `Task: ${task.description}. Category: ${task.category}. ` +
       `Dirty level: ${task.dirtyLevel}. ` +
       `Image 1=BEFORE, Image 2=AFTER, Image 3=PROOF. ` +
-      `Return ONLY valid JSON with no other text. Example: ` +
+      `Return ONLY valid JSON with no other text: ` +
       `{"score":0.85,"label":"GOOD","reasoning":"...","workEvident":true,` +
       `"suspiciousActivity":false,"recommendation":"APPROVE"}`
   }
 
-  const response = await anthropic.messages.create({
-    model:      AI_MODEL,
+  const response = await openai.chat.completions.create({
+    model: AI_MODEL,
     max_tokens: 1024,
     messages: [
       {
-        role:    'user',
+        role: 'user',
         content: [
-          ...imageContent,
+          ...imageMessages,
           { type: 'text', text: prompt },
         ],
       },
     ],
   })
 
-  const block = response.content[0]
-  if (block.type !== 'text') throw new Error('Unexpected response type from Anthropic')
+  const text = response.choices[0]?.message?.content
+  if (!text) throw new Error('Empty response from OpenAI')
+
+  // Extract JSON from response (might have markdown wrapping)
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) {
+    logger.error({ taskId, raw: text }, 'Failed to extract JSON from AI response')
+    throw new Error('OpenAI returned non-JSON response')
+  }
 
   let result: AiVerificationResult
   try {
-    result = AiResultSchema.parse(JSON.parse(block.text))
+    result = AiResultSchema.parse(JSON.parse(jsonMatch[0]))
   } catch {
-    logger.error({ taskId, raw: block.text }, 'Failed to parse AI verification JSON')
-    throw new Error('Anthropic returned non-JSON response')
+    logger.error({ taskId, raw: text }, 'Failed to parse AI verification JSON')
+    throw new Error('OpenAI returned invalid JSON')
   }
 
-  // Persist score + reasoning + model version to task
+  // Persist score + reasoning + model version
   await prisma.task.update({
     where: { id: taskId },
-    data:  {
+    data: {
       aiScore:        result.score,
       aiReasoning:    result.reasoning,
       aiModelVersion: AI_MODEL,
     },
   })
+
+  // If BOTH rule engine passed AND AI approves → upgrade to AUTO_PASS
+  const task2 = await prisma.task.findUnique({ where: { id: taskId } })
+  if (task2?.ruleEngineScore && task2.ruleEngineScore >= 85 && result.score >= 0.75 && result.recommendation === 'APPROVE') {
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { finalDecision: 'AUTO_PASS' },
+    })
+  }
 
   return result
 }
