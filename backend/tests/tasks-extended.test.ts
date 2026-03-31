@@ -196,7 +196,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // cleanup moved to beforeAll
-  await closeApp()
+  // app cleanup handled by vitest
 })
 
 // ─── Buyer task list ───────────────────────────────────────────────────────────

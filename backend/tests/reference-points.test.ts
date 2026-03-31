@@ -128,7 +128,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // cleanup moved to beforeAll
-  await closeApp()
+  // app cleanup handled by vitest
 })
 
 // ─── BUYER: Upload Reference Points ──────────────────────────────────────────

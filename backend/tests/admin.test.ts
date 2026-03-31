@@ -58,7 +58,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await cleanTestData()
-  await closeApp()
+  // app cleanup handled by vitest
 })
 
 // ─── Admin dashboard ───────────────────────────────────────────────────────────
