@@ -26,10 +26,11 @@ export interface ScoringContext {
   task: Task
   referencePoints: TaskReferencePoint[]
   submissions: WorkerPointSubmission[]
-  // Future extension points — add new evidence types here
-  environmentMatch?: number | null       // EnvDNA match score (0-100), Phase 6
-  motionSummary?: MotionSummaryData | null // Motion signature data, Phase 6
-  citizenVerifications?: CitizenVerificationData[] | null // Citizen mesh, Phase 7
+  // Extension points for additional evidence layers
+  environmentMatch?: number | null       // EnvDNA match score (0-100)
+  motionSummary?: MotionSummaryData | null // Motion signature data
+  citizenVerifications?: CitizenVerificationData[] | null // Citizen mesh
+  zoneDirtyScore?: number | null         // Zone dirty score (0-100) — context-aware verification
 }
 
 export interface MotionSummaryData {
@@ -264,6 +265,40 @@ const environmentDNALayer: ScoringLayerConfig = {
   },
 }
 
+const zoneIntelligenceLayer: ScoringLayerConfig = {
+  id: 'zone_intelligence',
+  name: 'Zone Intelligence',
+  maxPoints: 5,
+  enabled: true,
+  category: 'bonus',
+  fn: (ctx) => {
+    const dirtyScore = ctx.zoneDirtyScore
+    if (dirtyScore == null) {
+      return { layerId: 'zone_intelligence', score: 0, maxPoints: 5, explanation: 'No zone data available' }
+    }
+
+    const durationSecs = ctx.task.workDurationSecs ?? ctx.task.timeSpentSecs ?? 0
+    const minutes = durationSecs / 60
+
+    // Very dirty zone (score 60+) cleaned in < 10 min = suspicious
+    if (dirtyScore >= 60 && minutes < 10) {
+      return {
+        layerId: 'zone_intelligence',
+        score: 0,
+        maxPoints: 5,
+        explanation: `Zone dirty score ${dirtyScore}/100 but cleaned in ${Math.round(minutes)} min — suspiciously fast`,
+      }
+    }
+
+    // Zone dirty score aligns with reasonable time = bonus
+    if (dirtyScore < 40 || minutes >= 15) {
+      return { layerId: 'zone_intelligence', score: 5, maxPoints: 5, explanation: `Zone context consistent: dirty=${dirtyScore}, time=${Math.round(minutes)}min` }
+    }
+
+    return { layerId: 'zone_intelligence', score: 2, maxPoints: 5, explanation: `Zone moderately dirty (${dirtyScore}), time marginal (${Math.round(minutes)}min)` }
+  },
+}
+
 const motionSignatureLayer: ScoringLayerConfig = {
   id: 'motion_signature',
   name: 'Motion Signature',
@@ -322,8 +357,9 @@ export const SCORING_LAYERS: ScoringLayerConfig[] = [
   timeOnSiteLayer,
   duplicateImageLayer,
   fraudFlagsLayer,
-  // Bonus layers (enable when ready)
+  // Bonus layers
   environmentDNALayer,
+  zoneIntelligenceLayer,
   motionSignatureLayer,
   citizenMeshLayer,
 ]
@@ -407,11 +443,22 @@ export async function computeConfidenceForTask(taskId: string): Promise<RuleEngi
     durationSecs: motionSummary.durationSecs,
   } : null
 
+  // Fetch zone dirty score for context-aware verification
+  let zoneDirtyScore: number | null = null
+  if (task.zoneId) {
+    const latestSnapshot = await prisma.analyticsZoneSnapshot.findFirst({
+      where: { zoneId: task.zoneId },
+      orderBy: { date: 'desc' },
+    })
+    zoneDirtyScore = latestSnapshot?.dirtyScore ?? null
+  }
+
   return computeTaskConfidence({
     task,
     referencePoints,
     submissions,
     environmentMatch,
     motionSummary: motionData,
+    zoneDirtyScore,
   })
 }

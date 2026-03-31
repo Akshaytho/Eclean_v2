@@ -28,28 +28,21 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
     throw new Error('OPENAI_API_KEY not configured')
   }
 
-  // COST OPTIMIZATION: Skip AI for obvious rule engine decisions
-  // Rule engine already checked GPS, coverage, time, duplicates — no need to pay for AI
+  // COST OPTIMIZATION: Only skip AI for terrible metadata → route to human review
+  // >95 skip REMOVED: gameable by workers who spoof metadata perfectly
+  // <40: don't auto-reject (GPS drift could cause false rejection) — flag for human review
   const existingTask = await prisma.task.findUnique({ where: { id: taskId }, select: { ruleEngineScore: true } })
-  if (existingTask?.ruleEngineScore != null) {
-    if (existingTask.ruleEngineScore >= 95) {
-      // Perfect metadata score — AI would just confirm. Skip and save $0.06
-      const autoResult: AiVerificationResult = {
-        score: 0.95, label: 'EXCELLENT', reasoning: 'Skipped — rule engine score 95+, all metadata checks passed',
-        workEvident: true, suspiciousActivity: false, recommendation: 'APPROVE',
-      }
-      await prisma.task.update({ where: { id: taskId }, data: { aiScore: autoResult.score, aiReasoning: autoResult.reasoning, aiModelVersion: 'rule-engine-bypass' } })
-      return autoResult
+  if (existingTask?.ruleEngineScore != null && existingTask.ruleEngineScore < 40) {
+    // Flag for human review, don't auto-reject. Worker might have GPS drift.
+    const reviewResult: AiVerificationResult = {
+      score: 0.25, label: 'POOR', reasoning: 'Rule engine score below 40 — flagged for supervisor review (GPS drift possible)',
+      workEvident: false, suspiciousActivity: true, recommendation: 'REVIEW',
     }
-    if (existingTask.ruleEngineScore < 40) {
-      // Terrible metadata — AI would just confirm rejection. Skip.
-      const autoResult: AiVerificationResult = {
-        score: 0.15, label: 'POOR', reasoning: 'Skipped — rule engine score below 40, multiple fraud indicators',
-        workEvident: false, suspiciousActivity: true, recommendation: 'REJECT',
-      }
-      await prisma.task.update({ where: { id: taskId }, data: { aiScore: autoResult.score, aiReasoning: autoResult.reasoning, aiModelVersion: 'rule-engine-bypass' } })
-      return autoResult
-    }
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { aiScore: reviewResult.score, aiReasoning: reviewResult.reasoning, aiModelVersion: 'human-review-queue', finalDecision: 'MANUAL_REVIEW' },
+    })
+    return reviewResult
   }
 
   const task = await prisma.task.findUnique({
@@ -96,11 +89,13 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
       `You are receiving ${pairsToSend.length} pairs of images. ` +
       `Each pair: first image is buyer's REFERENCE (dirty area), second is worker's AFTER (should be cleaned). ` +
       `You MUST check ALL of the following: ` +
-      `(1) Do the photos match the task description? If task says "bathroom cleaning" but photos show a laptop, score 0. ` +
-      `(2) Are the before and after photos of the SAME location? ` +
+      `(1) Do the photos match the task description? If task says "bathroom cleaning" but photos show a street, score 0. ` +
+      `(2) Are the before and after photos taken from APPROXIMATELY THE SAME ANGLE AND DISTANCE? If they show completely different viewpoints, the worker may have photographed a different clean area. ` +
       `(3) Is the area VISIBLY cleaner in the after photo? Look for actual cleaning evidence. ` +
-      `(4) Are the before and after photos DIFFERENT images? If they look identical, the worker likely didn't do any work — score 0 and set suspiciousActivity to true. ` +
+      `(4) Are the before and after photos DIFFERENT images? If they look identical, score 0 and set suspiciousActivity to true. ` +
       `(5) Is there evidence of actual cleaning work (mop marks, wet surfaces, organized debris, removed trash)? ` +
+      `(6) Is there any text, watermark, screenshot artifact, or UI overlay visible in the photos? If yes, photos may be downloaded/screenshotted — set suspiciousActivity to true. ` +
+      `(7) Do both photos appear to be outdoor/indoor consistent with the task category "${task.category}"? A drain cleaning task should show drains, not living rooms. ` +
       `Be STRICT. Do not give high scores for photos that don't match the task or show no real cleaning. ` +
       `Return ONLY valid JSON, no other text: ` +
       `{"score":0.85,"label":"GOOD","reasoning":"...","workEvident":true,` +
