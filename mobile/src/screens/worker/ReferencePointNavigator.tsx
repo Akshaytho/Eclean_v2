@@ -108,20 +108,26 @@ export function ReferencePointNavigator() {
     setCameraState(s => ({ ...s, visible: false }))
     if (!cameraState.pointId) return
 
+    const meta = result.photo.metadata ? {
+      lat:       result.photo.metadata.lat,
+      lng:       result.photo.metadata.lng,
+      timestamp: result.photo.metadata.timestamp,
+      deviceId:  result.photo.metadata.deviceId,
+      photoHash: result.photo.metadata.photoHash,
+    } : undefined
+
     try {
+      // Always submit as AFTER (counts toward coverage requirement)
       await referencePointsApi.submitPoint(
-        taskId,
-        cameraState.pointId,
-        cameraState.isVerification ? 'VERIFICATION' : 'AFTER',
-        result.photo.fullUri,
-        result.photo.metadata ? {
-          lat:       result.photo.metadata.lat,
-          lng:       result.photo.metadata.lng,
-          timestamp: result.photo.metadata.timestamp,
-          deviceId:  result.photo.metadata.deviceId,
-          photoHash: result.photo.metadata.photoHash,
-        } : undefined,
+        taskId, cameraState.pointId, 'AFTER', result.photo.fullUri, meta,
       )
+
+      // If verification point, ALSO submit as VERIFICATION (proves presence)
+      if (cameraState.isVerification) {
+        await referencePointsApi.submitPoint(
+          taskId, cameraState.pointId, 'VERIFICATION', result.photo.fullUri, meta,
+        )
+      }
     } catch { /* upload handled by retry/offline queue */ }
 
     qc.invalidateQueries({ queryKey: ['submission-progress', taskId] })

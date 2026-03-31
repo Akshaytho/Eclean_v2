@@ -956,8 +956,8 @@ export async function rateTask(buyerId: string, taskId: string, input: RateTaskI
   await prisma.$executeRaw`
     UPDATE "WorkerProfile"
     SET rating = ROUND(
-      ((COALESCE(rating, 0) * GREATEST("completedTasks" - 1, 0)) + ${input.rating})
-      / GREATEST("completedTasks", 1)::numeric,
+      (((COALESCE(rating, 0) * GREATEST("completedTasks" - 1, 0)) + ${input.rating})
+      / GREATEST("completedTasks", 1))::numeric,
       1
     )
     WHERE "userId" = ${task.workerId}

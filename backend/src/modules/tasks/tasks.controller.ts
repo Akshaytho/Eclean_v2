@@ -101,16 +101,18 @@ export async function submitTask(req: FastifyRequest, reply: FastifyReply): Prom
   const task = await svc.submitTask(req.user.id, taskId)
 
   // Rule engine: instant confidence scoring (sync, ~5ms)
+  // finalDecision stays MANUAL_REVIEW until AI verifier also approves
+  // AUTO_PASS only when BOTH rule engine >= 85 AND AI score >= 0.75
   computeConfidenceForTask(taskId).then(async (result) => {
     await prisma.task.update({
       where: { id: taskId },
       data: {
         ruleEngineScore:     result.normalizedScore,
         ruleEngineBreakdown: JSON.stringify(result.breakdown),
-        finalDecision:       result.decision,
+        finalDecision:       result.decision === 'REJECT' ? 'REJECT' : 'MANUAL_REVIEW',
       },
     })
-    logger.info({ taskId, score: result.normalizedScore, decision: result.decision }, 'Rule engine scored task')
+    logger.info({ taskId, score: result.normalizedScore, decision: result.decision }, 'Rule engine scored task — awaiting AI confirmation')
   }).catch((err) => {
     logger.error({ taskId, err }, 'Rule engine scoring failed')
   })
