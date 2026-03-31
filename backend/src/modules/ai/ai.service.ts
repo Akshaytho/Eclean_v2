@@ -134,14 +134,23 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
     },
   })
 
-  // Update finalDecision based on BOTH rule engine + AI
+  // Update finalDecision based on BOTH rule engine + AI + fraud
   const ruleScore = preCheck?.ruleEngineScore ?? 0
   let finalDecision = 'MANUAL_REVIEW'
+
   if (ruleScore >= 85 && verScore >= 0.75 && fraudProb < 0.3 && aiResult.verification.recommendation === 'APPROVE') {
     finalDecision = 'AUTO_PASS'
-  } else if (verScore < 0.3 || aiResult.verification.recommendation === 'REJECT') {
-    // Only auto-reject when AI is very confident it's bad
+  } else if (verScore < 0.3 && ruleScore < 70) {
+    // Auto-reject ONLY when BOTH signals are bad.
+    // AI < 0.3 + rule ≥ 70 = worker did work but took bad photos → let buyer decide
     finalDecision = 'REJECT'
+  }
+
+  // Fraud score override: high fraud forces MANUAL_REVIEW regardless of other scores
+  // Buyer sees the fraud anomalies alongside photos so they can make informed decision
+  if (fraudProb >= 0.8 && finalDecision === 'AUTO_PASS') {
+    finalDecision = 'MANUAL_REVIEW'
+    logger.warn({ taskId, fraudProb, verScore, ruleScore }, 'High fraud probability overrode AUTO_PASS → MANUAL_REVIEW')
   }
 
   await prisma.task.update({ where: { id: taskId }, data: { finalDecision } })
