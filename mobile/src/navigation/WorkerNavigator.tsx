@@ -22,6 +22,8 @@ const WalletScreen       = lazy(() => import('../screens/worker/WalletScreen').t
 const ChatScreen         = lazy(() => import('../screens/shared/ChatScreen').then(m => ({ default: m.ChatScreen })))
 const GalleryScreen      = lazy(() => import('../screens/shared/GalleryScreen').then(m => ({ default: m.GalleryScreen })))
 const NotificationsScreen = lazy(() => import('../screens/shared/NotificationsScreen').then(m => ({ default: m.NotificationsScreen })))
+const PostSubmissionScreen = lazy(() => import('../screens/worker/PostSubmissionScreen').then(m => ({ default: m.PostSubmissionScreen })))
+const ReportIssueScreen = lazy(() => import('../screens/worker/ReportIssueScreen').then(m => ({ default: m.ReportIssueScreen })))
 
 function LazyFallback() {
   return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: W.background }}>
@@ -84,7 +86,9 @@ export function WorkerNavigator() {
       <Stack.Screen name="Chat"          component={withSuspense(ChatScreen)}          options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="Gallery"       component={withSuspense(GalleryScreen)}       options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="Wallet"        component={withSuspense(WalletScreen)}        options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Notifications" component={withSuspense(NotificationsScreen)} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="Notifications"   component={withSuspense(NotificationsScreen)}  options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="PostSubmission"   component={withSuspense(PostSubmissionScreen)} options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
+      <Stack.Screen name="ReportIssue"      component={withSuspense(ReportIssueScreen)}    options={{ animation: 'slide_from_right' }} />
     </Stack.Navigator>
   )
 }

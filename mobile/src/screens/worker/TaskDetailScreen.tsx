@@ -1,9 +1,9 @@
 import React, { useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, ActivityIndicator, Image, Modal,
+  ScrollView, ActivityIndicator, Image, Modal, Dimensions,
 } from 'react-native'
-import MapView, { Marker } from 'react-native-maps'
+// Map removed from task detail — worker already saw location on Find Work screen
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -116,67 +116,75 @@ export function TaskDetailScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {/* ── Mini Map ── */}
-        {hasLocation ? (
-          <MapView
-            style={styles.miniMap}
-            initialRegion={{
-              latitude:       task.locationLat!,
-              longitude:      task.locationLng!,
-              latitudeDelta:  0.008,
-              longitudeDelta: 0.008,
-            }}
-            scrollEnabled={false}
-            zoomEnabled={false}
-            pitchEnabled={false}
-            rotateEnabled={false}
-          >
-            <Marker
-              coordinate={{ latitude: task.locationLat!, longitude: task.locationLng! }}
-              pinColor={dirtyColor}
-            />
-          </MapView>
-        ) : (
-          <View style={styles.noMap}>
-            <MapPin size={24} color={W.text.muted} />
-            <Text style={styles.noMapText}>No location specified</Text>
-          </View>
-        )}
-
-        {/* ── Rate ── */}
-        <View style={styles.rateCard}>
-          <DollarSign size={20} color={W.primary} />
-          <Text style={styles.rateAmount}>{formatMoney(task.rateCents, 'INR')}</Text>
-          <View style={[styles.dirtyBadge, { backgroundColor: dirtyColor }]}>
-            <Text style={styles.dirtyText}>{task.dirtyLevel}</Text>
-          </View>
-        </View>
-
-        {/* ── Reference Point Photos (buyer's documentation of dirty spots) ── */}
-        {refPoints && refPoints.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Areas to Clean ({refPoints.length} spots)</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.refScroll}>
+        {/* ── Hero: Reference Photos (Swiggy-style swipeable gallery) ── */}
+        {refPoints && refPoints.length > 0 ? (
+          <View>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.heroGallery}
+            >
               {refPoints.map((p) => (
-                <TouchableOpacity key={p.id} style={styles.refThumbWrap} onPress={() => setPreviewUrl(p.buyerImageUrl)} activeOpacity={0.85}>
-                  <Image source={{ uri: p.buyerImageUrl }} style={styles.refThumbImg} />
-                  <Text style={styles.refThumbLabel} numberOfLines={1}>
-                    {p.label ?? `Spot ${p.pointIndex}`}
-                  </Text>
+                <TouchableOpacity
+                  key={p.id}
+                  activeOpacity={0.95}
+                  onPress={() => setPreviewUrl(p.buyerImageUrl)}
+                >
+                  <Image
+                    source={{ uri: p.buyerImageUrl }}
+                    style={styles.heroImage}
+                    resizeMode="cover"
+                  />
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            <Text style={styles.refHint}>You'll match these photos after cleaning</Text>
+            <View style={styles.heroDots}>
+              {refPoints.map((_, i) => (
+                <View key={i} style={[styles.heroDot, i === 0 && styles.heroDotActive]} />
+              ))}
+            </View>
           </View>
-        )}
+        ) : task.media?.filter(m => m.type === 'REFERENCE').length ? (
+          <Image
+            source={{ uri: task.media.filter(m => m.type === 'REFERENCE')[0].url }}
+            style={styles.heroImage}
+            resizeMode="cover"
+          />
+        ) : null}
 
-        {/* Legacy single reference photo (old tasks) */}
-        {(!refPoints || refPoints.length === 0) && task.media?.filter(m => m.type === 'REFERENCE').map(m => (
-          <View key={m.id} style={styles.refPhotoCard}>
-            <Image source={{ uri: m.url }} style={styles.refPhotoImg} resizeMode="cover" />
-            <Text style={styles.refPhotoLabel}>Photo from buyer</Text>
+        {/* ── Task Info ── */}
+        <View style={styles.taskInfo}>
+          <Text style={styles.taskTitle}>{task.title}</Text>
+          {task.locationAddress && (
+            <View style={styles.locRow}>
+              <MapPin size={14} color={W.text.muted} />
+              <Text style={styles.locText}>{task.locationAddress}</Text>
+            </View>
+          )}
+          {task.buyer && (
+            <Text style={styles.buyerName}>{task.buyer.name}</Text>
+          )}
+        </View>
+
+        {/* ── Info Chips (rate, dirty level, photo count) ── */}
+        <View style={styles.chipsRow}>
+          <View style={[styles.infoChip, { backgroundColor: '#DCFCE7' }]}>
+            <Text style={[styles.chipAmount, { color: '#15803D' }]}>{formatMoney(task.rateCents, 'INR')}</Text>
+            <Text style={[styles.chipLabel, { color: '#15803D' }]}>Earning</Text>
           </View>
-        ))}
+          <View style={[styles.infoChip, { backgroundColor: dirtyColor + '20' }]}>
+            <View style={[styles.dirtyBadge, { backgroundColor: dirtyColor }]}>
+              <Text style={styles.dirtyText}>{task.dirtyLevel}</Text>
+            </View>
+          </View>
+          {(task.totalReferencePoints ?? 0) > 0 && (
+            <View style={[styles.infoChip, { backgroundColor: '#EFF6FF' }]}>
+              <Text style={[styles.chipAmount, { color: '#1D4ED8' }]}>{task.totalReferencePoints}</Text>
+              <Text style={[styles.chipLabel, { color: '#1D4ED8' }]}>Photos</Text>
+            </View>
+          )}
+        </View>
 
         {/* ── Description ── */}
         <View style={styles.card}>
@@ -238,7 +246,7 @@ export function TaskDetailScreen() {
             {acceptMutation.isPending ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.acceptBtnText}>Accept Task — {formatMoney(task.rateCents, 'INR')}</Text>
+              <Text style={styles.acceptBtnText}>ACCEPT TASK — EARN {formatMoney(task.rateCents, 'INR')}</Text>
             )}
           </TouchableOpacity>
         ) : (task.status === 'ACCEPTED' || task.status === 'IN_PROGRESS') ? (
@@ -325,18 +333,23 @@ const styles = StyleSheet.create({
   backBtn:        { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   topBarTitle:    { flex: 1, fontSize: 17, fontWeight: '700', color: W.text.primary, textAlign: 'center' },
   content:        { padding: 16, paddingBottom: 32, gap: 12 },
-  miniMap:        { height: 180, borderRadius: 14, overflow: 'hidden' },
-  noMap:          { height: 100, borderRadius: 14, backgroundColor: W.primaryTint, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  noMapText:      { fontSize: 13, color: W.text.muted },
-  refPhotoCard:   { borderRadius: 14, overflow: 'hidden', backgroundColor: W.surface },
-  refPhotoImg:    { width: '100%', height: 200, borderRadius: 14 },
-  refPhotoLabel:  { fontSize: 12, color: W.text.secondary, textAlign: 'center', paddingVertical: 8 },
-  // Reference point photo grid
-  refScroll:      { marginTop: 10 },
-  refThumbWrap:   { width: 120, marginRight: 10, alignItems: 'center' },
-  refThumbImg:    { width: 120, height: 90, borderRadius: 10 },
-  refThumbLabel:  { fontSize: 11, color: W.text.secondary, fontWeight: '500', marginTop: 4 },
-  refHint:        { fontSize: 12, color: W.text.muted, marginTop: 10, fontStyle: 'italic' },
+  // Hero gallery (Swiggy-style full-width swipeable)
+  heroGallery:    { height: 220 },
+  heroImage:      { width: Dimensions.get('window').width - 32, height: 220, borderRadius: 14, marginHorizontal: 16 },
+  heroDots:       { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 8 },
+  heroDot:        { width: 8, height: 8, borderRadius: 4, backgroundColor: W.border },
+  heroDotActive:  { backgroundColor: W.primary, width: 20 },
+  // Task info
+  taskInfo:       { paddingHorizontal: 4, gap: 4 },
+  taskTitle:      { fontSize: 22, fontWeight: '800', color: W.text.primary },
+  locRow:         { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  locText:        { fontSize: 13, color: W.text.muted },
+  buyerName:      { fontSize: 13, color: W.text.secondary },
+  // Info chips
+  chipsRow:       { flexDirection: 'row', gap: 10 },
+  infoChip:       { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12 },
+  chipAmount:     { fontSize: 18, fontWeight: '800' },
+  chipLabel:      { fontSize: 11, fontWeight: '600', marginTop: 2 },
   // Fullscreen photo preview
   previewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center', padding: 20 },
   previewImage:   { width: '100%', height: '80%', borderRadius: 12 },

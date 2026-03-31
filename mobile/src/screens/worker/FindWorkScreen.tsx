@@ -1,29 +1,38 @@
+/**
+ * FindWorkScreen — "Uber driver nearby rides"
+ *
+ * Map pins show ₹AMOUNT (not just dots)
+ * Pin color = dirty level (green/orange/red)
+ * Empty state with "Expand to 10km" + notification opt-in
+ * Bottom sheet with cleaner task cards
+ */
+
 import React, { useRef, useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  FlatList, ActivityIndicator,
+  ActivityIndicator,
 } from 'react-native'
-import MapView, { Marker, Circle } from 'react-native-maps'
+import MapView, { Marker, Circle, Callout } from 'react-native-maps'
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import * as Location from 'expo-location'
-import { MapPin, Filter } from 'lucide-react-native'
+import { MapPin, Filter, Bell, Search } from 'lucide-react-native'
 
 import { COLORS } from '../../constants/colors'
 import { WORKER_THEME as W } from '../../constants/workerTheme'
-import { DIRTY_LEVELS, TASK_CATEGORIES } from '../../constants/taskCategories'
+import { DIRTY_LEVELS } from '../../constants/taskCategories'
 import { workerTasksApi } from '../../api/tasks.api'
 import { formatMoney } from '../../utils/formatMoney'
 import { useLocationStore } from '../../stores/locationStore'
-import type { Task, TaskCategory, DirtyLevel } from '../../types'
+import { Skeleton } from '../../components/ui/Skeleton'
+import type { Task, DirtyLevel } from '../../types'
 import type { WorkerStackParamList } from '../../navigation/types'
 
 type Nav = NativeStackNavigationProp<WorkerStackParamList>
 
-const SNAP_POINTS = ['20%', '50%', '90%']
-const RADIUS_KM   = 10
+const SNAP_POINTS = ['25%', '55%', '90%']
 
 const DIRTY_COLOR: Record<DirtyLevel, string> = {
   LIGHT:    COLORS.dirty.light,
@@ -33,16 +42,15 @@ const DIRTY_COLOR: Record<DirtyLevel, string> = {
 }
 
 export function FindWorkScreen() {
-  const navigation         = useNavigation<Nav>()
-  const bottomSheetRef     = useRef<BottomSheet>(null)
-  const mapRef             = useRef<MapView>(null)
+  const navigation     = useNavigation<Nav>()
+  const bottomSheetRef = useRef<BottomSheet>(null)
+  const mapRef         = useRef<MapView>(null)
   const { currentLocation, setLocation, setPermission } = useLocationStore()
 
-  const [selectedCategory, setSelectedCategory] = useState<TaskCategory | null>(null)
-  const [selectedDirty,    setSelectedDirty]    = useState<DirtyLevel | null>(null)
-  const [selectedTaskId,   setSelectedTaskId]   = useState<string | null>(null)
+  const [selectedDirty, setSelectedDirty] = useState<DirtyLevel | null>(null)
+  const [radiusKm, setRadiusKm]          = useState(5)
 
-  // ── Get initial location ──────────────────────────────────────────────────
+  // Get location on mount
   useEffect(() => {
     ;(async () => {
       const { granted } = await Location.requestForegroundPermissionsAsync()
@@ -52,52 +60,43 @@ export function FindWorkScreen() {
       const { latitude: lat, longitude: lng, accuracy } = loc.coords
       setLocation({ lat, lng, accuracy: accuracy ?? undefined, timestamp: Date.now() })
       mapRef.current?.animateToRegion({
-        latitude:       lat,
-        longitude:      lng,
-        latitudeDelta:  0.05,
-        longitudeDelta: 0.05,
+        latitude: lat, longitude: lng,
+        latitudeDelta: 0.04, longitudeDelta: 0.04,
       })
     })()
   }, [])
 
-  // ── Query open tasks ──────────────────────────────────────────────────────
+  // Query open tasks
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['worker', 'tasks', 'open', currentLocation?.lat, currentLocation?.lng, selectedCategory, selectedDirty],
+    queryKey: ['worker', 'tasks', 'open', currentLocation?.lat, currentLocation?.lng, selectedDirty, radiusKm],
     queryFn: () =>
       workerTasksApi.getOpen({
-        lat:       currentLocation?.lat,
-        lng:       currentLocation?.lng,
-        radiusKm:  RADIUS_KM,
-        category:  selectedCategory ?? undefined,
-        limit:     50,
+        lat:      currentLocation?.lat,
+        lng:      currentLocation?.lng,
+        radiusKm,
+        limit:    50,
       }),
     staleTime: 30_000,
   })
 
-  const tasks = data?.tasks ?? []
-
-  // Tasks with valid location (for map markers)
-  const mappableTasks = tasks.filter((t) => t.locationLat != null && t.locationLng != null)
-
-  const handleMarkerPress = useCallback((taskId: string) => {
-    setSelectedTaskId(taskId)
-    bottomSheetRef.current?.snapToIndex(1)
-  }, [])
+  const allTasks = data?.tasks ?? []
+  const tasks = selectedDirty ? allTasks.filter(t => t.dirtyLevel === selectedDirty) : allTasks
+  const mappableTasks = tasks.filter(t => t.locationLat != null)
 
   const handleTaskPress = useCallback((taskId: string) => {
     navigation.navigate('TaskDetail', { taskId })
   }, [navigation])
 
   const defaultRegion = {
-    latitude:       currentLocation?.lat  ?? 12.9716,
-    longitude:      currentLocation?.lng  ?? 77.5946,
-    latitudeDelta:  0.05,
-    longitudeDelta: 0.05,
+    latitude:       currentLocation?.lat ?? 17.385,
+    longitude:      currentLocation?.lng ?? 78.4867,
+    latitudeDelta:  0.04,
+    longitudeDelta: 0.04,
   }
 
   return (
-    <View style={styles.container}>
-      {/* ── Map ─────────────────────────────────────────────────────────── */}
+    <View style={s.container}>
+      {/* Map */}
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFill}
@@ -105,86 +104,97 @@ export function FindWorkScreen() {
         showsUserLocation
         showsMyLocationButton={false}
       >
-        {/* Search radius circle */}
         {currentLocation && (
           <Circle
             center={{ latitude: currentLocation.lat, longitude: currentLocation.lng }}
-            radius={RADIUS_KM * 1000}
-            strokeColor={`${W.primary}50`}
-            fillColor={`${W.primary}12`}
+            radius={radiusKm * 1000}
+            strokeColor={`${W.primary}40`}
+            fillColor={`${W.primary}08`}
           />
         )}
 
-        {/* Task markers */}
+        {/* Price pins — show ₹AMOUNT on each marker */}
         {mappableTasks.map((task) => (
           <Marker
             key={task.id}
             coordinate={{ latitude: task.locationLat!, longitude: task.locationLng! }}
-            onPress={() => handleMarkerPress(task.id)}
-            pinColor={DIRTY_COLOR[task.dirtyLevel]}
-          />
+            onPress={() => handleTaskPress(task.id)}
+          >
+            <PricePin amount={task.rateCents} dirtyLevel={task.dirtyLevel} />
+          </Marker>
         ))}
       </MapView>
 
-      {/* ── Bottom Sheet ─────────────────────────────────────────────────── */}
+      {/* Bottom Sheet */}
       <BottomSheet
         ref={bottomSheetRef}
         index={0}
         snapPoints={SNAP_POINTS}
-        backgroundStyle={styles.sheetBg}
-        handleIndicatorStyle={styles.handle}
+        backgroundStyle={s.sheetBg}
+        handleIndicatorStyle={s.handle}
       >
         {/* Filter chips */}
-        <View style={styles.filterRow}>
-          <Filter size={16} color={W.text.secondary} />
+        <View style={s.filterRow}>
+          <Filter size={14} color={W.text.muted} />
           {(Object.keys(DIRTY_LEVELS) as DirtyLevel[]).map((level) => (
             <TouchableOpacity
               key={level}
-              style={[
-                styles.chip,
-                selectedDirty === level && { backgroundColor: DIRTY_COLOR[level] },
-              ]}
-              onPress={() => setSelectedDirty((prev) => prev === level ? null : level)}
+              style={[s.chip, selectedDirty === level && { backgroundColor: DIRTY_COLOR[level], borderColor: DIRTY_COLOR[level] }]}
+              onPress={() => setSelectedDirty(prev => prev === level ? null : level)}
             >
-              <Text style={[
-                styles.chipText,
-                selectedDirty === level && { color: '#fff' },
-              ]}>
+              <Text style={[s.chipText, selectedDirty === level && { color: '#fff' }]}>
                 {DIRTY_LEVELS[level].label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={styles.countRow}>
-          <Text style={styles.countText}>
-            {isLoading ? 'Loading…' : `${tasks.length} tasks nearby`}
+        {/* Count + radius */}
+        <View style={s.countRow}>
+          <Text style={s.countText}>
+            {isLoading ? 'Searching...' : `${tasks.length} tasks within ${radiusKm} km`}
           </Text>
           <TouchableOpacity onPress={() => refetch()}>
-            <Text style={styles.refreshText}>Refresh</Text>
+            <Text style={s.refreshText}>Refresh</Text>
           </TouchableOpacity>
         </View>
 
         {isLoading ? (
-          <ActivityIndicator color={W.primary} style={{ marginTop: 32 }} />
-        ) : (
-          <BottomSheetScrollView contentContainerStyle={styles.list}>
-            {tasks.length === 0 ? (
-              <View style={styles.empty}>
-                <MapPin size={40} color={W.text.muted} />
-                <Text style={styles.emptyText}>No tasks found nearby</Text>
-                <Text style={styles.emptySubtext}>Try increasing the radius or changing filters</Text>
-              </View>
-            ) : (
-              tasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  selected={selectedTaskId === task.id}
-                  onPress={() => handleTaskPress(task.id)}
-                />
-              ))
+          <View style={s.skeletonList}>
+            {[1, 2, 3].map(i => <Skeleton key={i} width="100%" height={80} borderRadius={12} />)}
+          </View>
+        ) : tasks.length === 0 ? (
+          /* Empty state — NOT a dead end */
+          <View style={s.empty}>
+            <Search size={40} color={W.text.muted} />
+            <Text style={s.emptyTitle}>No tasks in {radiusKm} km</Text>
+
+            {radiusKm < 10 && (
+              <TouchableOpacity
+                style={s.expandBtn}
+                onPress={() => setRadiusKm(10)}
+                activeOpacity={0.85}
+              >
+                <Text style={s.expandBtnText}>Expand to 10 km</Text>
+              </TouchableOpacity>
             )}
+
+            {radiusKm >= 10 && (
+              <Text style={s.emptySubtext}>
+                No tasks available right now.{'\n'}We'll notify you when work appears nearby.
+              </Text>
+            )}
+
+            <TouchableOpacity style={s.notifyBtn} activeOpacity={0.85}>
+              <Bell size={16} color={W.primary} />
+              <Text style={s.notifyBtnText}>Notify me when tasks appear</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <BottomSheetScrollView contentContainerStyle={s.list}>
+            {tasks.map((task) => (
+              <TaskCard key={task.id} task={task} onPress={() => handleTaskPress(task.id)} />
+            ))}
           </BottomSheetScrollView>
         )}
       </BottomSheet>
@@ -192,81 +202,103 @@ export function FindWorkScreen() {
   )
 }
 
-function TaskCard({
-  task, selected, onPress,
-}: { task: Task; selected: boolean; onPress: () => void }) {
+// ── Price Pin (₹ amount on map) ─────────────────────────────────────────────
+
+function PricePin({ amount, dirtyLevel }: { amount: number; dirtyLevel: DirtyLevel }) {
+  const color = DIRTY_COLOR[dirtyLevel]
+  const text = `\u20B9${Math.round(amount / 100)}`
+
   return (
-    <TouchableOpacity
-      style={[styles.taskCard, selected && styles.taskCardSelected]}
-      onPress={onPress}
-      activeOpacity={0.82}
-    >
-      <View style={styles.taskCardTop}>
-        <Text style={styles.taskTitle} numberOfLines={1}>{task.title}</Text>
-        <Text style={styles.taskRate}>{formatMoney(task.rateCents, 'INR')}</Text>
+    <View style={[pp.container, { backgroundColor: color }]}>
+      <Text style={pp.text}>{text}</Text>
+      <View style={[pp.arrow, { borderTopColor: color }]} />
+    </View>
+  )
+}
+
+const pp = StyleSheet.create({
+  container: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignItems: 'center', minWidth: 44 },
+  text:      { fontSize: 12, fontWeight: '800', color: '#fff' },
+  arrow:     { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent', marginTop: -1 },
+})
+
+// ── Task Card ───────────────────────────────────────────────────────────────
+
+function TaskCard({ task, onPress }: { task: Task; onPress: () => void }) {
+  const color = DIRTY_COLOR[task.dirtyLevel]
+
+  return (
+    <TouchableOpacity style={s.taskCard} onPress={onPress} activeOpacity={0.85}>
+      <View style={s.taskRow1}>
+        <Text style={s.taskTitle} numberOfLines={1}>{task.title}</Text>
+        <Text style={s.taskRate}>{formatMoney(task.rateCents, 'INR')}</Text>
       </View>
-      <View style={styles.taskCardBottom}>
-        <View style={[styles.levelBadge, { backgroundColor: DIRTY_COLOR[task.dirtyLevel] }]}>
-          <Text style={styles.levelText}>{task.dirtyLevel}</Text>
+
+      <View style={s.taskRow2}>
+        {task.locationAddress && (
+          <View style={s.taskMeta}>
+            <MapPin size={12} color={W.text.muted} />
+            <Text style={s.taskAddress} numberOfLines={1}>{task.locationAddress}</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={s.taskRow3}>
+        <View style={[s.dirtyBadge, { backgroundColor: color }]}>
+          <Text style={s.dirtyText}>{task.dirtyLevel}</Text>
         </View>
-        <Text style={styles.taskCategory}>
-          {TASK_CATEGORIES[task.category as keyof typeof TASK_CATEGORIES]?.label ?? task.category}
-        </Text>
-        {task.locationAddress ? (
-          <Text style={styles.taskAddress} numberOfLines={1}>{task.locationAddress}</Text>
-        ) : null}
+        {task.totalReferencePoints > 0 && (
+          <Text style={s.taskPhotos}>{task.totalReferencePoints} photos</Text>
+        )}
+        {task.workWindowStart && (
+          <Text style={s.taskWindow}>{task.workWindowStart} - {task.workWindowEnd}</Text>
+        )}
       </View>
     </TouchableOpacity>
   )
 }
 
-const styles = StyleSheet.create({
-  container:        { flex: 1 },
-  sheetBg:          { backgroundColor: W.surface, borderRadius: 20 },
-  handle:           { backgroundColor: W.text.muted, width: 40 },
-  filterRow:        {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  chip:             {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: W.primaryTint,
-    borderWidth: 1,
-    borderColor: W.border,
-  },
-  chipText:         { fontSize: 12, fontWeight: '600', color: W.text.secondary },
-  countRow:         {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  countText:        { fontSize: 13, color: W.text.secondary },
-  refreshText:      { fontSize: 13, color: W.primary, fontWeight: '600' },
-  list:             { paddingHorizontal: 16, paddingBottom: 32, gap: 10 },
-  empty:            { alignItems: 'center', paddingTop: 32, gap: 8 },
-  emptyText:        { fontSize: 15, fontWeight: '600', color: W.text.secondary },
-  emptySubtext:     { fontSize: 13, color: W.text.muted, textAlign: 'center' },
-  taskCard:         {
-    backgroundColor: W.card,
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: W.border,
-  },
-  taskCardSelected: { borderColor: W.primary, borderWidth: 2 },
-  taskCardTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  taskTitle:        { flex: 1, fontSize: 14, fontWeight: '600', color: W.text.primary, marginRight: 8 },
-  taskRate:         { fontSize: 16, fontWeight: '700', color: W.primary },
-  taskCardBottom:   { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  levelBadge:       { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  levelText:        { fontSize: 10, fontWeight: '700', color: '#fff' },
-  taskCategory:     { fontSize: 12, color: W.text.secondary },
-  taskAddress:      { fontSize: 11, color: W.text.muted, flex: 1 },
+// ── Styles ──────────────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  container: { flex: 1 },
+  sheetBg:   { backgroundColor: W.surface, borderRadius: 20 },
+  handle:    { backgroundColor: W.text.muted, width: 40 },
+
+  // Filters
+  filterRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, gap: 8, flexWrap: 'wrap' },
+  chip:      { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: W.border, backgroundColor: W.surface },
+  chipText:  { fontSize: 12, fontWeight: '600', color: W.text.secondary },
+
+  // Count
+  countRow:    { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
+  countText:   { fontSize: 13, color: W.text.secondary },
+  refreshText: { fontSize: 13, color: W.primary, fontWeight: '600' },
+
+  // List
+  list:         { paddingHorizontal: 16, paddingBottom: 32, gap: 10 },
+  skeletonList: { paddingHorizontal: 16, gap: 10, paddingTop: 8 },
+
+  // Empty state
+  empty:        { alignItems: 'center', paddingTop: 32, paddingHorizontal: 32, gap: 12 },
+  emptyTitle:   { fontSize: 16, fontWeight: '700', color: W.text.secondary },
+  emptySubtext: { fontSize: 13, color: W.text.muted, textAlign: 'center', lineHeight: 20 },
+  expandBtn:    { backgroundColor: W.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
+  expandBtnText:{ fontSize: 14, fontWeight: '700', color: '#fff' },
+  notifyBtn:    { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
+  notifyBtnText:{ fontSize: 13, fontWeight: '600', color: W.primary },
+
+  // Task card
+  taskCard:  { backgroundColor: W.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: W.border, gap: 8 },
+  taskRow1:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  taskTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: W.text.primary, marginRight: 8 },
+  taskRate:  { fontSize: 17, fontWeight: '800', color: W.primary },
+  taskRow2:  { },
+  taskMeta:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  taskAddress:{ fontSize: 12, color: W.text.muted, flex: 1 },
+  taskRow3:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dirtyBadge:{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  dirtyText: { fontSize: 10, fontWeight: '700', color: '#fff' },
+  taskPhotos:{ fontSize: 11, color: W.text.muted },
+  taskWindow:{ fontSize: 11, color: W.text.muted },
 })

@@ -1,14 +1,19 @@
-// ActiveTaskScreen — THE most complex screen in the app.
-// Handles both ACCEPTED (pre-start) and IN_PROGRESS (active) task states.
-// GPS via socket.emit('worker:gps') — NOT HTTP.
-// Timer computed from task.startedAt (server time) — NOT useState(0).
-// Background GPS via expo-task-manager — works with phone locked.
+/**
+ * ActiveTaskScreen — Redesigned with two clear states:
+ *
+ * ACCEPTED: "Ola navigating to pickup" — map + navigate + start work
+ * IN_PROGRESS: "Zomato order tracking" — progress steps + FindMyArrow + capture
+ *
+ * No legacy 3-photo flow. Only reference points flow.
+ * Motion tracking starts here (not ReferencePointNavigator).
+ * GPS retry mechanism for geofence (3 retries, not hard block).
+ */
 
 import React, { useEffect, useRef, useCallback, useState } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Alert, Image, ActivityIndicator, ScrollView,
-  TextInput, KeyboardAvoidingView, Platform, Linking,
+  TextInput, Modal, Linking, Platform,
 } from 'react-native'
 import MapView, { Marker, Polyline, Circle } from 'react-native-maps'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -16,44 +21,33 @@ import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { RouteProp } from '@react-navigation/native'
 import * as Haptics from 'expo-haptics'
-import { Camera, CheckCircle, Wifi, WifiOff, Play, X, Images, MapPin, Clock, AlertTriangle, MessageCircle } from 'lucide-react-native'
-import { Modal } from 'react-native'
-import { CaptureCamera } from '../../components/camera/CaptureCamera'
-import type { CaptureResult } from '../../components/camera/CaptureCamera'
-import type { PhotoType } from '../../components/camera/CaptureCamera'
+import * as Location from 'expo-location'
+import NetInfo from '@react-native-community/netinfo'
+import {
+  CheckCircle, Wifi, WifiOff, Play, MapPin, Clock,
+  AlertTriangle, MessageCircle, Navigation2, Camera, X, Flag,
+} from 'lucide-react-native'
 
-import { FlatList, Dimensions } from 'react-native'
-import { COLORS } from '../../constants/colors'
 import { WORKER_THEME as W } from '../../constants/workerTheme'
-import { getAllPhotos, GalleryPhoto } from '../../services/galleryService'
 import { workerTasksApi } from '../../api/tasks.api'
-import { mediaApi } from '../../api/media.api'
+import { referencePointsApi } from '../../api/referencePoints.api'
 import { useBackgroundLocation } from '../../hooks/useBackgroundLocation'
 import { useActiveTaskStore } from '../../stores/activeTaskStore'
 import { useSocketStore } from '../../stores/socketStore'
-import { formatMoney } from '../../utils/formatMoney'
 import { startMotionTracking, isMotionTrackingActive } from '../../services/motionTracker'
+import { formatMoney } from '../../utils/formatMoney'
+import { formatElapsed } from '../../utils/formatTime'
+import { haversineKm } from '../../utils/distance'
+import { CaptureCamera } from '../../components/camera/CaptureCamera'
+import { FindMyArrow } from '../../components/maps/FindMyArrow'
+import type { CaptureResult } from '../../components/camera/CaptureCamera'
 import type { WorkerStackParamList } from '../../navigation/types'
-import type { MediaType } from '../../types'
+import type { SubmissionProgress } from '../../types'
 
 type Nav   = NativeStackNavigationProp<WorkerStackParamList, 'ActiveTask'>
 type Route = RouteProp<WorkerStackParamList, 'ActiveTask'>
 
-interface PhotoState {
-  uri:       string | null
-  uploading: boolean
-  uploaded:  boolean
-}
-
-const PHOTO_TYPES: { type: MediaType; label: string }[] = [
-  { type: 'BEFORE', label: 'Before' },
-  { type: 'AFTER',  label: 'After'  },
-  { type: 'PROOF',  label: 'Proof'  },
-]
-
-import { formatElapsed } from '../../utils/formatTime'
-
-import { haversineKm } from '../../utils/distance'
+const GEOFENCE_RADIUS_KM = 0.5
 
 function openMapsNavigation(lat: number, lng: number) {
   const url = Platform.select({
@@ -65,35 +59,28 @@ function openMapsNavigation(lat: number, lng: number) {
   })
 }
 
-const GEOFENCE_RADIUS_KM = 0.5 // 500 meters
-
 export function ActiveTaskScreen() {
-  const navigation          = useNavigation<Nav>()
-  const route               = useRoute<Route>()
-  const { taskId }          = route.params
-  const queryClient         = useQueryClient()
+  const navigation = useNavigation<Nav>()
+  const route      = useRoute<Route>()
+  const { taskId } = route.params
+  const qc         = useQueryClient()
   const { joinTask, leaveTask, connected } = useSocketStore()
-
   const { setActiveTask, gpsTrail, elapsedSecs, setElapsedSecs } = useActiveTaskStore()
   const { currentLocation, requestPermissions, startTracking, stopTracking } = useBackgroundLocation()
 
-  const mapRef        = useRef<MapView>(null)
-  const isCancelling  = useRef(false)
-  const isStarting    = useRef(false)
+  const mapRef       = useRef<MapView>(null)
+  const isStarting   = useRef(false)
+  const isCancelling = useRef(false)
 
-  const [photos, setPhotos] = useState<Record<string, PhotoState>>({
-    BEFORE:    { uri: null, uploading: false, uploaded: false },
-    AFTER:     { uri: null, uploading: false, uploaded: false },
-    PROOF:     { uri: null, uploading: false, uploaded: false },
-    REFERENCE: { uri: null, uploading: false, uploaded: false },
-  })
-  const [cameraType, setCameraType] = useState<PhotoType | null>(null)
-  const [cancelModal, setCancelModal] = useState(false)
+  const [gpsRetrying, setGpsRetrying]   = useState(false)
+  const gpsRetryCount                    = useRef(0)
+  const [cancelModal, setCancelModal]   = useState(false)
   const [cancelReason, setCancelReason] = useState('')
-  const [photoSourceType, setPhotoSourceType] = useState<MediaType | null>(null)
-  const [galleryPicker, setGalleryPicker] = useState<MediaType | null>(null)
-  const [galleryPhotos, setGalleryPhotos] = useState<GalleryPhoto[]>([])
-  const [gpsWarning, setGpsWarning] = useState(false)
+  const [isOnline, setIsOnline]         = useState(true)
+  const [cameraState, setCameraState]   = useState<{
+    visible: boolean; pointId: string | null; pointIndex: number;
+    label: string | null; buyerImageUrl: string | null; distance: number | null
+  }>({ visible: false, pointId: null, pointIndex: 0, label: null, buyerImageUrl: null, distance: null })
 
   // ── Task query ────────────────────────────────────────────────────────────
   const { data: task, isLoading } = useQuery({
@@ -103,18 +90,31 @@ export function ActiveTaskScreen() {
     refetchInterval: 10_000,
   })
 
-  // ── Join socket room on mount ─────────────────────────────────────────────
+  // ── Submission progress (for IN_PROGRESS reference point flow) ────────────
+  const { data: progress } = useQuery<SubmissionProgress>({
+    queryKey: ['submission-progress', taskId, currentLocation?.lat, currentLocation?.lng],
+    queryFn:  () => referencePointsApi.progress(taskId, currentLocation?.lat, currentLocation?.lng),
+    enabled:  task?.status === 'IN_PROGRESS' && (task?.totalReferencePoints ?? 0) > 0,
+    refetchInterval: 15_000,
+  })
+
+  // ── Network status ────────────────────────────────────────────────────────
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsOnline(state.isConnected === true)
+    })
+    return () => unsubscribe()
+  }, [])
+
+  // ── Socket room ───────────────────────────────────────────────────────────
   useEffect(() => {
     joinTask(taskId)
     return () => leaveTask(taskId)
-  }, [taskId, joinTask, leaveTask])
+  }, [taskId])
 
-  // ── Sync active task store ────────────────────────────────────────────────
-  useEffect(() => {
-    if (task) setActiveTask(task)
-  }, [task, setActiveTask])
+  useEffect(() => { if (task) setActiveTask(task) }, [task])
 
-  // ── Timer: computed from server startedAt (survives restart) ─────────────
+  // ── Timer from server startedAt ───────────────────────────────────────────
   useEffect(() => {
     if (!task?.startedAt) return
     const startMs = new Date(task.startedAt).getTime()
@@ -122,50 +122,29 @@ export function ActiveTaskScreen() {
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [task?.startedAt, setElapsedSecs])
+  }, [task?.startedAt])
 
-  // ── Restart background tracking + motion tracking if IN_PROGRESS on mount ──
+  // ── Start tracking + motion when IN_PROGRESS ─────────────────────────────
   useEffect(() => {
     if (task?.status === 'IN_PROGRESS') {
       startTracking(taskId)
-      // Start motion tracking here (not in ReferencePointNavigator) so it captures
-      // the full task duration from Start Work to Submit
-      if (!isMotionTrackingActive()) {
-        startMotionTracking()
-      }
+      if (!isMotionTrackingActive()) startMotionTracking()
     }
-  }, [task?.status]) // intentionally only on status change
+  }, [task?.status])
 
-  // ── Move map camera to worker location ───────────────────────────────────
-  useEffect(() => {
-    if (currentLocation) {
-      mapRef.current?.animateToRegion({
-        latitude:       currentLocation.lat,
-        longitude:      currentLocation.lng,
-        latitudeDelta:  0.005,
-        longitudeDelta: 0.005,
-      }, 800)
-    }
-  }, [currentLocation])
-
-  // ── Start Task mutation (ACCEPTED → IN_PROGRESS) ──────────────────────────
+  // ── Mutations ─────────────────────────────────────────────────────────────
   const startMutation = useMutation({
-    mutationFn: () =>
-      workerTasksApi.start(taskId, currentLocation
-        ? { lat: currentLocation.lat, lng: currentLocation.lng }
-        : undefined,
-      ),
+    mutationFn: () => workerTasksApi.start(taskId, currentLocation
+      ? { lat: currentLocation.lat, lng: currentLocation.lng } : undefined),
     onSuccess: async () => {
       isStarting.current = false
-      queryClient.invalidateQueries({ queryKey: ['worker', 'task', taskId] })
-      queryClient.invalidateQueries({ queryKey: ['worker', 'tasks'] })
+      qc.invalidateQueries({ queryKey: ['worker', 'task', taskId] })
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       const granted = await requestPermissions()
       if (granted) await startTracking(taskId)
     },
     onError: (err: any) => {
       isStarting.current = false
-      // Only show alert for actual failures, not network hiccups after success
       const msg = err?.response?.data?.error?.message ?? ''
       if (msg && !msg.includes('already') && !msg.includes('IN_PROGRESS')) {
         Alert.alert('Cannot Start', msg)
@@ -173,13 +152,12 @@ export function ActiveTaskScreen() {
     },
   })
 
-  // ── Cancel Task mutation ──────────────────────────────────────────────────
   const cancelMutation = useMutation({
     mutationFn: (reason: string) => workerTasksApi.cancel(taskId, reason),
     onSuccess: async () => {
       await stopTracking()
       setActiveTask(null)
-      queryClient.invalidateQueries({ queryKey: ['worker', 'tasks'] })
+      qc.invalidateQueries({ queryKey: ['worker', 'tasks'] })
       navigation.navigate('WorkerTabs', { screen: 'MyTasks' } as never)
     },
     onError: (err: any) => {
@@ -188,679 +166,509 @@ export function ActiveTaskScreen() {
     },
   })
 
-  // Distance to task location
+  // ── Computed ──────────────────────────────────────────────────────────────
   const distanceKm = (currentLocation && task?.locationLat)
     ? haversineKm(currentLocation.lat, currentLocation.lng, task.locationLat, task.locationLng!)
     : null
   const isNearTask = distanceKm !== null && distanceKm <= GEOFENCE_RADIUS_KM
   const hasLocation = task?.locationLat != null
+  const isInProgress = task?.status === 'IN_PROGRESS'
+  const isAccepted   = task?.status === 'ACCEPTED'
 
-  const [gpsRetrying, setGpsRetrying] = useState(false)
-  const gpsRetryCount = useRef(0)
-
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleStart = async () => {
     if (isStarting.current) return
-    if (!currentLocation) {
-      setGpsWarning(true)
-      return
-    }
-    // If task has location, enforce geofence with retry
+    if (!currentLocation) { Alert.alert('GPS', 'Waiting for GPS signal...'); return }
     if (hasLocation && !isNearTask) {
-      // GPS retry mechanism: 3 retries over 15 seconds
-      // Budget phones in congested Indian lanes have 15-50m GPS drift
       if (gpsRetryCount.current < 3) {
         setGpsRetrying(true)
-        setGpsWarning(false)
         gpsRetryCount.current++
-        try {
-          await requestPermissions()
-          // Wait 5 seconds for GPS to converge
-          await new Promise(r => setTimeout(r, 5000))
-        } catch {}
+        try { await requestPermissions(); await new Promise(r => setTimeout(r, 5000)) } catch {}
         setGpsRetrying(false)
-        // Location will update via useBackgroundLocation hook, triggering re-render
         return
       }
-      // After 3 retries, show guidance (not a hard block — they can keep trying)
-      setGpsWarning(true)
+      Alert.alert('Too Far', `You're ${distanceKm ? `${distanceKm.toFixed(1)} km` : '?'} away. Get within 500m to start.`)
       gpsRetryCount.current = 0
       return
     }
-    setGpsWarning(false)
-    setGpsRetrying(false)
     gpsRetryCount.current = 0
+    setGpsRetrying(false)
     isStarting.current = true
     startMutation.mutate()
   }
 
-  const handleNavigate = () => {
-    if (task?.locationLat && task?.locationLng) {
-      openMapsNavigation(task.locationLat, task.locationLng)
-    }
-  }
+  // Find the next uncaptured reference point
+  const nextPoint = progress?.points.find(p => !p.hasAfterSubmission)
+  const completedCount = progress?.afterCompleted ?? 0
+  const totalCount = progress?.totalPoints ?? 0
 
-  const handleCancel = () => {
-    setCancelReason('')
-    setCancelModal(true)
-  }
-
-  const confirmCancel = () => {
-    if (isCancelling.current) return
-    if (cancelReason.trim().length < 5) {
-      Alert.alert('Reason Required', 'Please provide at least 5 characters.')
-      return
-    }
-    isCancelling.current = true
-    setCancelModal(false)
-    cancelMutation.mutate(cancelReason.trim())
-  }
-
-  const openPhotoChoice = useCallback((type: MediaType) => {
-    setPhotoSourceType(type)
+  const openCameraForPoint = useCallback((point: SubmissionProgress['points'][number]) => {
+    setCameraState({
+      visible: true, pointId: point.id, pointIndex: point.pointIndex,
+      label: point.label, buyerImageUrl: point.buyerImageUrl, distance: point.distanceFromWorker,
+    })
   }, [])
 
-  const pickFromCamera = useCallback(() => {
-    if (!photoSourceType) return
-    setPhotoSourceType(null)
-    setCameraType(photoSourceType as PhotoType)
-  }, [photoSourceType])
-
-  const pickFromGallery = useCallback(async () => {
-    if (!photoSourceType) return
-    const all = await getAllPhotos()
-    setGalleryPhotos(all)
-    setPhotoSourceType(null)
-    setGalleryPicker(photoSourceType)
-  }, [photoSourceType])
-
-  const handleCapture = useCallback((result: CaptureResult) => {
-    if (!cameraType) return
-    setCameraType(null)
-    // Pass device-captured metadata (GPS, hash, device) to backend
-    uploadPhoto(cameraType as MediaType, result.photo.fullUri, result.photo.metadata)
-  }, [cameraType, taskId])
-
-  const handleGalleryPick = useCallback((photo: GalleryPhoto) => {
-    if (!galleryPicker) return
-    setGalleryPicker(null)
-    // Gallery photos also have metadata from when they were captured
-    uploadPhoto(galleryPicker, photo.fullUri, photo.metadata)
-  }, [galleryPicker, taskId])
-
-  const uploadPhoto = useCallback(async (type: MediaType, uri: string, metadata?: GalleryPhoto['metadata']) => {
-    setPhotos((p) => ({ ...p, [type]: { uri, uploading: true, uploaded: false } }))
+  const onCapture = useCallback(async (result: CaptureResult) => {
+    setCameraState(s => ({ ...s, visible: false }))
+    if (!cameraState.pointId) return
+    const meta = result.photo.metadata ? {
+      lat: result.photo.metadata.lat, lng: result.photo.metadata.lng,
+      timestamp: result.photo.metadata.timestamp, deviceId: result.photo.metadata.deviceId,
+      photoHash: result.photo.metadata.photoHash,
+    } : undefined
     try {
-      await mediaApi.upload(taskId, uri, type, metadata ? {
-        lat:       metadata.lat,
-        lng:       metadata.lng,
-        timestamp: metadata.timestamp,
-        deviceId:  metadata.deviceId,
-        photoHash: metadata.photoHash,
-      } : undefined)
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      setPhotos((p) => ({ ...p, [type]: { uri, uploading: false, uploaded: true } }))
-    } catch {
-      setPhotos((p) => ({ ...p, [type]: { uri: null, uploading: false, uploaded: false } }))
-      Alert.alert('Upload Failed', 'Please check your connection and try again.')
-    }
-  }, [taskId])
+      await referencePointsApi.submitPoint(taskId, cameraState.pointId, 'AFTER', result.photo.fullUri, meta)
+    } catch {}
+    qc.invalidateQueries({ queryKey: ['submission-progress', taskId] })
+  }, [taskId, cameraState.pointId])
 
-  const allUploaded = PHOTO_TYPES.every(({ type }) => photos[type].uploaded)
-  const isInProgress = task?.status === 'IN_PROGRESS'
-  const isAccepted   = task?.status === 'ACCEPTED'
-
+  // ── Loading ───────────────────────────────────────────────────────────────
   if (isLoading || !task) {
+    return <View style={s.center}><ActivityIndicator color={W.primary} size="large" /></View>
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ACCEPTED STATE — "Ola navigating to pickup"
+  // ══════════════════════════════════════════════════════════════════════════
+  if (isAccepted) {
+    const mapRegion = currentLocation
+      ? { latitude: currentLocation.lat, longitude: currentLocation.lng, latitudeDelta: 0.01, longitudeDelta: 0.01 }
+      : task.locationLat
+        ? { latitude: task.locationLat, longitude: task.locationLng!, latitudeDelta: 0.01, longitudeDelta: 0.01 }
+        : { latitude: 17.385, longitude: 78.4867, latitudeDelta: 0.05, longitudeDelta: 0.05 }
+
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={W.primary} size="large" />
+      <View style={s.root}>
+        {/* Map — 60% of screen */}
+        <View style={s.mapContainer}>
+          <MapView ref={mapRef} style={StyleSheet.absoluteFill} initialRegion={mapRegion} showsUserLocation>
+            {task.locationLat && (
+              <Marker coordinate={{ latitude: task.locationLat, longitude: task.locationLng! }} pinColor={W.primary} title="Task Location" />
+            )}
+          </MapView>
+        </View>
+
+        {/* Bottom card */}
+        <View style={s.acceptedCard}>
+          <View style={s.cardRow}>
+            <Text style={s.cardTitle} numberOfLines={1}>{task.title}</Text>
+            <Text style={s.cardRate}>{formatMoney(task.rateCents, 'INR')}</Text>
+          </View>
+          {task.locationAddress && (
+            <View style={s.cardLocRow}>
+              <MapPin size={12} color={W.text.muted} />
+              <Text style={s.cardLoc} numberOfLines={1}>{task.locationAddress}</Text>
+            </View>
+          )}
+
+          {/* Distance + ETA */}
+          {distanceKm !== null && (
+            <View style={s.metricsRow}>
+              <View style={[s.metricBox, { backgroundColor: isNearTask ? '#DCFCE7' : '#FEF3C7' }]}>
+                <Text style={[s.metricVal, { color: isNearTask ? '#15803D' : '#92400E' }]}>
+                  {distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)} km`}
+                </Text>
+                <Text style={[s.metricLabel, { color: isNearTask ? '#15803D' : '#92400E' }]}>
+                  {isNearTask ? 'At location' : 'away'}
+                </Text>
+              </View>
+              <View style={[s.metricBox, { backgroundColor: '#F0F9FF' }]}>
+                <Text style={[s.metricVal, { color: '#1D4ED8' }]}>~{Math.max(1, Math.round(distanceKm * 12))} min</Text>
+                <Text style={[s.metricLabel, { color: '#1D4ED8' }]}>to reach</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Navigate button */}
+          {hasLocation && !isNearTask && (
+            <TouchableOpacity style={s.navigateBtn} onPress={() => openMapsNavigation(task.locationLat!, task.locationLng!)} activeOpacity={0.85}>
+              <Navigation2 size={18} color="#fff" />
+              <Text style={s.navigateBtnText}>NAVIGATE</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* GPS retry indicator */}
+          {gpsRetrying && (
+            <View style={s.retryBar}>
+              <ActivityIndicator size="small" color={W.primary} />
+              <Text style={s.retryText}>GPS retrying... ({gpsRetryCount.current}/3)</Text>
+            </View>
+          )}
+
+          {/* Start Work */}
+          <TouchableOpacity
+            style={[s.startBtn, (!isNearTask && hasLocation) && s.btnDisabled]}
+            onPress={handleStart}
+            activeOpacity={0.85}
+            disabled={startMutation.isPending}
+          >
+            {startMutation.isPending ? <ActivityIndicator color="#fff" /> : (
+              <>
+                <Play size={18} color="#fff" />
+                <Text style={s.startBtnText}>
+                  {hasLocation && !isNearTask ? 'Get closer to start' : 'START WORK'}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Footer: Report + Cancel */}
+          <View style={s.footerActions}>
+            <TouchableOpacity style={s.footerBtn} onPress={() => navigation.navigate('ReportIssue' as any, { taskId })}>
+              <Flag size={14} color={W.text.muted} />
+              <Text style={s.footerBtnText}>Report Issue</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.footerBtn} onPress={() => setCancelModal(true)}>
+              <X size={14} color={W.text.muted} />
+              <Text style={s.footerBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Cancel modal */}
+        <CancelModal
+          visible={cancelModal}
+          reason={cancelReason}
+          onReasonChange={setCancelReason}
+          onCancel={() => setCancelModal(false)}
+          onConfirm={() => {
+            if (cancelReason.trim().length < 5) { Alert.alert('Reason Required', 'At least 5 characters.'); return }
+            isCancelling.current = true; setCancelModal(false); cancelMutation.mutate(cancelReason.trim())
+          }}
+          isPending={cancelMutation.isPending}
+        />
       </View>
     )
   }
 
-  const mapRegion = currentLocation
-    ? { latitude: currentLocation.lat, longitude: currentLocation.lng, latitudeDelta: 0.008, longitudeDelta: 0.008 }
-    : task.locationLat
-      ? { latitude: task.locationLat, longitude: task.locationLng!, latitudeDelta: 0.008, longitudeDelta: 0.008 }
-      : { latitude: 17.385, longitude: 78.4867, latitudeDelta: 0.05, longitudeDelta: 0.05 }
-
+  // ══════════════════════════════════════════════════════════════════════════
+  // IN_PROGRESS STATE — "Zomato order tracking" + FindMyArrow
+  // ══════════════════════════════════════════════════════════════════════════
   return (
-    <View style={styles.container}>
-      {/* ── Map ── */}
-      <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
-          style={StyleSheet.absoluteFill}
-          initialRegion={mapRegion}
-          showsUserLocation={false}
-        >
-          {/* Task location pin */}
-          {task.locationLat && (
-            <Marker
-              coordinate={{ latitude: task.locationLat, longitude: task.locationLng! }}
-              pinColor={COLORS.map.task}
-              title="Task Location"
-            />
-          )}
-
-          {/* 2km geofence circle */}
-          {task.locationLat && (
-            <Circle
-              center={{ latitude: task.locationLat, longitude: task.locationLng! }}
-              radius={2000}
-              strokeColor={`${W.primary}60`}
-              fillColor={`${W.primary}10`}
-            />
-          )}
-
-          {/* Worker current position */}
-          {currentLocation && (
-            <Marker
-              coordinate={{ latitude: currentLocation.lat, longitude: currentLocation.lng }}
-              anchor={{ x: 0.5, y: 0.5 }}
-            >
-              <View style={styles.workerDot}>
-                <View style={styles.workerDotInner} />
-              </View>
-            </Marker>
-          )}
-
-          {/* GPS trail polyline */}
-          {gpsTrail.length > 1 && (
-            <Polyline
-              coordinates={gpsTrail.map((c) => ({ latitude: c.lat, longitude: c.lng }))}
-              strokeColor={COLORS.map.trail}
-              strokeWidth={3}
-            />
-          )}
-        </MapView>
-
-        {/* Status bar overlay */}
-        <View style={styles.statusBar}>
-          <View style={styles.timerBox}>
-            <Text style={styles.timerText}>{formatElapsed(elapsedSecs)}</Text>
-            <Text style={styles.timerLabel}>elapsed</Text>
-          </View>
-          <View style={styles.gpsStatus}>
-            {connected
-              ? <Wifi size={14} color={W.status.success} />
-              : <WifiOff size={14} color={W.status.error} />}
-            <Text style={[styles.gpsText, { color: connected ? W.status.success : W.status.error }]}>
-              {connected ? 'GPS live' : 'No signal'}
-            </Text>
-          </View>
+    <View style={s.root}>
+      {/* Header with timer */}
+      <View style={s.progressHeader}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+          <Text style={s.backText}>{'<'}</Text>
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Active Task</Text>
+        <View style={s.timerChip}>
+          <Clock size={14} color={W.primary} />
+          <Text style={s.timerText}>{formatElapsed(elapsedSecs)}</Text>
         </View>
       </View>
 
-      {/* ── Bottom Panel ── */}
-      <ScrollView style={styles.panel} contentContainerStyle={styles.panelContent}>
-        {/* Task info row */}
-        <View style={styles.taskInfoRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.taskTitle} numberOfLines={1}>{task.title}</Text>
-            <Text style={styles.taskCategory}>{task.category ?? 'General'}</Text>
-          </View>
-          <View style={styles.rateChip}>
-            <Text style={styles.rateText}>{formatMoney(task.rateCents, 'INR')}</Text>
-          </View>
+      <ScrollView contentContainerStyle={s.progressContent} showsVerticalScrollIndicator={false}>
+
+        {/* Connection status */}
+        <View style={[s.connectionBar, { backgroundColor: connected ? '#DCFCE7' : '#FEF3C7' }]}>
+          {connected ? <Wifi size={14} color="#15803D" /> : <WifiOff size={14} color="#92400E" />}
+          <Text style={{ fontSize: 12, fontWeight: '600', color: connected ? '#15803D' : '#92400E' }}>
+            {connected ? 'GPS live' : 'Reconnecting...'}
+          </Text>
         </View>
 
-        {/* ACCEPTED state — navigate + geofence + start */}
-        {isAccepted && (
-          <>
-            {/* Distance indicator */}
-            {hasLocation && distanceKm !== null && (
-              <View style={[styles.distanceCard, isNearTask ? styles.distanceNear : styles.distanceFar]}>
-                <MapPin size={18} color={isNearTask ? W.primary : W.secondary} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.distanceText, { color: isNearTask ? '#15803D' : '#92400E' }]}>
-                    {isNearTask
-                      ? "You're at the location!"
-                      : `${distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)} km`} away`
-                    }
-                  </Text>
-                  <Text style={styles.distanceSub}>
-                    {isNearTask ? 'You can start work now' : 'Get within 500m to start work'}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {/* Navigate button — opens Google Maps */}
-            {hasLocation && !isNearTask && (
-              <TouchableOpacity style={styles.navigateBtn} onPress={handleNavigate} activeOpacity={0.85}>
-                <MapPin size={18} color="#fff" />
-                <Text style={styles.navigateBtnText}>Navigate to Location</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* No location set */}
-            {!hasLocation && (
-              <View style={styles.infoCard}>
-                <Text style={styles.infoCardText}>No specific location set. You can start work anytime.</Text>
-              </View>
-            )}
-
-            {/* GPS retrying indicator */}
-            {gpsRetrying && (
-              <View style={styles.gpsWarning}>
-                <ActivityIndicator size="small" color={W.primary} />
-                <Text style={styles.gpsWarningText}>
-                  GPS signal is weak. Retrying... ({gpsRetryCount.current}/3)
-                </Text>
-              </View>
-            )}
-
-            {/* GPS warning */}
-            {gpsWarning && !gpsRetrying && (
-              <View style={styles.gpsWarning}>
-                <AlertTriangle size={14} color={W.status.warning} />
-                <Text style={styles.gpsWarningText}>
-                  {!currentLocation
-                    ? 'Waiting for GPS signal...'
-                    : hasLocation && !isNearTask
-                      ? `You need to be within 500m of the task location. Currently ${distanceKm ? `${distanceKm.toFixed(1)} km` : '?'} away.`
-                      : 'GPS acquired — tap Start Work'}
-                </Text>
-              </View>
-            )}
-
-            {/* Start Work button */}
-            <TouchableOpacity
-              style={[
-                styles.startBtn,
-                (startMutation.isPending || (hasLocation && !isNearTask)) && styles.btnDisabled,
-              ]}
-              onPress={handleStart}
-              activeOpacity={0.85}
-              disabled={startMutation.isPending || (hasLocation && !isNearTask)}
-            >
-              {startMutation.isPending
-                ? <ActivityIndicator color="#fff" />
-                : (
-                    <>
-                      <Play size={18} color="#fff" style={{ marginRight: 8 }} />
-                      <Text style={styles.startBtnText}>
-                        {hasLocation && !isNearTask ? 'Go to location first' : 'Start Work'}
-                      </Text>
-                    </>
-                  )}
-            </TouchableOpacity>
-          </>
+        {/* Offline bar */}
+        {!isOnline && (
+          <View style={s.offlineBar}>
+            <Text style={s.offlineText}>Offline — photos saved locally. Will sync when connected.</Text>
+          </View>
         )}
 
-        {/* Photo Evidence (IN_PROGRESS only) */}
-        {isInProgress && (task.totalReferencePoints ?? 0) > 0 && (
-          <>
-            {/* Reference Point flow — new system */}
-            <View style={styles.progressRow}>
-              <Text style={styles.sectionLabel}>Reference Points</Text>
-              <Text style={styles.progressText}>{task.totalReferencePoints} points</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.refPointBtn}
-              onPress={() => navigation.navigate('ReferencePoints', { taskId })}
-              activeOpacity={0.85}
-            >
-              <Camera size={20} color={W.primary} />
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.refPointBtnTitle}>Capture Reference Points</Text>
-                <Text style={styles.refPointBtnSub}>Match buyer's photos to prove your work</Text>
+        {/* Progress tracker */}
+        {progress && (
+          <View style={s.progressCard}>
+            <View style={s.progressBarRow}>
+              <View style={s.progressTrack}>
+                <View style={[s.progressFill, { width: `${totalCount > 0 ? (completedCount / totalCount) * 100 : 0}%` }]} />
               </View>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {isInProgress && (task.totalReferencePoints ?? 0) === 0 && (
-          <>
-            {/* Legacy 3-photo flow */}
-            <View style={styles.progressRow}>
-              <Text style={styles.sectionLabel}>Evidence Photos</Text>
-              <View style={styles.progressPills}>
-                {PHOTO_TYPES.map(({ type }) => (
-                  <View key={type} style={[styles.pill, photos[type].uploaded && styles.pillDone]} />
-                ))}
-              </View>
-              <Text style={styles.progressText}>
-                {PHOTO_TYPES.filter(({ type }) => photos[type].uploaded).length}/3
-              </Text>
+              <Text style={s.progressCount}>{completedCount}/{totalCount}</Text>
             </View>
 
-            <View style={styles.photoGrid}>
-              {PHOTO_TYPES.map(({ type, label }) => (
-                <PhotoBox
-                  key={type}
-                  label={label}
-                  state={photos[type]}
-                  onPress={() => openPhotoChoice(type)}
+            {/* Step list */}
+            <View style={s.stepList}>
+              <StepItem done label="Started work" />
+              {progress.points.map((point) => (
+                <StepItem
+                  key={point.id}
+                  done={point.hasAfterSubmission}
+                  active={nextPoint?.id === point.id}
+                  label={point.label ?? `Photo ${point.pointIndex}`}
+                  subtitle={point.hasAfterSubmission && point.afterSubmission?.locationMatchScore != null
+                    ? `GPS: ${point.afterSubmission.locationMatchScore}%`
+                    : point.distanceFromWorker != null ? `${point.distanceFromWorker}m away` : undefined}
+                  onPress={!point.hasAfterSubmission ? () => openCameraForPoint(point) : undefined}
                 />
               ))}
+              <StepItem
+                done={false}
+                active={completedCount >= totalCount}
+                label="Submit work"
+              />
             </View>
-
-            <TouchableOpacity
-              style={[styles.submitBtn, !allUploaded && styles.btnDisabled]}
-              onPress={() => navigation.navigate('SubmitProof', { taskId })}
-              disabled={!allUploaded}
-              activeOpacity={0.85}
-            >
-              <CheckCircle size={18} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.submitBtnText}>
-                {allUploaded ? 'Review & Submit' : 'Complete all 3 photos to submit'}
-              </Text>
-            </TouchableOpacity>
-          </>
+          </View>
         )}
 
-        {/* Task info */}
-        {task.description ? <Text style={styles.desc}>{task.description}</Text> : null}
-        {task.locationAddress ? (
-          <Text style={styles.infoLine}>{task.locationAddress}</Text>
-        ) : null}
-
-        {/* Chat */}
-        <TouchableOpacity
-          style={styles.chatBtn}
-          onPress={() => navigation.navigate('Chat', { taskId, title: task.title })}
-          activeOpacity={0.85}
-        >
-          <MessageCircle size={16} color={W.primary} />
-          <Text style={styles.chatBtnText}>Message Buyer</Text>
-        </TouchableOpacity>
-
-        {/* Cancel */}
-        <TouchableOpacity
-          style={styles.cancelBtn}
-          onPress={handleCancel}
-          disabled={cancelMutation.isPending}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.cancelBtnText}>Cancel Task</Text>
-        </TouchableOpacity>
-      </ScrollView>
-
-      {/* Photo source picker */}
-      <Modal visible={!!photoSourceType} transparent animationType="fade" onRequestClose={() => setPhotoSourceType(null)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setPhotoSourceType(null)}>
-          <TouchableOpacity activeOpacity={1} style={styles.sourceSheet}>
-            <View style={styles.sourceHandle} />
-            <View style={styles.sourceHeaderRow}>
-              <View style={[styles.sourceBadge, { backgroundColor: LABEL_COLORS[photoSourceType === 'BEFORE' ? 'Before' : photoSourceType === 'AFTER' ? 'After' : 'Proof'] ?? W.primary }]}>
-                <Text style={styles.sourceBadgeText}>{photoSourceType}</Text>
-              </View>
-              <Text style={styles.sourceTitle}>Add Evidence</Text>
-            </View>
-
-            <View style={styles.sourceCards}>
-              <TouchableOpacity style={styles.sourceCard} onPress={pickFromCamera} activeOpacity={0.85}>
-                <View style={[styles.sourceCardIcon, { backgroundColor: `${W.primary}15` }]}>
-                  <Camera size={28} color={W.primary} />
-                </View>
-                <Text style={styles.sourceCardTitle}>Take Photo</Text>
-                <Text style={styles.sourceCardSub}>Capture fresh{'\n'}evidence now</Text>
-                <View style={[styles.sourceCardTag, { backgroundColor: W.primary }]}>
-                  <Text style={styles.sourceCardTagText}>Recommended</Text>
-                </View>
+        {/* FindMyArrow — for next uncaptured point */}
+        {nextPoint && currentLocation && nextPoint.buyerLat != null && nextPoint.buyerLng != null && (
+          <View style={s.arrowSection}>
+            <Text style={s.arrowLabel}>{nextPoint.label ?? `Point ${nextPoint.pointIndex}`}</Text>
+            <FindMyArrow
+              targetLat={nextPoint.buyerLat}
+              targetLng={nextPoint.buyerLng}
+              workerLat={currentLocation.lat}
+              workerLng={currentLocation.lng}
+              distanceMeters={nextPoint.distanceFromWorker ?? 0}
+              size={140}
+            />
+            <View style={s.arrowActions}>
+              <TouchableOpacity style={s.captureBtn} onPress={() => openCameraForPoint(nextPoint)} activeOpacity={0.85}>
+                <Camera size={20} color="#fff" />
+                <Text style={s.captureBtnText}>CAPTURE THIS SPOT</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity style={styles.sourceCard} onPress={pickFromGallery} activeOpacity={0.85}>
-                <View style={[styles.sourceCardIcon, { backgroundColor: '#8B5CF615' }]}>
-                  <Images size={28} color="#8B5CF6" />
-                </View>
-                <Text style={styles.sourceCardTitle}>My Photos</Text>
-                <Text style={styles.sourceCardSub}>Choose from{'\n'}your gallery</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.sourceFooter}>All photos are securely verified</Text>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Cancel reason modal */}
-      <Modal visible={cancelModal} transparent animationType="fade" onRequestClose={() => setCancelModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCancelModal(false)}>
-            <TouchableOpacity activeOpacity={1} style={styles.cancelSheet}>
-              <Text style={styles.cancelSheetTitle}>Cancel Task</Text>
-              <Text style={styles.cancelSheetSub}>Tell us why you're cancelling (min 5 chars)</Text>
-              <TextInput
-                style={styles.cancelInput}
-                placeholder="e.g. Area is inaccessible, weather issue..."
-                placeholderTextColor={W.text.muted}
-                value={cancelReason}
-                onChangeText={setCancelReason}
-                multiline
-                maxLength={200}
-                autoFocus
-              />
-              <Text style={styles.cancelCharCount}>{cancelReason.length}/200</Text>
-              <View style={styles.cancelBtns}>
-                <TouchableOpacity style={styles.cancelSheetBack} onPress={() => setCancelModal(false)}>
-                  <Text style={styles.cancelSheetBackText}>Go Back</Text>
-                </TouchableOpacity>
+              {nextPoint.buyerLat != null && (
                 <TouchableOpacity
-                  style={[styles.cancelSheetConfirm, cancelReason.trim().length < 5 && styles.btnDisabled]}
-                  onPress={confirmCancel}
-                  disabled={cancelReason.trim().length < 5}
+                  style={s.walkBtn}
+                  onPress={() => openMapsNavigation(nextPoint.buyerLat!, nextPoint.buyerLng!)}
+                  activeOpacity={0.85}
                 >
-                  <Text style={styles.cancelSheetConfirmText}>Cancel Task</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Internal gallery picker modal */}
-      <Modal visible={!!galleryPicker} animationType="slide" onRequestClose={() => setGalleryPicker(null)}>
-        <View style={styles.gpModal}>
-          <View style={styles.gpHeader}>
-            <TouchableOpacity onPress={() => setGalleryPicker(null)} hitSlop={12}>
-              <X size={22} color={W.text.primary} />
-            </TouchableOpacity>
-            <Text style={styles.gpTitle}>Select from My Photos</Text>
-            <View style={{ width: 22 }} />
-          </View>
-          {galleryPhotos.length === 0 ? (
-            <View style={styles.gpEmpty}>
-              <Text style={styles.gpEmptyText}>No photos yet. Take one first!</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={galleryPhotos}
-              numColumns={3}
-              keyExtractor={p => p.id}
-              contentContainerStyle={{ padding: 2 }}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.gpThumb}
-                  onPress={() => handleGalleryPick(item)}
-                  activeOpacity={0.8}
-                >
-                  <Image source={{ uri: item.thumbUri }} style={styles.gpThumbImg} resizeMode="cover" />
-                  <View style={[styles.gpTypeDot, { backgroundColor: LABEL_COLORS[item.photoType === 'BEFORE' ? 'Before' : item.photoType === 'AFTER' ? 'After' : 'Proof'] ?? W.text.muted }]}>
-                    <Text style={styles.gpTypeDotText}>{item.photoType[0]}</Text>
-                  </View>
+                  <Navigation2 size={16} color={W.primary} />
+                  <Text style={s.walkBtnText}>WALK TO SPOT</Text>
                 </TouchableOpacity>
               )}
-            />
-          )}
+            </View>
+          </View>
+        )}
+
+        {/* All points done — show submit */}
+        {progress?.canSubmit && (
+          <TouchableOpacity
+            style={s.submitBtn}
+            onPress={() => navigation.navigate('SubmitProof', { taskId })}
+            activeOpacity={0.85}
+          >
+            <CheckCircle size={20} color="#fff" />
+            <Text style={s.submitBtnText}>REVIEW & SUBMIT</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Reference photo preview for next point */}
+        {nextPoint && nextPoint.buyerImageUrl && (
+          <View style={s.refPreview}>
+            <Image source={{ uri: nextPoint.buyerImageUrl }} style={s.refImage} resizeMode="cover" />
+            <Text style={s.refCaption}>Match this angle after cleaning</Text>
+          </View>
+        )}
+
+        {/* Motion tracking — transparent */}
+        <View style={s.motionBar}>
+          <Text style={s.motionText}>Motion tracking active — helps verify your work faster</Text>
         </View>
+
+        {/* Footer actions */}
+        <View style={s.footerActions}>
+          <TouchableOpacity style={s.footerBtn} onPress={() => navigation.navigate('Chat', { taskId, title: task.title })}>
+            <MessageCircle size={14} color={W.primary} />
+            <Text style={[s.footerBtnText, { color: W.primary }]}>Message Buyer</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.footerBtn} onPress={() => navigation.navigate('ReportIssue' as any, { taskId })}>
+            <Flag size={14} color={W.text.muted} />
+            <Text style={s.footerBtnText}>Report</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.footerBtn} onPress={() => setCancelModal(true)}>
+            <X size={14} color={W.text.muted} />
+            <Text style={s.footerBtnText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      {/* Camera modal */}
+      <Modal visible={cameraState.visible} animationType="slide" statusBarTranslucent>
+        <CaptureCamera
+          taskId={taskId}
+          photoType="AFTER"
+          onCapture={onCapture}
+          onClose={() => setCameraState(cs => ({ ...cs, visible: false }))}
+          referenceImage={cameraState.buyerImageUrl}
+          referenceLabel={cameraState.label}
+          pointIndex={cameraState.pointIndex}
+          totalPoints={totalCount}
+          distanceFromPoint={cameraState.distance}
+        />
       </Modal>
 
-      {/* CaptureCamera modal — camera only, NO gallery */}
-      <Modal visible={!!cameraType} animationType="slide" statusBarTranslucent>
-        {cameraType && (
-          <CaptureCamera
-            taskId={taskId}
-            photoType={cameraType}
-            onCapture={handleCapture}
-            onClose={() => setCameraType(null)}
-          />
-        )}
-      </Modal>
+      {/* Cancel modal */}
+      <CancelModal
+        visible={cancelModal}
+        reason={cancelReason}
+        onReasonChange={setCancelReason}
+        onCancel={() => setCancelModal(false)}
+        onConfirm={() => {
+          if (cancelReason.trim().length < 5) { Alert.alert('Reason Required', 'At least 5 characters.'); return }
+          isCancelling.current = true; setCancelModal(false); cancelMutation.mutate(cancelReason.trim())
+        }}
+        isPending={cancelMutation.isPending}
+      />
     </View>
   )
 }
 
-const LABEL_COLORS: Record<string, string> = {
-  Before: '#F59E0B',
-  After:  '#2E8B57',
-  Proof:  '#3B82F6',
-}
+// ── Step Item (Zomato-style progress step) ──────────────────────────────────
 
-function PhotoBox({ label, state, onPress }: { label: string; state: PhotoState; onPress: () => void }) {
-  const color = LABEL_COLORS[label] ?? W.text.muted
+function StepItem({ done, active, label, subtitle, onPress }: {
+  done: boolean; active?: boolean; label: string; subtitle?: string;
+  onPress?: () => void
+}) {
   return (
-    <TouchableOpacity style={styles.photoBox} onPress={onPress} activeOpacity={0.8}>
-      {state.uploading ? (
-        <View style={styles.photoBoxInner}>
-          <ActivityIndicator color={color} />
-          <Text style={[styles.photoLabel, { color }]}>Uploading...</Text>
-        </View>
-      ) : state.uri && state.uploaded ? (
-        <>
-          <Image source={{ uri: state.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-          <View style={[styles.checkOverlay, { backgroundColor: color }]}>
-            <CheckCircle size={16} color="#fff" />
-          </View>
-          <View style={[styles.photoBadge, { backgroundColor: color }]}>
-            <Text style={styles.photoBadgeText}>{label}</Text>
-          </View>
-        </>
-      ) : state.uri ? (
-        <>
-          <Image source={{ uri: state.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-          <View style={[styles.photoBadge, { backgroundColor: color }]}>
-            <Text style={styles.photoBadgeText}>{label}</Text>
-          </View>
-        </>
-      ) : (
-        <View style={styles.photoBoxInner}>
-          <View style={[styles.photoIconCircle, { borderColor: color }]}>
-            <Camera size={20} color={color} />
-          </View>
-          <Text style={[styles.photoLabel, { color }]}>{label}</Text>
-          <Text style={styles.photoHint}>Tap to capture</Text>
-        </View>
-      )}
+    <TouchableOpacity
+      style={[s.stepRow, active && s.stepRowActive]}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.85 : 1}
+      disabled={!onPress}
+    >
+      <View style={[s.stepDot, done && s.stepDotDone, active && s.stepDotActive]}>
+        {done && <CheckCircle size={16} color="#fff" />}
+      </View>
+      <View style={s.stepContent}>
+        <Text style={[s.stepLabel, done && s.stepLabelDone]}>{label}</Text>
+        {subtitle && <Text style={s.stepSub}>{subtitle}</Text>}
+      </View>
+      {onPress && !done && <Camera size={16} color={W.primary} />}
     </TouchableOpacity>
   )
 }
 
-const styles = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: W.background },
-  center:         { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  mapContainer:   { height: 200 },
-  statusBar:      { position: 'absolute', top: 52, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  timerBox:       { backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6, alignItems: 'center' },
-  timerText:      { fontSize: 20, fontWeight: '800', color: '#fff', fontVariant: ['tabular-nums'] },
-  timerLabel:     { fontSize: 9, color: 'rgba(255,255,255,0.6)', marginTop: 1 },
-  gpsStatus:      { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
-  gpsText:        { fontSize: 11, fontWeight: '600' },
-  workerDot:      { width: 20, height: 20, borderRadius: 10, backgroundColor: `${COLORS.map.worker}40`, alignItems: 'center', justifyContent: 'center' },
-  workerDotInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.map.worker },
+// ── Cancel Modal ────────────────────────────────────────────────────────────
 
-  // Panel
-  panel:          { flex: 1 },
-  panelContent:   { backgroundColor: W.surface, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+function CancelModal({ visible, reason, onReasonChange, onCancel, onConfirm, isPending }: {
+  visible: boolean; reason: string; onReasonChange: (t: string) => void;
+  onCancel: () => void; onConfirm: () => void; isPending: boolean
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+      <View style={s.modalOverlay}>
+        <View style={s.modalCard}>
+          <Text style={s.modalTitle}>Cancel this task?</Text>
+          <Text style={s.modalSub}>Please tell us why (min 5 characters)</Text>
+          <TextInput
+            style={s.modalInput}
+            value={reason}
+            onChangeText={onReasonChange}
+            placeholder="Reason for cancellation..."
+            placeholderTextColor={W.text.muted}
+            multiline
+          />
+          <View style={s.modalBtns}>
+            <TouchableOpacity style={s.modalCancelBtn} onPress={onCancel}>
+              <Text style={s.modalCancelText}>Keep Task</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.modalConfirmBtn} onPress={onConfirm} disabled={isPending}>
+              {isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.modalConfirmText}>Cancel Task</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
 
-  // Task info
-  taskInfoRow:    { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  taskTitle:      { fontSize: 16, fontWeight: '700', color: W.text.primary },
-  taskCategory:   { fontSize: 12, color: W.text.secondary, marginTop: 2 },
-  rateChip:       { backgroundColor: W.primaryTint, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: W.primary },
-  rateText:       { fontSize: 16, fontWeight: '800', color: W.primary },
+// ── Styles ──────────────────────────────────────────────────────────────────
 
-  // Info card (ACCEPTED state)
-  infoCard:       { backgroundColor: W.primaryTint, borderRadius: 10, padding: 12, marginBottom: 12 },
-  infoCardText:   { fontSize: 13, color: W.text.secondary, lineHeight: 18 },
+const s = StyleSheet.create({
+  root:    { flex: 1, backgroundColor: W.background },
+  center:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  // Distance + Navigation
-  distanceCard:   { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, padding: 14, marginBottom: 12 },
-  distanceNear:   { backgroundColor: '#DCFCE7', borderWidth: 1, borderColor: '#86EFAC' },
-  distanceFar:    { backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FDE68A' },
-  distanceText:   { fontSize: 15, fontWeight: '700' },
-  distanceSub:    { fontSize: 12, color: W.text.muted, marginTop: 2 },
-  navigateBtn:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3B82F6', borderRadius: 14, height: 50, marginBottom: 12 },
-  navigateBtnText:{ fontSize: 15, fontWeight: '700', color: '#fff' },
+  // ── ACCEPTED state ──
+  mapContainer:  { flex: 0.55 },
+  acceptedCard:  { flex: 0.45, backgroundColor: W.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, marginTop: -16, gap: 12 },
+  cardRow:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardTitle:     { fontSize: 18, fontWeight: '700', color: W.text.primary, flex: 1, marginRight: 8 },
+  cardRate:      { fontSize: 20, fontWeight: '800', color: W.primary },
+  cardLocRow:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  cardLoc:       { fontSize: 13, color: W.text.muted, flex: 1 },
+  metricsRow:    { flexDirection: 'row', gap: 10 },
+  metricBox:     { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10 },
+  metricVal:     { fontSize: 16, fontWeight: '800' },
+  metricLabel:   { fontSize: 11, fontWeight: '600', marginTop: 2 },
+  navigateBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#3B82F6', borderRadius: 12, paddingVertical: 14 },
+  navigateBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  retryBar:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8 },
+  retryText:     { fontSize: 13, color: W.primary, fontWeight: '600' },
+  startBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: W.primary, borderRadius: 12, paddingVertical: 16 },
+  startBtnText:  { fontSize: 15, fontWeight: '700', color: '#fff' },
+  btnDisabled:   { backgroundColor: W.border },
 
-  // GPS warning (inline, subtle)
-  gpsWarning:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FEF3C7', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
-  gpsWarningText: { fontSize: 12, color: '#92400E', flex: 1 },
+  // ── IN_PROGRESS state ──
+  progressHeader:{ flexDirection: 'row', alignItems: 'center', paddingTop: 56, paddingBottom: 12, paddingHorizontal: 16, backgroundColor: W.surface, borderBottomWidth: 1, borderBottomColor: W.border },
+  backBtn:       { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  backText:      { fontSize: 22, fontWeight: '700', color: W.text.primary },
+  headerTitle:   { flex: 1, fontSize: 16, fontWeight: '700', color: W.text.primary, textAlign: 'center' },
+  timerChip:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: W.primaryTint, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  timerText:     { fontSize: 14, fontWeight: '700', color: W.primary },
+  progressContent: { padding: 16, gap: 16 },
 
-  // Progress row
-  progressRow:    { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  sectionLabel:   { fontSize: 14, fontWeight: '700', color: W.text.primary },
-  progressPills:  { flexDirection: 'row', gap: 4, marginLeft: 'auto', marginRight: 8 },
-  pill:           { width: 20, height: 4, borderRadius: 2, backgroundColor: W.border },
-  pillDone:       { backgroundColor: W.primary },
-  progressText:   { fontSize: 12, fontWeight: '700', color: W.text.secondary },
+  connectionBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 6, borderRadius: 8 },
+  offlineBar:    { backgroundColor: '#FEF3C7', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#FDE68A' },
+  offlineText:   { fontSize: 12, color: '#92400E', textAlign: 'center' },
 
-  // Photo grid
-  photoGrid:      { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  photoBox:       { flex: 1, aspectRatio: 0.85, borderRadius: 12, backgroundColor: W.background, borderWidth: 1.5, borderColor: W.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  photoBoxInner:  { alignItems: 'center', justifyContent: 'center', gap: 4 },
-  photoIconCircle:{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
-  photoLabel:     { fontSize: 12, fontWeight: '700' },
-  photoHint:      { fontSize: 9, color: W.text.muted },
-  photoBadge:     { position: 'absolute', top: 6, left: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  photoBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
-  checkOverlay:   { position: 'absolute', bottom: 6, right: 6, borderRadius: 10, padding: 3 },
+  // Progress card
+  progressCard:    { backgroundColor: W.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: W.border },
+  progressBarRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  progressTrack:   { flex: 1, height: 6, borderRadius: 3, backgroundColor: W.border },
+  progressFill:    { height: '100%', borderRadius: 3, backgroundColor: W.primary },
+  progressCount:   { fontSize: 14, fontWeight: '700', color: W.text.primary },
+  stepList:        { gap: 4 },
 
-  // Buttons
-  startBtn:       { backgroundColor: W.primary, borderRadius: 14, height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  startBtnText:   { fontSize: 16, fontWeight: '700', color: '#fff' },
-  submitBtn:      { backgroundColor: W.primary, borderRadius: 14, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  submitBtnText:  { fontSize: 14, fontWeight: '700', color: '#fff' },
-  desc:           { fontSize: 13, color: W.text.secondary, lineHeight: 19, marginBottom: 8 },
-  infoLine:       { fontSize: 12, color: W.text.secondary, marginBottom: 12 },
-  chatBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 44, borderRadius: 12, backgroundColor: W.primaryTint, marginBottom: 8 },
-  chatBtnText:    { fontSize: 14, fontWeight: '600', color: W.primary },
-  cancelBtn:      { height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: W.border, marginTop: 4 },
-  cancelBtnText:  { fontSize: 13, fontWeight: '500', color: W.text.secondary },
-  btnDisabled:    { opacity: 0.45 },
+  // Steps
+  stepRow:         { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 10 },
+  stepRowActive:   { backgroundColor: W.primaryTint },
+  stepDot:         { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: W.border, alignItems: 'center', justifyContent: 'center' },
+  stepDotDone:     { backgroundColor: W.primary, borderColor: W.primary },
+  stepDotActive:   { borderColor: W.primary },
+  stepContent:     { flex: 1 },
+  stepLabel:       { fontSize: 14, fontWeight: '600', color: W.text.primary },
+  stepLabelDone:   { color: W.text.muted, textDecorationLine: 'line-through' },
+  stepSub:         { fontSize: 11, color: W.text.muted, marginTop: 2 },
+
+  // Arrow section
+  arrowSection:    { alignItems: 'center', backgroundColor: W.surface, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: W.border },
+  arrowLabel:      { fontSize: 16, fontWeight: '700', color: W.text.primary, marginBottom: 12 },
+  arrowActions:    { width: '100%', gap: 10, marginTop: 16 },
+  captureBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: W.primary, borderRadius: 12, paddingVertical: 16 },
+  captureBtnText:  { fontSize: 15, fontWeight: '700', color: '#fff' },
+  walkBtn:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: W.primary, borderRadius: 12, paddingVertical: 14 },
+  walkBtnText:     { fontSize: 14, fontWeight: '700', color: W.primary },
+
+  // Submit
+  submitBtn:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: W.primary, borderRadius: 14, paddingVertical: 18 },
+  submitBtnText:   { fontSize: 16, fontWeight: '700', color: '#fff' },
+
+  // Reference preview
+  refPreview:      { alignItems: 'center', gap: 8 },
+  refImage:        { width: '100%', height: 180, borderRadius: 14 },
+  refCaption:      { fontSize: 12, color: W.text.muted, fontStyle: 'italic' },
+
+  // Motion bar
+  motionBar:       { backgroundColor: '#F0F9FF', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#BFDBFE' },
+  motionText:      { fontSize: 12, color: '#1E40AF', textAlign: 'center' },
+
+  // Footer
+  footerActions:   { flexDirection: 'row', justifyContent: 'center', gap: 20, paddingVertical: 8 },
+  footerBtn:       { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 12 },
+  footerBtnText:   { fontSize: 12, color: W.text.muted },
 
   // Cancel modal
-  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  cancelSheet:    { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-  cancelSheetTitle: { fontSize: 20, fontWeight: '800', color: W.text.primary, marginBottom: 4 },
-  cancelSheetSub: { fontSize: 13, color: W.text.secondary, marginBottom: 16 },
-  cancelInput:    { backgroundColor: W.primaryTint, borderRadius: 12, padding: 14, fontSize: 15, color: W.text.primary, minHeight: 80, textAlignVertical: 'top', borderWidth: 1, borderColor: W.border },
-  cancelCharCount:{ fontSize: 11, color: W.text.muted, textAlign: 'right', marginTop: 4 },
-  cancelBtns:     { flexDirection: 'row', gap: 12, marginTop: 20 },
-  cancelSheetBack:{ flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: W.border },
-  cancelSheetBackText: { fontSize: 15, fontWeight: '600', color: W.text.secondary },
-  cancelSheetConfirm: { flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: W.status.error },
-  cancelSheetConfirmText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-
-  // Source picker sheet
-  sourceSheet:      { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 24, paddingBottom: 36 },
-  sourceHandle:     { width: 36, height: 4, borderRadius: 2, backgroundColor: COLORS.neutral[300], alignSelf: 'center', marginTop: 12, marginBottom: 20 },
-  sourceHeaderRow:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
-  sourceBadge:      { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
-  sourceBadgeText:  { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
-  sourceTitle:      { fontSize: 20, fontWeight: '800', color: W.text.primary },
-  sourceCards:      { flexDirection: 'row', gap: 12 },
-  sourceCard:       { flex: 1, backgroundColor: W.background, borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1.5, borderColor: W.border },
-  sourceCardIcon:   { width: 56, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  sourceCardTitle:  { fontSize: 15, fontWeight: '700', color: W.text.primary, marginBottom: 4 },
-  sourceCardSub:    { fontSize: 11, color: W.text.secondary, textAlign: 'center', lineHeight: 16 },
-  sourceCardTag:    { position: 'absolute', top: 8, right: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  sourceCardTagText:{ color: '#fff', fontSize: 8, fontWeight: '800', letterSpacing: 0.5 },
-  sourceFooter:     { fontSize: 10, color: W.text.muted, textAlign: 'center', marginTop: 16 },
-
-  // Gallery picker
-  gpModal:        { flex: 1, backgroundColor: '#fff' },
-  gpHeader:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 56, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: W.border },
-  gpTitle:        { fontSize: 17, fontWeight: '700', color: W.text.primary },
-  gpEmpty:        { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  gpEmptyText:    { fontSize: 14, color: W.text.muted },
-  gpThumb:        { width: (Dimensions.get('window').width - 6) / 3, height: (Dimensions.get('window').width - 6) / 3, margin: 1 },
-  gpThumbImg:     { width: '100%', height: '100%' },
-  gpTypeDot:      { position: 'absolute', top: 4, left: 4, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  gpTypeDotText:  { color: '#fff', fontSize: 9, fontWeight: '800' },
-  // Reference points button
-  refPointBtn:      { flexDirection: 'row', alignItems: 'center', backgroundColor: W.primaryTint, borderRadius: 14, padding: 16, borderWidth: 1.5, borderColor: W.primary + '30' },
-  refPointBtnTitle: { fontSize: 15, fontWeight: '700', color: W.primary },
-  refPointBtnSub:   { fontSize: 12, color: W.text.secondary, marginTop: 2 },
+  modalOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalCard:       { backgroundColor: W.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 36 },
+  modalTitle:      { fontSize: 18, fontWeight: '700', color: W.text.primary },
+  modalSub:        { fontSize: 13, color: W.text.muted, marginTop: 4 },
+  modalInput:      { borderWidth: 1, borderColor: W.border, borderRadius: 10, padding: 14, marginTop: 16, minHeight: 80, fontSize: 14, color: W.text.primary, textAlignVertical: 'top' },
+  modalBtns:       { flexDirection: 'row', gap: 12, marginTop: 16 },
+  modalCancelBtn:  { flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: W.border },
+  modalCancelText: { fontSize: 14, fontWeight: '600', color: W.text.secondary },
+  modalConfirmBtn: { flex: 1, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EF4444' },
+  modalConfirmText:{ fontSize: 14, fontWeight: '700', color: '#fff' },
 })

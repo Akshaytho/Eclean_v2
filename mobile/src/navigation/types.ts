@@ -28,6 +28,8 @@ export type WorkerStackParamList = {
   Gallery:          undefined
   Wallet:           undefined
   Notifications:    undefined
+  PostSubmission:   { taskId: string }
+  ReportIssue:      { taskId: string }
 }
 
 // ─── Buyer ───────────────────────────────────────────────────────────────────

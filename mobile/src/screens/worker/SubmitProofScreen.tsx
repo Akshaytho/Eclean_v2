@@ -64,7 +64,7 @@ export function SubmitProofScreen() {
       queryClient.invalidateQueries({ queryKey: ['worker', 'tasks'] })
       queryClient.invalidateQueries({ queryKey: ['worker', 'wallet'] })
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      navigation.navigate('WorkerTabs', { screen: 'MyTasks' } as never)
+      navigation.navigate('PostSubmission', { taskId })
     },
     onError: (err: any) => {
       isSubmitting.current = false
@@ -204,20 +204,12 @@ export function SubmitProofScreen() {
             ok={gpsTrail.length > 0}
           />
           {hasRefPoints && refProgress ? (
-            <>
-              <CheckRow
-                icon={<CheckCircle size={16} color={W.primary} />}
-                label="After photos"
-                value={`${refProgress.afterCompleted} / ${refProgress.totalPoints}`}
-                ok={refProgress.afterCompleted >= Math.max(3, Math.ceil(refProgress.totalPoints * 0.7))}
-              />
-              <CheckRow
-                icon={<CheckCircle size={16} color={W.primary} />}
-                label="Verification photos"
-                value={`${refProgress.verificationCompleted} / ${refProgress.verificationRequired}`}
-                ok={refProgress.verificationCompleted >= refProgress.verificationRequired}
-              />
-            </>
+            <CheckRow
+              icon={<CheckCircle size={16} color={W.primary} />}
+              label="Photos captured"
+              value={`${refProgress.afterCompleted} / ${refProgress.totalPoints}`}
+              ok={refProgress.afterCompleted >= Math.max(3, Math.ceil(refProgress.totalPoints * 0.7))}
+            />
           ) : (
             <CheckRow
               icon={<CheckCircle size={16} color={W.primary} />}
@@ -232,10 +224,16 @@ export function SubmitProofScreen() {
             value={formatElapsed(elapsedSecs)}
             ok={elapsedSecs > 0}
           />
+          <CheckRow
+            icon={<CheckCircle size={16} color={W.primary} />}
+            label="Motion tracking"
+            value="Active"
+            ok
+          />
           {task && (
             <CheckRow
               icon={<CheckCircle size={16} color={W.primary} />}
-              label="Earnings on approval"
+              label="You'll earn"
               value={formatMoney(task.rateCents, 'INR')}
               ok
             />

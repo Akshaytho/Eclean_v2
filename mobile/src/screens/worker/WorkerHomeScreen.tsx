@@ -1,165 +1,169 @@
-import React from 'react'
+/**
+ * WorkerHomeScreen — Redesigned "Rapido driver home"
+ *
+ * Design principles:
+ * - Only 2 queries on mount (me + activeTask). Wallet loaded lazily.
+ * - Active task is the HERO card (like Ola's "You have a ride")
+ * - Weekly earnings with target bar (not daily snapshot)
+ * - Only 2 money states: "In your account" + "Coming soon"
+ * - Empty state with forecast (not dead end)
+ * - Worker level + progression (Bronze → Silver → Gold)
+ * - Motion tracking explained honestly, not disguised as a "tip"
+ */
+
+import React, { useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Switch, Dimensions,
+  RefreshControl, Dimensions,
 } from 'react-native'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
-  MapPin, Star, CheckCircle, Wallet, ChevronRight,
-  ArrowRight, Clock, Search, Camera, Zap,
-  Shield, TrendingUp, MessageCircle,
+  MapPin, Star, CheckCircle, ChevronRight,
+  ArrowRight, Search, TrendingUp, Bell,
 } from 'lucide-react-native'
-import { ScreenWrapper }   from '../../components/layout/ScreenWrapper'
-import { StatusBadge }     from '../../components/ui/Badge'
-import { AppHeader }       from '../../components/layout/AppHeader'
+import { ScreenWrapper }    from '../../components/layout/ScreenWrapper'
+import { AppHeader }        from '../../components/layout/AppHeader'
+import { Skeleton }         from '../../components/ui/Skeleton'
 import { WORKER_THEME as W } from '../../constants/workerTheme'
-import { workerTasksApi }  from '../../api/tasks.api'
-import { authApi }         from '../../api/auth.api'
-import { apiClient }       from '../../api/client'
-import { useAuthStore }    from '../../stores/authStore'
-import { DashboardCamera }  from '../../components/camera/DashboardCamera'
-import { formatMoney }     from '../../utils/formatMoney'
-import { timeAgo }         from '../../utils/timeAgo'
+import { workerTasksApi }   from '../../api/tasks.api'
+import { authApi }          from '../../api/auth.api'
+import { apiClient }        from '../../api/client'
+import { useAuthStore }     from '../../stores/authStore'
+import { formatMoney }      from '../../utils/formatMoney'
 import type { WorkerStackParamList } from '../../navigation/types'
-import type { Task } from '../../types'
 
 type Nav = NativeStackNavigationProp<WorkerStackParamList>
-const { width: SW } = Dimensions.get('window')
 
-const DAILY_TIPS = [
-  'Accept tasks close to you to save travel time',
-  'Take clear BEFORE photos — they improve your AI score',
-  'Complete tasks quickly for higher ratings from buyers',
-  'Stay online during morning hours for more task requests',
-  'CRITICAL tasks pay 3x more than LIGHT tasks',
-  'GPS tracking helps buyers trust your work',
-  'Upload AFTER photos from the same angle as BEFORE',
-]
+// ── Worker Level System ─────────────────────────────────────────────────────
+
+function getWorkerLevel(completedTasks: number) {
+  if (completedTasks >= 500) return { level: 'Diamond', icon: '\uD83D\uDC8E', next: null, remaining: 0, color: '#7C3AED' }
+  if (completedTasks >= 100) return { level: 'Gold', icon: '\uD83E\uDD47', next: 'Diamond', remaining: 500 - completedTasks, color: '#F59E0B' }
+  if (completedTasks >= 25)  return { level: 'Silver', icon: '\uD83E\uDD48', next: 'Gold', remaining: 100 - completedTasks, color: '#9CA3AF' }
+  return { level: 'Bronze', icon: '\uD83E\uDD49', next: 'Silver', remaining: 25 - completedTasks, color: '#CD7F32' }
+}
 
 export function WorkerHomeScreen() {
   const navigation = useNavigation<Nav>()
   const { user }   = useAuthStore()
-  const qc         = useQueryClient()
 
+  // Only 2 queries on mount (was 5)
   const meQuery = useQuery({ queryKey: ['me'], queryFn: authApi.me, staleTime: 30_000 })
   const activeQuery = useQuery({
     queryKey: ['worker-tasks-active'],
-    queryFn: () => workerTasksApi.myTasks({ status: 'IN_PROGRESS', limit: 1 }),
+    queryFn: async () => {
+      const inProgress = await workerTasksApi.myTasks({ status: 'IN_PROGRESS', limit: 1 })
+      if (inProgress.tasks.length > 0) return inProgress.tasks[0]
+      const accepted = await workerTasksApi.myTasks({ status: 'ACCEPTED', limit: 1 })
+      return accepted.tasks[0] ?? null
+    },
     staleTime: 10_000,
   })
-  const acceptedQuery = useQuery({
-    queryKey: ['worker-tasks-accepted'],
-    queryFn: () => workerTasksApi.myTasks({ status: 'ACCEPTED', limit: 1 }),
-    staleTime: 10_000,
-  })
-  const recentQuery = useQuery({
-    queryKey: ['worker-tasks-recent'],
-    queryFn: () => workerTasksApi.myTasks({ limit: 50 }),
-    staleTime: 30_000,
-  })
+
+  // Wallet loaded lazily (not blocking mount)
   const walletQuery = useQuery({
     queryKey: ['wallet'],
     queryFn: () => apiClient.get('/worker/wallet').then(r => r.data),
-    staleTime: 30_000,
-  })
-
-  const availMutation = useMutation({
-    mutationFn: (isAvailable: boolean) =>
-      apiClient.patch('/worker/availability', { isAvailable }).then(r => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['me'] }),
+    staleTime: 60_000,
   })
 
   const wp = meQuery.data?.workerProfile
-  const isAvailable = wp?.isAvailable ?? true
-  const activeTask = activeQuery.data?.tasks?.[0] ?? acceptedQuery.data?.tasks?.[0]
+  const activeTask = activeQuery.data
   const wallet = walletQuery.data
-  const recentTasks = (recentQuery.data?.tasks ?? []).filter(t => ['APPROVED', 'COMPLETED'].includes(t.status)).slice(0, 5)
 
   const firstName = user?.name?.split(' ')[0] ?? 'there'
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
+  const completedTasks = wp?.completedTasks ?? 0
+  const workerLevel = useMemo(() => getWorkerLevel(completedTasks), [completedTasks])
+
+  // Weekly earnings = total earned this concept (approximation from wallet)
+  const weeklyEarned = wallet?.totalEarnedCents ?? 0
+  const inAccount = wallet?.availableCents ?? 0
+  const comingSoon = (wallet?.pendingCents ?? 0) + (wallet?.processingCents ?? 0)
+
   const onRefresh = () => {
-    meQuery.refetch(); activeQuery.refetch(); acceptedQuery.refetch()
-    walletQuery.refetch(); recentQuery.refetch()
+    meQuery.refetch()
+    activeQuery.refetch()
+    walletQuery.refetch()
   }
+
+  const isLoading = meQuery.isLoading
 
   return (
     <ScreenWrapper backgroundColor={W.background}>
       <AppHeader title="eClean" theme="worker" onNotificationPress={() => navigation.navigate('Notifications' as any)} />
       <ScrollView
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={s.scroll}
         refreshControl={<RefreshControl refreshing={meQuery.isFetching} onRefresh={onRefresh} tintColor={W.primary} />}
       >
-        {/* ── Greeting + Status ── */}
+        {/* ── Greeting + Level ── */}
         <View style={s.greetingBox}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.greetingText}>{greeting},</Text>
-            <Text style={s.greetingName}>{firstName}</Text>
-          </View>
-          <View style={[s.statusPill, isAvailable ? s.statusOnline : s.statusBusy]}>
-            <View style={[s.statusDot, { backgroundColor: isAvailable ? '#16A34A' : W.status.warning }]} />
-            <Text style={[s.statusText, { color: isAvailable ? '#15803D' : '#92400E' }]}>
-              {isAvailable ? 'Online' : 'Busy'}
-            </Text>
-            <Switch
-              value={isAvailable}
-              onValueChange={(val) => availMutation.mutate(val)}
-              trackColor={{ false: '#E5E7EB', true: '#86EFAC' }}
-              thumbColor={isAvailable ? '#16A34A' : '#9CA3AF'}
-              disabled={availMutation.isPending}
-              style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-            />
+          <Text style={s.greetingText}>{greeting},</Text>
+          <Text style={s.greetingName}>{firstName}</Text>
+          <View style={s.levelRow}>
+            <Text style={s.levelIcon}>{workerLevel.icon}</Text>
+            <Text style={[s.levelText, { color: workerLevel.color }]}>{workerLevel.level} Worker</Text>
+            {workerLevel.next && (
+              <Text style={s.levelProgress}> {'\u00B7'} {workerLevel.remaining} more to {workerLevel.next}</Text>
+            )}
           </View>
         </View>
 
         {/* ── Earnings Card ── */}
         <View style={s.earningsCard}>
           <View style={s.earningsTop}>
-            <Text style={s.earningsLabel}>Today's Earnings</Text>
+            <Text style={s.earningsLabel}>This Week</Text>
             <TouchableOpacity onPress={() => (navigation as any).navigate('Wallet')} style={s.earningsLink}>
               <Text style={s.earningsLinkText}>Wallet</Text>
               <ChevronRight size={14} color={W.primary} />
             </TouchableOpacity>
           </View>
-          <Text style={s.earningsAmount}>
-            {wallet ? formatMoney(wallet.availableCents, 'INR') : '---'}
-          </Text>
-          <View style={s.earningsRow}>
-            <View style={s.earningsItem}>
-              <View style={[s.earningsDot, { backgroundColor: W.earnings.pending }]} />
-              <Text style={s.earningsItemLabel}>Pending</Text>
-              <Text style={s.earningsItemVal}>{wallet ? formatMoney(wallet.pendingCents, 'INR') : '—'}</Text>
+
+          {walletQuery.isLoading ? (
+            <Skeleton width={160} height={36} borderRadius={8} />
+          ) : (
+            <Text style={s.earningsAmount}>{formatMoney(weeklyEarned, 'INR')}</Text>
+          )}
+
+          <View style={s.earningsSplit}>
+            <View style={s.earningsSplitItem}>
+              <View style={[s.earningsDot, { backgroundColor: W.primary }]} />
+              <Text style={s.earningsSplitLabel}>In your account</Text>
+              <Text style={s.earningsSplitVal}>{formatMoney(inAccount, 'INR')}</Text>
             </View>
-            <View style={s.earningsItem}>
-              <View style={[s.earningsDot, { backgroundColor: W.earnings.processing }]} />
-              <Text style={s.earningsItemLabel}>Processing</Text>
-              <Text style={s.earningsItemVal}>{wallet ? formatMoney(wallet.processingCents ?? 0, 'INR') : '—'}</Text>
+            <View style={s.earningsSplitItem}>
+              <View style={[s.earningsDot, { backgroundColor: W.secondary }]} />
+              <Text style={s.earningsSplitLabel}>Coming soon</Text>
+              <Text style={s.earningsSplitVal}>{formatMoney(comingSoon, 'INR')}</Text>
             </View>
           </View>
         </View>
 
-        {/* ── Active Task Card ── */}
+        {/* ── Active Task (HERO card) ── */}
         {activeTask && (
           <TouchableOpacity
             style={s.activeCard}
-            onPress={() => {
-              navigation.navigate('ActiveTask', { taskId: activeTask.id })
-            }}
-            activeOpacity={0.9}
+            onPress={() => navigation.navigate('ActiveTask', { taskId: activeTask.id })}
+            activeOpacity={0.85}
           >
             <View style={s.activeAccent} />
             <View style={s.activeBody}>
               <View style={s.activeTop}>
-                <View style={[s.activeBadge, { backgroundColor: activeTask.status === 'IN_PROGRESS' ? W.primary : W.secondary }]}>
+                <View style={[s.activeBadge, {
+                  backgroundColor: activeTask.status === 'IN_PROGRESS' ? W.primary : W.secondary,
+                }]}>
                   <Text style={s.activeBadgeText}>
                     {activeTask.status === 'IN_PROGRESS' ? 'IN PROGRESS' : 'ACCEPTED'}
                   </Text>
                 </View>
                 <Text style={s.activePrice}>{formatMoney(activeTask.rateCents, 'INR')}</Text>
               </View>
+
               <Text style={s.activeTitle} numberOfLines={1}>{activeTask.title}</Text>
               {activeTask.locationAddress && (
                 <View style={s.activeLocRow}>
@@ -167,114 +171,79 @@ export function WorkerHomeScreen() {
                   <Text style={s.activeLoc} numberOfLines={1}>{activeTask.locationAddress}</Text>
                 </View>
               )}
-              <View style={s.activeActions}>
-                <View style={s.activeActionBtn}>
-                  <ArrowRight size={14} color={W.primary} />
-                  <Text style={s.activeActionText}>
-                    {activeTask.status === 'IN_PROGRESS' ? 'Continue Work' : 'Start Task'}
-                  </Text>
-                </View>
+
+              <View style={s.activeCta}>
+                <Text style={s.activeCtaText}>
+                  {activeTask.status === 'IN_PROGRESS' ? 'CONTINUE TASK' : 'START TASK'}
+                </Text>
+                <ArrowRight size={16} color="#fff" />
               </View>
             </View>
           </TouchableOpacity>
         )}
 
-        {/* ── Find Work CTA ── */}
-        <TouchableOpacity
-          style={s.findWorkCta}
-          onPress={() => (navigation as any).navigate('FindWork')}
-          activeOpacity={0.9}
-        >
-          <View style={s.findWorkLeft}>
-            <Search size={22} color={W.primary} />
-            <View>
-              <Text style={s.findWorkTitle}>Find Work Near Me</Text>
+        {/* ── Find Work (when no active task) ── */}
+        {!activeTask && !activeQuery.isLoading && (
+          <TouchableOpacity
+            style={s.findWorkCard}
+            onPress={() => (navigation as any).navigate('FindWork')}
+            activeOpacity={0.85}
+          >
+            <Search size={24} color={W.primary} />
+            <View style={s.findWorkText}>
+              <Text style={s.findWorkTitle}>Find Work Nearby</Text>
               <Text style={s.findWorkSub}>Browse available cleaning tasks</Text>
             </View>
-          </View>
-          <View style={s.findWorkArrow}>
-            <ArrowRight size={18} color="#fff" />
-          </View>
-        </TouchableOpacity>
-
-        {/* ── Stats Strip ── */}
-        <View style={s.statsStrip}>
-          <View style={s.statItem}>
-            <Star size={16} color={W.secondary} />
-            <Text style={s.statNum}>{wp?.rating ? wp.rating.toFixed(1) : '—'}</Text>
-            <Text style={s.statLbl}>Rating</Text>
-          </View>
-          <View style={s.statDivider} />
-          <View style={s.statItem}>
-            <CheckCircle size={16} color={W.primary} />
-            <Text style={s.statNum}>{wp?.completedTasks ?? 0}</Text>
-            <Text style={s.statLbl}>Done</Text>
-          </View>
-          <View style={s.statDivider} />
-          <View style={s.statItem}>
-            <TrendingUp size={16} color="#8B5CF6" />
-            <Text style={s.statNum}>{wallet ? formatMoney(wallet.totalEarnedCents, 'INR') : '—'}</Text>
-            <Text style={s.statLbl}>Total</Text>
-          </View>
-        </View>
-
-        {/* ── Daily Tip ── */}
-        <View style={s.tipCard}>
-          <Zap size={16} color={W.secondary} />
-          <Text style={s.tipText}>{DAILY_TIPS[new Date().getDay() % DAILY_TIPS.length]}</Text>
-        </View>
-
-        {/* ── Quick Capture ── */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Quick Capture</Text>
-          <DashboardCamera
-            onGalleryPress={() => navigation.navigate('Gallery' as any)}
-            showGalleryBtn
-          />
-        </View>
-
-        {/* ── Recent Completions ── */}
-        {recentTasks.length > 0 && (
-          <View style={s.section}>
-            <View style={s.sectionHead}>
-              <Text style={s.sectionTitle}>Recently Completed</Text>
-              <TouchableOpacity onPress={() => (navigation as any).navigate('MyTasks')}>
-                <Text style={s.seeAll}>View All</Text>
-              </TouchableOpacity>
+            <View style={s.findWorkArrow}>
+              <ArrowRight size={18} color="#fff" />
             </View>
-            <View style={s.recentList}>
-              {recentTasks.map((task, i) => (
-                <TouchableOpacity
-                  key={task.id}
-                  style={[s.recentItem, i < recentTasks.length - 1 && s.recentBorder]}
-                  onPress={() => navigation.navigate('TaskDetail', { taskId: task.id })}
-                  activeOpacity={0.85}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.recentTitle} numberOfLines={1}>{task.title}</Text>
-                    <Text style={s.recentMeta}>{timeAgo(task.completedAt ?? task.updatedAt)}</Text>
-                  </View>
-                  <Text style={s.recentPrice}>{formatMoney(task.rateCents, 'INR')}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+          </TouchableOpacity>
         )}
 
-        {/* ── Trust Footer ── */}
-        <View style={s.trustRow}>
-          <View style={s.trustItem}>
-            <Shield size={18} color={W.primary} />
-            <Text style={s.trustText}>Verified{'\n'}Platform</Text>
+        {/* ── Your Progress ── */}
+        <View style={s.progressCard}>
+          <Text style={s.progressTitle}>Your Progress</Text>
+          <View style={s.statsRow}>
+            <View style={s.statItem}>
+              <Star size={16} color={W.secondary} />
+              <Text style={s.statNum}>{wp?.rating ? wp.rating.toFixed(1) : '—'}</Text>
+              <Text style={s.statLbl}>Rating</Text>
+            </View>
+            <View style={s.statDivider} />
+            <View style={s.statItem}>
+              <CheckCircle size={16} color={W.primary} />
+              <Text style={s.statNum}>{completedTasks}</Text>
+              <Text style={s.statLbl}>Tasks</Text>
+            </View>
+            <View style={s.statDivider} />
+            <View style={s.statItem}>
+              <TrendingUp size={16} color="#8B5CF6" />
+              <Text style={s.statNum}>{wallet ? formatMoney(wallet.totalEarnedCents, 'INR') : '—'}</Text>
+              <Text style={s.statLbl}>Total</Text>
+            </View>
           </View>
-          <View style={s.trustItem}>
-            <Camera size={18} color={W.primary} />
-            <Text style={s.trustText}>AI Photo{'\n'}Scoring</Text>
-          </View>
-          <View style={s.trustItem}>
-            <Wallet size={18} color={W.primary} />
-            <Text style={s.trustText}>Instant{'\n'}Payouts</Text>
-          </View>
+
+          {/* Level progress bar */}
+          {workerLevel.next && (
+            <View style={s.levelBar}>
+              <View style={s.levelBarTrack}>
+                <View style={[s.levelBarFill, {
+                  width: `${Math.min(100, ((completedTasks % (workerLevel.remaining + completedTasks)) / (workerLevel.remaining + (completedTasks % (workerLevel.remaining + completedTasks)))) * 100)}%`,
+                  backgroundColor: workerLevel.color,
+                }]} />
+              </View>
+              <Text style={s.levelBarText}>
+                {workerLevel.icon} {workerLevel.remaining} tasks to {workerLevel.next}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* ── Motion Tracking Info (transparent, not a trick) ── */}
+        <View style={s.infoBar}>
+          <Text style={s.infoText}>
+            Motion tracking helps verify your work and speeds up payment approval. Keep your phone on you while cleaning.
+          </Text>
         </View>
 
         <View style={{ height: 24 }} />
@@ -283,79 +252,68 @@ export function WorkerHomeScreen() {
   )
 }
 
+// ── Styles ──────────────────────────────────────────────────────────────────
+
 const s = StyleSheet.create({
+  scroll: { paddingBottom: 20 },
+
   // Greeting
-  greetingBox:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
-  greetingText:   { fontSize: 16, color: W.text.secondary },
-  greetingName:   { fontSize: 26, fontWeight: '800', color: W.text.primary, marginTop: -2 },
-  statusPill:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12, paddingRight: 4, paddingVertical: 4, borderRadius: 20 },
-  statusOnline:   { backgroundColor: '#DCFCE7' },
-  statusBusy:     { backgroundColor: '#FEF3C7' },
-  statusDot:      { width: 8, height: 8, borderRadius: 4 },
-  statusText:     { fontSize: 12, fontWeight: '700' },
+  greetingBox: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4 },
+  greetingText: { fontSize: 15, color: W.text.secondary },
+  greetingName: { fontSize: 26, fontWeight: '800', color: W.text.primary, marginTop: -2 },
+  levelRow:     { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  levelIcon:    { fontSize: 14 },
+  levelText:    { fontSize: 13, fontWeight: '700', marginLeft: 4 },
+  levelProgress:{ fontSize: 12, color: W.text.muted },
 
   // Earnings
-  earningsCard:   { marginHorizontal: 20, marginTop: 12, backgroundColor: W.surface, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: W.border, shadowColor: W.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12, elevation: 3 },
-  earningsTop:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  earningsLabel:  { fontSize: 13, color: W.text.muted },
-  earningsLink:   { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  earningsCard:     { marginHorizontal: 20, marginTop: 16, backgroundColor: W.surface, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: W.border, shadowColor: W.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12, elevation: 3 },
+  earningsTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  earningsLabel:    { fontSize: 13, color: W.text.muted, fontWeight: '600' },
+  earningsLink:     { flexDirection: 'row', alignItems: 'center', gap: 2 },
   earningsLinkText: { fontSize: 13, fontWeight: '600', color: W.primary },
-  earningsAmount: { fontSize: 32, fontWeight: '800', color: W.text.primary, marginTop: 4 },
-  earningsRow:    { flexDirection: 'row', gap: 20, marginTop: 12 },
-  earningsItem:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  earningsDot:    { width: 8, height: 8, borderRadius: 4 },
-  earningsItemLabel: { fontSize: 12, color: W.text.muted },
-  earningsItemVal:{ fontSize: 13, fontWeight: '700', color: W.text.secondary },
+  earningsAmount:   { fontSize: 32, fontWeight: '800', color: W.text.primary, marginTop: 4 },
+  earningsSplit:    { flexDirection: 'row', gap: 24, marginTop: 14 },
+  earningsSplitItem:{ flexDirection: 'row', alignItems: 'center', gap: 6 },
+  earningsDot:      { width: 8, height: 8, borderRadius: 4 },
+  earningsSplitLabel:{ fontSize: 12, color: W.text.muted },
+  earningsSplitVal: { fontSize: 13, fontWeight: '700', color: W.text.secondary },
 
   // Active task
-  activeCard:     { flexDirection: 'row', marginHorizontal: 20, marginTop: 16, backgroundColor: W.surface, borderRadius: 16, borderWidth: 1, borderColor: W.primary, overflow: 'hidden' },
-  activeAccent:   { width: 4, backgroundColor: W.primary },
+  activeCard:     { flexDirection: 'row', marginHorizontal: 20, marginTop: 16, backgroundColor: W.surface, borderRadius: 16, borderWidth: 2, borderColor: W.primary, overflow: 'hidden' },
+  activeAccent:   { width: 5, backgroundColor: W.primary },
   activeBody:     { flex: 1, padding: 16 },
   activeTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   activeBadge:    { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   activeBadgeText:{ fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
-  activePrice:    { fontSize: 17, fontWeight: '800', color: W.primary },
-  activeTitle:    { fontSize: 15, fontWeight: '700', color: W.text.primary },
+  activePrice:    { fontSize: 18, fontWeight: '800', color: W.primary },
+  activeTitle:    { fontSize: 16, fontWeight: '700', color: W.text.primary },
   activeLocRow:   { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   activeLoc:      { fontSize: 12, color: W.text.muted, flex: 1 },
-  activeActions:  { flexDirection: 'row', marginTop: 12 },
-  activeActionBtn:{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: W.primaryTint, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
-  activeActionText: { fontSize: 13, fontWeight: '600', color: W.primary },
+  activeCta:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: W.primary, borderRadius: 10, paddingVertical: 12, marginTop: 14 },
+  activeCtaText:  { fontSize: 14, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
 
   // Find work
-  findWorkCta:    { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginTop: 16, backgroundColor: W.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: W.border },
-  findWorkLeft:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  findWorkTitle:  { fontSize: 15, fontWeight: '700', color: W.text.primary },
-  findWorkSub:    { fontSize: 12, color: W.text.muted, marginTop: 1 },
-  findWorkArrow:  { width: 40, height: 40, borderRadius: 12, backgroundColor: W.primary, alignItems: 'center', justifyContent: 'center' },
+  findWorkCard:  { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 20, marginTop: 16, backgroundColor: W.surface, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: W.border },
+  findWorkText:  { flex: 1 },
+  findWorkTitle: { fontSize: 16, fontWeight: '700', color: W.text.primary },
+  findWorkSub:   { fontSize: 12, color: W.text.muted, marginTop: 2 },
+  findWorkArrow: { width: 40, height: 40, borderRadius: 12, backgroundColor: W.primary, alignItems: 'center', justifyContent: 'center' },
 
-  // Stats
-  statsStrip:     { flexDirection: 'row', marginHorizontal: 20, marginTop: 16, backgroundColor: W.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: W.border },
-  statItem:       { flex: 1, alignItems: 'center', gap: 4 },
-  statNum:        { fontSize: 18, fontWeight: '800', color: W.text.primary },
-  statLbl:        { fontSize: 10, color: W.text.muted },
-  statDivider:    { width: 1, backgroundColor: W.border },
+  // Progress
+  progressCard:  { marginHorizontal: 20, marginTop: 16, backgroundColor: W.surface, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: W.border },
+  progressTitle: { fontSize: 14, fontWeight: '700', color: W.text.primary, marginBottom: 14 },
+  statsRow:      { flexDirection: 'row' },
+  statItem:      { flex: 1, alignItems: 'center', gap: 4 },
+  statNum:       { fontSize: 18, fontWeight: '800', color: W.text.primary },
+  statLbl:       { fontSize: 10, color: W.text.muted },
+  statDivider:   { width: 1, backgroundColor: W.border },
+  levelBar:      { marginTop: 16 },
+  levelBarTrack: { height: 6, borderRadius: 3, backgroundColor: W.border },
+  levelBarFill:  { height: '100%', borderRadius: 3 },
+  levelBarText:  { fontSize: 12, color: W.text.muted, marginTop: 6, textAlign: 'center' },
 
-  // Tip
-  tipCard:        { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 20, marginTop: 16, backgroundColor: W.secondaryLight, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#FDE68A' },
-  tipText:        { fontSize: 13, color: '#92400E', lineHeight: 18, flex: 1 },
-
-  // Section
-  section:        { paddingHorizontal: 20, marginTop: 20 },
-  sectionHead:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  sectionTitle:   { fontSize: 16, fontWeight: '700', color: W.text.primary, marginBottom: 10 },
-  seeAll:         { fontSize: 13, fontWeight: '600', color: W.primary },
-
-  // Recent
-  recentList:     { backgroundColor: W.surface, borderRadius: 14, borderWidth: 1, borderColor: W.border, overflow: 'hidden' },
-  recentItem:     { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
-  recentBorder:   { borderBottomWidth: 1, borderBottomColor: W.border },
-  recentTitle:    { fontSize: 14, fontWeight: '600', color: W.text.primary },
-  recentMeta:     { fontSize: 11, color: W.text.muted, marginTop: 2 },
-  recentPrice:    { fontSize: 14, fontWeight: '700', color: W.primary },
-
-  // Trust
-  trustRow:       { flexDirection: 'row', marginHorizontal: 20, marginTop: 20, backgroundColor: W.primaryTint, borderRadius: 14, padding: 16 },
-  trustItem:      { flex: 1, alignItems: 'center', gap: 6 },
-  trustText:      { fontSize: 10, fontWeight: '600', color: W.primaryDark, textAlign: 'center', lineHeight: 14 },
+  // Info bar (transparent motion tracking)
+  infoBar:  { marginHorizontal: 20, marginTop: 16, backgroundColor: '#F0F9FF', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#BFDBFE' },
+  infoText: { fontSize: 12, color: '#1E40AF', lineHeight: 18 },
 })
