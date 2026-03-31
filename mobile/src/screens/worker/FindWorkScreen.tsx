@@ -10,7 +10,7 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ActivityIndicator,
+  ActivityIndicator, Platform,
 } from 'react-native'
 import MapView, { Marker, Circle, Callout } from 'react-native-maps'
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet'
@@ -113,14 +113,18 @@ export function FindWorkScreen() {
           />
         )}
 
-        {/* Price pins — show ₹AMOUNT on each marker */}
+        {/* Price pins — custom view on iOS, title fallback on Android */}
         {mappableTasks.map((task) => (
           <Marker
             key={task.id}
             coordinate={{ latitude: task.locationLat!, longitude: task.locationLng! }}
             onPress={() => handleTaskPress(task.id)}
+            title={Platform.OS === 'android' ? `\u20B9${Math.round(task.rateCents / 100)}` : undefined}
+            pinColor={Platform.OS === 'android' ? DIRTY_COLOR[task.dirtyLevel] : undefined}
           >
-            <PricePin amount={task.rateCents} dirtyLevel={task.dirtyLevel} />
+            {Platform.OS === 'ios' && (
+              <PricePin amount={task.rateCents} dirtyLevel={task.dirtyLevel} />
+            )}
           </Marker>
         ))}
       </MapView>

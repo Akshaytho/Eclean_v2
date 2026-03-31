@@ -85,7 +85,10 @@ export const referencePointsApi = {
     uri: string,
     metadata?: PhotoMetadata,
   ): Promise<WorkerPointSubmission> => {
-    const compressedUri = await compressPhoto(uri)
+    // Skip compression — camera already captures at quality 0.7 and
+    // Cloudinary handles server-side optimization. Double compression
+    // was adding 1-2 seconds per upload on budget phones.
+    const compressedUri = uri
     const formData = new FormData()
     formData.append('file', {
       uri: compressedUri,

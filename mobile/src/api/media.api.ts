@@ -39,7 +39,8 @@ export const mediaApi = {
     mediaType: MediaType,
     metadata?: PhotoMetadata,
   ): Promise<TaskMedia> => {
-    const compressedUri = await compressPhoto(uri)
+    // Skip compression — camera captures at quality 0.7, Cloudinary optimizes server-side
+    const compressedUri = uri
 
     const formData = new FormData()
     formData.append('file', {

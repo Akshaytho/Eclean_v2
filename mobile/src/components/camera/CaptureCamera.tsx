@@ -114,14 +114,31 @@ export const CaptureCamera = React.memo(function CaptureCamera({
   const onConfirm = useCallback(async (uri: string, metadata: CaptureMetadata) => {
     setSaving(true)
     try {
-      const galleryPhoto = await saveToGallery(uri, taskId, photoType, metadata)
+      // Fast path: create gallery photo object without expensive compression + thumbnail
+      // The upload API handles compression. Gallery save is deferred.
+      const quickPhoto: GalleryPhoto = {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        taskId,
+        photoType,
+        fullUri: uri,
+        thumbUri: uri, // Use original as thumb temporarily
+        uploadedUri: null,
+        metadata,
+        capturedAt: new Date().toISOString(),
+        uploaded: false,
+      }
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setSaving(false)
       setSaved(true)
-      await new Promise(r => setTimeout(r, 800))
+      // Shortened save animation from 800ms to 400ms
+      await new Promise(r => setTimeout(r, 400))
       setSaved(false)
       setPreview(null)
-      onCapture({ photo: galleryPhoto, uploaded: false })
+      onCapture({ photo: quickPhoto, uploaded: false })
+
+      // Deferred: save to gallery in background (non-blocking)
+      saveToGallery(uri, taskId, photoType, metadata).catch(() => {})
     } catch (err: any) {
       setSaving(false)
       Alert.alert('Save failed', err?.message ?? 'Could not save photo.')

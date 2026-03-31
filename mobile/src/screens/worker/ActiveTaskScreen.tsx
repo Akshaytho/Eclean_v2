@@ -369,10 +369,10 @@ export function ActiveTaskScreen() {
           </Text>
         </View>
 
-        {/* Offline bar */}
+        {/* Connection warning — honest about what offline means */}
         {!isOnline && (
           <View style={s.offlineBar}>
-            <Text style={s.offlineText}>Offline — photos saved locally. Will sync when connected.</Text>
+            <Text style={s.offlineText}>No internet — photos will upload when connection returns</Text>
           </View>
         )}
 

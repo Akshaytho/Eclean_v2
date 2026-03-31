@@ -80,8 +80,7 @@ export function WorkerHomeScreen() {
   const completedTasks = wp?.completedTasks ?? 0
   const workerLevel = useMemo(() => getWorkerLevel(completedTasks), [completedTasks])
 
-  // Weekly earnings = total earned this concept (approximation from wallet)
-  const weeklyEarned = wallet?.totalEarnedCents ?? 0
+  const totalEarned = wallet?.totalEarnedCents ?? 0
   const inAccount = wallet?.availableCents ?? 0
   const comingSoon = (wallet?.pendingCents ?? 0) + (wallet?.processingCents ?? 0)
 
@@ -108,16 +107,14 @@ export function WorkerHomeScreen() {
           <View style={s.levelRow}>
             <Text style={s.levelIcon}>{workerLevel.icon}</Text>
             <Text style={[s.levelText, { color: workerLevel.color }]}>{workerLevel.level} Worker</Text>
-            {workerLevel.next && (
-              <Text style={s.levelProgress}> {'\u00B7'} {workerLevel.remaining} more to {workerLevel.next}</Text>
-            )}
+            <Text style={s.levelProgress}> {'\u00B7'} {completedTasks} tasks done</Text>
           </View>
         </View>
 
         {/* ── Earnings Card ── */}
         <View style={s.earningsCard}>
           <View style={s.earningsTop}>
-            <Text style={s.earningsLabel}>This Week</Text>
+            <Text style={s.earningsLabel}>Total Earned</Text>
             <TouchableOpacity onPress={() => (navigation as any).navigate('Wallet')} style={s.earningsLink}>
               <Text style={s.earningsLinkText}>Wallet</Text>
               <ChevronRight size={14} color={W.primary} />
@@ -127,7 +124,7 @@ export function WorkerHomeScreen() {
           {walletQuery.isLoading ? (
             <Skeleton width={160} height={36} borderRadius={8} />
           ) : (
-            <Text style={s.earningsAmount}>{formatMoney(weeklyEarned, 'INR')}</Text>
+            <Text style={s.earningsAmount}>{formatMoney(totalEarned, 'INR')}</Text>
           )}
 
           <View style={s.earningsSplit}>
@@ -223,20 +220,7 @@ export function WorkerHomeScreen() {
             </View>
           </View>
 
-          {/* Level progress bar */}
-          {workerLevel.next && (
-            <View style={s.levelBar}>
-              <View style={s.levelBarTrack}>
-                <View style={[s.levelBarFill, {
-                  width: `${Math.min(100, ((completedTasks % (workerLevel.remaining + completedTasks)) / (workerLevel.remaining + (completedTasks % (workerLevel.remaining + completedTasks)))) * 100)}%`,
-                  backgroundColor: workerLevel.color,
-                }]} />
-              </View>
-              <Text style={s.levelBarText}>
-                {workerLevel.icon} {workerLevel.remaining} tasks to {workerLevel.next}
-              </Text>
-            </View>
-          )}
+          {/* Level info — no fake progression bar until backend supports benefits */}
         </View>
 
         {/* ── Motion Tracking Info (transparent, not a trick) ── */}

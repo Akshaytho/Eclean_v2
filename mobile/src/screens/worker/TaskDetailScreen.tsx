@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, ActivityIndicator, Image, Modal, Dimensions,
 } from 'react-native'
-// Map removed from task detail — worker already saw location on Find Work screen
+import MapView, { Marker } from 'react-native-maps'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -166,6 +166,20 @@ export function TaskDetailScreen() {
             <Text style={styles.buyerName}>{task.buyer.name}</Text>
           )}
         </View>
+
+        {/* ── Mini Map (for workers coming from notifications) ── */}
+        {hasLocation && (
+          <MapView
+            style={styles.miniMap}
+            initialRegion={{
+              latitude: task.locationLat!, longitude: task.locationLng!,
+              latitudeDelta: 0.008, longitudeDelta: 0.008,
+            }}
+            scrollEnabled={false} zoomEnabled={false} pitchEnabled={false} rotateEnabled={false}
+          >
+            <Marker coordinate={{ latitude: task.locationLat!, longitude: task.locationLng! }} pinColor={dirtyColor} />
+          </MapView>
+        )}
 
         {/* ── Info Chips (rate, dirty level, photo count) ── */}
         <View style={styles.chipsRow}>
@@ -333,6 +347,8 @@ const styles = StyleSheet.create({
   backBtn:        { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   topBarTitle:    { flex: 1, fontSize: 17, fontWeight: '700', color: W.text.primary, textAlign: 'center' },
   content:        { padding: 16, paddingBottom: 32, gap: 12 },
+  // Mini map
+  miniMap:        { height: 120, borderRadius: 12, overflow: 'hidden' },
   // Hero gallery (Swiggy-style full-width swipeable)
   heroGallery:    { height: 220 },
   heroImage:      { width: Dimensions.get('window').width - 32, height: 220, borderRadius: 14, marginHorizontal: 16 },
