@@ -63,11 +63,17 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
     ])
 
     prompt =
-      `You are an AI verification system for civic cleanup work. ` +
-      `Task: ${task.description}. Category: ${task.category}. Dirty level: ${task.dirtyLevel}. ` +
+      `You are a STRICT AI verification system for civic cleanup work. ` +
+      `Task title: "${task.title}". Description: "${task.description}". Category: ${task.category}. Dirty level: ${task.dirtyLevel}. ` +
       `You are receiving ${pairsToSend.length} pairs of images. ` +
       `Each pair: first image is buyer's REFERENCE (dirty area), second is worker's AFTER (should be cleaned). ` +
-      `For each pair, assess: (1) same location? (2) area cleaner? (3) work evident? ` +
+      `You MUST check ALL of the following: ` +
+      `(1) Do the photos match the task description? If task says "bathroom cleaning" but photos show a laptop, score 0. ` +
+      `(2) Are the before and after photos of the SAME location? ` +
+      `(3) Is the area VISIBLY cleaner in the after photo? Look for actual cleaning evidence. ` +
+      `(4) Are the before and after photos DIFFERENT images? If they look identical, the worker likely didn't do any work — score 0 and set suspiciousActivity to true. ` +
+      `(5) Is there evidence of actual cleaning work (mop marks, wet surfaces, organized debris, removed trash)? ` +
+      `Be STRICT. Do not give high scores for photos that don't match the task or show no real cleaning. ` +
       `Return ONLY valid JSON, no other text: ` +
       `{"score":0.85,"label":"GOOD","reasoning":"...","workEvident":true,` +
       `"suspiciousActivity":false,"recommendation":"APPROVE"}`
@@ -88,10 +94,11 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
     ]
 
     prompt =
-      `You are an AI verification system for civic work. ` +
-      `Task: ${task.description}. Category: ${task.category}. ` +
-      `Dirty level: ${task.dirtyLevel}. ` +
+      `You are a STRICT AI verification system for civic work. ` +
+      `Task title: "${task.title}". Description: "${task.description}". Category: ${task.category}. Dirty level: ${task.dirtyLevel}. ` +
       `Image 1=BEFORE, Image 2=AFTER, Image 3=PROOF. ` +
+      `Check: (1) Photos match task description? (2) Before/After are DIFFERENT images showing same location? (3) Area visibly cleaner? (4) Actual cleaning evidence? ` +
+      `If photos don't match the task or show no cleaning, score 0. Be strict. ` +
       `Return ONLY valid JSON with no other text: ` +
       `{"score":0.85,"label":"GOOD","reasoning":"...","workEvident":true,` +
       `"suspiciousActivity":false,"recommendation":"APPROVE"}`

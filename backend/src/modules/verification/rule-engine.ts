@@ -186,10 +186,43 @@ const timeOnSiteLayer: ScoringLayerConfig = {
   },
 }
 
+const duplicateImageLayer: ScoringLayerConfig = {
+  id: 'duplicate_image_check',
+  name: 'Duplicate Image Check',
+  maxPoints: 15,
+  enabled: true,
+  category: 'core',
+  fn: (ctx) => {
+    // Check if worker submitted the SAME image as buyer's reference
+    // Compare by URL (exact match = copied/reused) or photoHash
+    const buyerUrls = new Set(ctx.referencePoints.map((p) => p.buyerImageUrl))
+    const duplicates = ctx.submissions.filter((s) => buyerUrls.has(s.imageUrl))
+
+    // Also check photoHash matches
+    const buyerHashes = new Set<string>()
+    // (buyer hashes aren't stored on reference points yet, but worker hashes can be compared)
+    const workerHashes = ctx.submissions.map((s) => s.photoHash).filter(Boolean)
+    const hashDuplicates = workerHashes.filter((h, i) => workerHashes.indexOf(h) !== i)
+
+    const totalDuplicates = duplicates.length + hashDuplicates.length
+
+    if (totalDuplicates > 0) {
+      return {
+        layerId: 'duplicate_image_check',
+        score: 0,
+        maxPoints: 15,
+        explanation: `FRAUD: ${duplicates.length} worker photo(s) are identical to buyer reference photos. ${hashDuplicates.length} duplicate hashes detected.`,
+      }
+    }
+
+    return { layerId: 'duplicate_image_check', score: 15, maxPoints: 15, explanation: 'All worker photos are unique' }
+  },
+}
+
 const fraudFlagsLayer: ScoringLayerConfig = {
   id: 'fraud_flags',
-  name: 'Fraud Flags',
-  maxPoints: 15,
+  name: 'GPS Fraud Flags',
+  maxPoints: 10,
   enabled: true,
   category: 'core',
   fn: (ctx) => {
@@ -197,12 +230,12 @@ const fraudFlagsLayer: ScoringLayerConfig = {
       (s) => s.locationMatchScore !== null && s.locationMatchScore < 25,
     ).length
 
-    const score = Math.max(0, 15 - flagged * 5)
+    const score = Math.max(0, 10 - flagged * 4)
     const explanation = flagged === 0
-      ? 'No fraud flags detected'
+      ? 'No GPS fraud flags detected'
       : `${flagged} photo(s) with low GPS match (<25/100)`
 
-    return { layerId: 'fraud_flags', score, maxPoints: 15, explanation }
+    return { layerId: 'fraud_flags', score, maxPoints: 10, explanation }
   },
 }
 
@@ -289,6 +322,7 @@ export const SCORING_LAYERS: ScoringLayerConfig[] = [
   photoCoverageLayer,
   gpsProximityLayer,
   timeOnSiteLayer,
+  duplicateImageLayer,
   fraudFlagsLayer,
   // Bonus layers (enable when ready)
   environmentDNALayer,
