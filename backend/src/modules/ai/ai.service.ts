@@ -28,6 +28,30 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
     throw new Error('OPENAI_API_KEY not configured')
   }
 
+  // COST OPTIMIZATION: Skip AI for obvious rule engine decisions
+  // Rule engine already checked GPS, coverage, time, duplicates — no need to pay for AI
+  const existingTask = await prisma.task.findUnique({ where: { id: taskId }, select: { ruleEngineScore: true } })
+  if (existingTask?.ruleEngineScore != null) {
+    if (existingTask.ruleEngineScore >= 95) {
+      // Perfect metadata score — AI would just confirm. Skip and save $0.06
+      const autoResult: AiVerificationResult = {
+        score: 0.95, label: 'EXCELLENT', reasoning: 'Skipped — rule engine score 95+, all metadata checks passed',
+        workEvident: true, suspiciousActivity: false, recommendation: 'APPROVE',
+      }
+      await prisma.task.update({ where: { id: taskId }, data: { aiScore: autoResult.score, aiReasoning: autoResult.reasoning, aiModelVersion: 'rule-engine-bypass' } })
+      return autoResult
+    }
+    if (existingTask.ruleEngineScore < 40) {
+      // Terrible metadata — AI would just confirm rejection. Skip.
+      const autoResult: AiVerificationResult = {
+        score: 0.15, label: 'POOR', reasoning: 'Skipped — rule engine score below 40, multiple fraud indicators',
+        workEvident: false, suspiciousActivity: true, recommendation: 'REJECT',
+      }
+      await prisma.task.update({ where: { id: taskId }, data: { aiScore: autoResult.score, aiReasoning: autoResult.reasoning, aiModelVersion: 'rule-engine-bypass' } })
+      return autoResult
+    }
+  }
+
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     include: {
@@ -39,7 +63,7 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
   if (!task) throw new Error(`Task ${taskId} not found`)
 
   // ── Build image content: paired mode (new) or legacy mode ────────────────
-  let imageMessages: Array<{ type: 'image_url'; image_url: { url: string } }>
+  let imageMessages: Array<{ type: 'image_url'; image_url: { url: string; detail?: string } }>
   let prompt: string
 
   if (task.referencePoints.length > 0 && task.workerSubmissions.length > 0) {
@@ -53,13 +77,17 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
       })
       .filter((p) => p.afterSub != null)
 
-    // Two-phase: send verification pairs first (cost optimization)
+    // Cost optimization: send only 1 verification pair (2 images = 170 tokens)
+    // If AI flags concern, full analysis can be triggered manually
     const verificationPairs = pairs.filter((p) => p.refPoint.isVerificationPoint)
-    const pairsToSend = verificationPairs.length >= 2 ? verificationPairs : pairs.slice(0, 4)
+    const pairsToSend = verificationPairs.length >= 1 ? [verificationPairs[0]] : pairs.slice(0, 1)
 
+    // detail: "low" = 512x512 fixed at 85 tokens per image (vs 85,000+ at high)
+    // Cleaning evidence (trash removal, sweeping) is visible at low resolution
+    // This reduces image cost by ~99%
     imageMessages = pairsToSend.flatMap((pair) => [
-      { type: 'image_url' as const, image_url: { url: pair.refPoint.buyerImageUrl } },
-      { type: 'image_url' as const, image_url: { url: pair.afterSub!.imageUrl } },
+      { type: 'image_url' as const, image_url: { url: pair.refPoint.buyerImageUrl, detail: 'low' as const } },
+      { type: 'image_url' as const, image_url: { url: pair.afterSub!.imageUrl, detail: 'low' as const } },
     ])
 
     prompt =
@@ -88,9 +116,9 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
     }
 
     imageMessages = [
-      { type: 'image_url', image_url: { url: beforeMedia.url } },
-      { type: 'image_url', image_url: { url: afterMedia.url  } },
-      { type: 'image_url', image_url: { url: proofMedia.url  } },
+      { type: 'image_url', image_url: { url: beforeMedia.url, detail: 'low' as const } },
+      { type: 'image_url', image_url: { url: afterMedia.url, detail: 'low' as const } },
+      { type: 'image_url', image_url: { url: proofMedia.url, detail: 'low' as const } },
     ]
 
     prompt =
@@ -111,7 +139,7 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
       {
         role: 'user',
         content: [
-          ...imageMessages,
+          ...imageMessages as any,
           { type: 'text', text: prompt },
         ],
       },

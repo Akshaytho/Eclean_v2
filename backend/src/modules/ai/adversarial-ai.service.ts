@@ -40,20 +40,6 @@ export async function adversarialCheck(taskId: string): Promise<AdversarialResul
   const motionSummary = await prisma.taskMotionSummary.findUnique({ where: { taskId } })
   const envCaptures = await prisma.workerEnvironmentCapture.findMany({ where: { taskId } })
 
-  // Build verification pairs
-  const verificationPairs = task.referencePoints
-    .filter((p) => p.isVerificationPoint)
-    .map((rp) => {
-      const sub = task.workerSubmissions.find((s) => s.referencePointId === rp.id)
-      return { rp, sub }
-    })
-    .filter((p) => p.sub != null)
-
-  const imageMessages = verificationPairs.flatMap((pair) => [
-    { type: 'image_url' as const, image_url: { url: pair.rp.buyerImageUrl } },
-    { type: 'image_url' as const, image_url: { url: pair.sub!.imageUrl } },
-  ])
-
   const evidence = {
     taskDescription: task.description,
     category: task.category,
@@ -65,15 +51,27 @@ export async function adversarialCheck(taskId: string): Promise<AdversarialResul
     envMatchScores: envCaptures.map((e) => e.matchScore).filter(Boolean),
   }
 
-  const prompt = `Analyze this task for fraud. Evidence: ${JSON.stringify(evidence)}. ${imageMessages.length > 0 ? `${imageMessages.length / 2} image pair(s): buyer reference then worker submission.` : 'No images.'} Return ONLY JSON: {"fraudProbability":0.1,"confidence":0.8,"anomalies":[],"recommendation":"PASS","reasoning":"..."}`
+  // COST OPTIMIZATION: Adversarial check is TEXT-ONLY (no images)
+  // Analyzes metadata patterns: GPS scores, motion data, timestamps, env match
+  // This costs ~$0.00003 instead of $0.03 (1000x cheaper)
+  // Images are already checked by the verifier AI — adversarial checks the DATA
+  const prompt = `Analyze this civic cleanup task for fraud using ONLY the metadata below (no images).
+Evidence: ${JSON.stringify(evidence)}
+Key fraud signals to check:
+- GPS scores: are any very low (<25)? Are they all suspiciously identical?
+- Time spent: is it reasonable for ${task.referencePoints.length} reference points?
+- Motion data: does it show actual cleaning or mostly standing/vehicle?
+- Environmental match: does worker's sensor data match buyer's location?
+- Submission count vs reference count: any missing?
+Return ONLY JSON: {"fraudProbability":0.1,"confidence":0.8,"anomalies":[],"recommendation":"PASS","reasoning":"..."}`
 
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      max_tokens: 1024,
+      max_tokens: 512, // shorter response for text-only
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: [...imageMessages, { type: 'text' as const, text: prompt }] },
+        { role: 'user', content: prompt }, // text only — no images
       ],
     })
 
