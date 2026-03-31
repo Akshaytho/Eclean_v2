@@ -83,18 +83,16 @@ export const CaptureCamera = React.memo(function CaptureCamera({
 
     try {
       const [photo, locResult] = await Promise.all([
-        cameraRef.current.takePictureAsync({ quality: 0.92, skipProcessing: false }),
+        cameraRef.current.takePictureAsync({ quality: 0.7, skipProcessing: true }),
         Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).catch(() => null),
       ])
       if (!photo) throw new Error('Camera failed')
 
-      let photoHash = ''
-      try {
-        const b64 = await FileSystem.readAsStringAsync(photo.uri, { encoding: FileSystem.EncodingType.Base64 })
-        photoHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, b64)
-      } catch {
-        photoHash = `fallback-${Date.now()}`
-      }
+      // Hash from file info (fast) instead of reading entire file as base64 (slow)
+      const photoHash = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        `${photo.uri}-${photo.width}-${photo.height}-${Date.now()}`
+      ).catch(() => `fallback-${Date.now()}`)
 
       const metadata: CaptureMetadata = {
         lat:       locResult?.coords.latitude  ?? null,
