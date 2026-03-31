@@ -1,0 +1,5 @@
+# EAS Build ignore
+.claude/
+.Claude/
+docs/
+.expo/

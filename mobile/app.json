@@ -87,6 +87,17 @@
           "project": "eclean-mobile",
           "url": "https://sentry.io/"
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "newArchEnabled": false
+          },
+          "ios": {
+            "newArchEnabled": false
+          }
+        }
       ]
     ],
     "extra": {
