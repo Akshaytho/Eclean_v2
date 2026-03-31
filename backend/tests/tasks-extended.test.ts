@@ -78,6 +78,7 @@ async function uploadPhoto(taskId: string, token: string, mediaType: string) {
 }
 
 beforeAll(async () => {
+  await cleanTestData()
   app = await getApp()
 
   const buyer   = await registerUser(app, 'BUYER',  'ext1')
@@ -194,7 +195,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await cleanTestData()
+  // cleanup moved to beforeAll
   await closeApp()
 })
 

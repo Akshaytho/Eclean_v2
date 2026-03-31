@@ -72,7 +72,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await cleanTestData()
+  // cleanup moved to beforeAll
   await closeApp()
 })
 

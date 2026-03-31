@@ -127,7 +127,7 @@ beforeAll(async () => {
 }, 30_000)
 
 afterAll(async () => {
-  await cleanTestData()
+  // cleanup moved to beforeAll
   await closeApp()
 })
 
