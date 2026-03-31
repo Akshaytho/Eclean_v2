@@ -4,105 +4,130 @@
 
 ---
 
-## Last Session: 2026-03-30/31 (Session 6 — Image Capture Redesign + Silent Witness Protocol)
+## Last Session: 2026-03-31 (Session 7 — Testing + AI Verification Architecture + Reviewer Feedback)
 
-### Status: MASSIVE BUILD — 40+ files, 8 phases, 34 tests, deployed to Railway
+### Status: 229/229 tests passing, AI verification architecture finalized, deployed to Railway
 
 ### What was completed:
 
-**Image Capture Redesign — Full 8-Phase Implementation:**
+**Live Testing on iPhone (Expo Go):**
+- Buyer flow tested: login → post task → 5 reference photos → pay → BuyerTaskDetail shows paired photos
+- Worker flow tested: login → view reference photos → accept → start → submit
+- Found and fixed: reference point 403 for workers (OPEN tasks), React hooks ordering, camera issues in Expo Go
+- Found and fixed: work window blocking (disabled hardcoded window), start work alert noise
+- Found and fixed: rating SQL ROUND cast error, payout status FAILED → PENDING
 
-Phase 1: Database schema — TaskReferencePoint, WorkerPointSubmission, TaskEnvironmentFingerprint,
-  WorkerEnvironmentCapture, TaskMotionSummary, CitizenVerification + trust scores on profiles
+**AI Verification — Complete Architecture Rewrite:**
+- Switched from Anthropic Claude (out of credits) to OpenAI gpt-4o-mini
+- Provider abstraction: `verification.interface.ts` → swap AI providers with one config change
+- Single merged call: verification + fraud detection in ONE API call (was two separate calls)
+- 768px images via Cloudinary URL transform, detail:"auto" (~765 tokens/image)
+- Cost: ~$0.0006/verification ($14 budget = ~23,000 verifications)
+- Fallback: API failure after 2 retries → MANUAL_REVIEW, never auto-pass without AI
 
-Phase 2: Backend APIs — 5 reference point endpoints (buyer CRUD, worker submission, progress
-  with proximity-based verification reveal at 50m)
+**AI Prompt — 7 Verification + 4 Fraud Checks:**
+1. Photos match task description and category?
+2. Same angle and distance in before vs after?
+3. Area visibly cleaner?
+4. Before/after are different images?
+5. Cleaning evidence (mop marks, removed trash)?
+6. Watermarks, screenshots, UI artifacts?
+7. Indoor/outdoor consistent with task category?
++ Fraud: GPS anomalies, timing, motion, statistical patterns
 
-Phase 3: Pluggable rule engine (8 scoring layers — 5 core + 3 bonus), buyer accountability
-  (falseRejectionCount, auto-flag at 3+), AI paired image mode with two-phase cost optimization
+**Decision Logic (finalized per reviewer feedback):**
+- Rule ≥ 85 AND AI ≥ 0.75 AND fraud < 0.3 → AUTO_PASS
+- AI < 0.3 AND rule < 70 → REJECT (both signals bad)
+- AI < 0.3 AND rule ≥ 70 → MANUAL_REVIEW (bad photos, good metadata = buyer decides)
+- Fraud ≥ 0.8 → forces MANUAL_REVIEW even if AUTO_PASS (buyer sees anomalies)
+- Rule < 40 → HUMAN_REVIEW (skip AI, GPS drift possible)
+- API failure → MANUAL_REVIEW (never auto-pass on failure)
 
-Phase 4: Mobile buyer flow — 5-step wizard (Type→Details→Location→Photos→Confirm),
-  multi-photo reference capture grid, parallel uploads (3 at a time), BuyerTaskDetail
-  paired comparison view
+**Rule Engine — Reweighted + Smart Normalization:**
+- GPS proximity: 30pts (was 25)
+- Photo coverage: 25pts (unchanged)
+- Time on site: 20pts (was 15)
+- Verification completeness: 20pts (unchanged)
+- Duplicate image check: 10pts (was 15)
+- GPS fraud flags: 10pts (unchanged)
+- Bonus layers (EnvDNA, Zone Intelligence, Motion, Citizen): 5pts each
+- Smart normalization: exclude no-data bonus layers from maxPossible
+  (fixes: every worker hitting MANUAL_REVIEW during pilot when sensor data unavailable)
 
-Phase 5: Mobile worker flow — side-by-side CaptureCamera with proximity bar,
-  ReferencePointNavigator screen, ActiveTaskScreen conditional routing,
-  SubmitProofScreen per-point progress
+**Weakest Pair Selection:**
+- AI receives the pair with LOWEST GPS score (most suspicious)
+- Not random, not first — the weakest link gets AI scrutiny
 
-Phase 6: Silent layers — useEnvironmentalDNA hook (magnetometer + barometer + ambient light
-  + cell), motionTracker service (accelerometer classification), wired into worker flow
+**Tests — 229/229 Passing:**
+- rule-engine.test.ts: 12 unit tests (human behavior scenarios)
+- rule-engine-edge-cases.test.ts: 29 tests (boundaries, corruption, fraud, chaos)
+- reference-points.test.ts: 22 integration tests (full lifecycle)
+- reference-points-edge-cases.test.ts: 12 tests (concurrent accept, cancellation, limits)
+- critical-gaps.test.ts: 13 tests (payment trigger, schema validation, buyer fraud, expiry)
+- All existing tests: 141/141 (auth, tasks, wallet, admin, citizen, etc.)
+- Test isolation fixed: cleanTestData in beforeAll, not afterAll
 
-Phase 7: Citizen mesh — backend service + routes + CitizenVerifyScreen with reward system
+**New Feature — Task Expiry Job:**
+- `task-expiry.job.ts`: BullMQ repeatable every 30 min
+- Releases ACCEPTED tasks stuck 2+ hours
+- Releases IN_PROGRESS tasks stuck 4+ hours
+- Worker trust decremented, notification sent
 
-Phase 8: Adversarial AI — second AI model chained after verifier in BullMQ job
+**Duplicate Image Detection Layer:**
+- Rule engine layer catches workers reusing buyer's reference photos
+- URL match + photoHash match detection
+- Found during live testing: identical photos scored 90% → now caught
 
-**Tests: 34/34 passing (12 unit + 22 integration)**
+**Buyer Accountability:**
+- falseRejectionCount increments when buyer rejects AI-approved (≥0.85) work
+- Auto-flags buyer at 3+ false rejections
+- buyerTrustScore decrements by 5 per false rejection
 
-**Live testing fixes:**
-- Fixed idempotencyKey null vs undefined (Railway build error)
-- Installed missing exifr package
-- Fixed workers couldn't see reference points for OPEN tasks (403 bug)
-- Fixed React hooks ordering in TaskDetailScreen (render error)
-- Added reference photo previews on worker TaskDetailScreen (horizontal scroll + tap to fullscreen)
-- Added parallel photo uploads for faster PostTaskScreen
-- Disabled hardcoded work window (will use per-task DB fields)
-- GPS accuracy reduced from High to Balanced for faster location (3s → <1s)
-
-### Production DB State (task 5f17f26f):
-- 4 reference points with Cloudinary images
-- 6 worker submissions (4 AFTER + 2 VERIFICATION) — 2 manually inserted
-- 2 verification points selected (points 2 and 3)
-- Task status: IN_PROGRESS
-- Ready for: worker submit → rule engine → buyer review
+### Production State:
+- Railway deployed with all changes (latest: c7524a6)
+- OpenAI API key configured on Railway (OPENAI_API_KEY)
+- Docker Postgres + Redis running locally for tests
+- 2 test tasks in production DB (Drain clean: APPROVED, Bathroom cleaning: REJECTED)
 
 ### What needs to happen next:
 
-**Priority 1 — Continue live testing:**
-- Worker submits task → verify rule engine scores → buyer reviews paired photos
-- Test rejection + dispute flow with explanation screen
-- Test citizen verification flow
-- Build dev client for camera testing (`npx expo run:ios` or `run:android`)
+**Priority 1 — Before pilot:**
+- Deploy latest code to Railway (`railway up`)
+- Build dev client for iPhone (`npx expo run:ios`) — camera + sensors don't work in Expo Go
+- Test full flow with dev client: reference photos → side-by-side camera → submit → AI scores
+- Worker flow UI redesign (TaskDetailScreen, ActiveTaskScreen, ReferencePointNavigator)
 
-**Priority 2 — Worker flow redesign (UI/UX):**
-- TaskDetailScreen visual redesign
-- ActiveTaskScreen polish
-- ReferencePointNavigator map integration
-- Side-by-side camera testing with dev client
+**Priority 2 — Week 2 after pilot:**
+- Perceptual hashing (pHash) for duplicate/recycled photo detection across ALL tasks
+- Buyer feedback loop: after 200 tasks, correlate ruleEngineBreakdown with approve/reject outcomes
+- Resolution ladder: 256px → 768px → full based on borderline score
 
-**Priority 3 — Known issues to fix:**
-- Camera doesn't work in Expo Go — needs dev client build
-- EnvDNA sensors fail silently in Expo Go (need native modules)
-- Work window check disabled — implement per-task configurable windows from DB
-- Labels not saving (users skip them — make label input more prominent)
-- Rejection explanation screen not yet built (launch requirement from plan)
-- Worker dispute flow not yet built (launch requirement from plan)
+**Priority 3 — After 200 real tasks:**
+- Threshold recalibration from real outcome data
+- MobileNet embedding layer for manipulated duplicate detection
+- Citizen anti-collusion (different phone + 7-day account age)
 
-### Branch: image_capture_workflow (6 commits)
-- `43ed665` feat: image capture redesign — reference points + silent witness protocol
-- `872279e` fix: resolve TS build errors for Railway deploy
-- `c3b71d3` fix: allow workers to view reference points for OPEN tasks
-- `626752f` fix: extend work window for testing
-- `60dbc9c` fix: disable hardcoded work window
-- `82db88f` fix: comment out unused work window constants
+**Priority 4 — After 5000 tasks:**
+- Custom fine-tuned verification model from labeled data
+- Training flywheel
 
-### Dev environment:
-- Backend: Railway production — deployed and healthy with all new endpoints
-- Mobile: Expo SDK 54, dev server via `npx expo start`
-- Docker: Postgres + Redis running locally (for tests)
-- Testing on iPhone via Expo Go (camera needs dev client)
+### Key Architecture Decisions Made This Session:
+1. AI provider abstracted behind interface (swap OpenAI/Anthropic/custom)
+2. Single merged call (verification + fraud) not two separate calls
+3. Anchoring bias acknowledged but irrelevant for pilot scale
+4. Smart normalization (exclude no-data bonus layers) — self-healing as layers enable
+5. Auto-reject requires BOTH AI AND rule engine agreement
+6. Fraud score has teeth (≥0.8 overrides AUTO_PASS) but never auto-rejects alone
+7. Cost optimization is solved ($0.0006/task) — focus on fraud resistance (moat), not cost
 
-### Key new files:
-- `backend/src/modules/reference-points/` (4 files — schema, services, routes)
-- `backend/src/modules/verification/rule-engine.ts`
-- `backend/src/modules/environment/` (2 files — service, routes)
-- `backend/src/modules/citizen-verify/` (2 files — service, routes)
-- `backend/src/modules/ai/adversarial-ai.service.ts`
-- `mobile/src/api/referencePoints.api.ts`
-- `mobile/src/hooks/useEnvironmentalDNA.ts`
-- `mobile/src/services/motionTracker.ts`
-- `mobile/src/screens/worker/ReferencePointNavigator.tsx`
-- `mobile/src/screens/citizen/CitizenVerifyScreen.tsx`
-- `docs/eClean_v2_Image_Capture_Complete_Plan.md` (2500+ line spec)
-- `docs/diagrams/` (8 Mermaid workflow diagrams)
-- `backend/tests/rule-engine.test.ts` (12 unit tests)
-- `backend/tests/reference-points.test.ts` (22 integration tests)
+### Branch: image_capture_workflow (20+ commits)
+### Latest commit: c7524a6
+
+### New files this session:
+- `backend/src/modules/ai/verification.interface.ts`
+- `backend/src/modules/ai/openai.provider.ts`
+- `backend/src/jobs/task-expiry.job.ts`
+- `backend/tests/rule-engine-edge-cases.test.ts`
+- `backend/tests/reference-points-edge-cases.test.ts`
+- `backend/tests/critical-gaps.test.ts`
+- `docs/test-documentation.md`
