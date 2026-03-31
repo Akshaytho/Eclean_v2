@@ -198,9 +198,7 @@ const duplicateImageLayer: ScoringLayerConfig = {
     const buyerUrls = new Set(ctx.referencePoints.map((p) => p.buyerImageUrl))
     const duplicates = ctx.submissions.filter((s) => buyerUrls.has(s.imageUrl))
 
-    // Also check photoHash matches
-    const buyerHashes = new Set<string>()
-    // (buyer hashes aren't stored on reference points yet, but worker hashes can be compared)
+    // Also check photoHash duplicates among worker submissions
     const workerHashes = ctx.submissions.map((s) => s.photoHash).filter(Boolean)
     const hashDuplicates = workerHashes.filter((h, i) => workerHashes.indexOf(h) !== i)
 
