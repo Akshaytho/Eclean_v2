@@ -82,7 +82,7 @@ export function createPaymentReleaseWorker(): Worker {
           await prisma.notification.create({
             data: {
               userId: task.workerId,
-              type: 'TASK_APPROVED',
+              type: 'TASK_VERIFIED',
               title: 'Payment Released',
               body: `Payment for "${task.title}" has been auto-released. Thank you for your work!`,
               data: { taskId: task.id, autoReleased: true },
@@ -93,7 +93,7 @@ export function createPaymentReleaseWorker(): Worker {
           await prisma.notification.create({
             data: {
               userId: task.buyerId,
-              type: 'TASK_APPROVED',
+              type: 'TASK_VERIFIED',
               title: 'Payment Auto-Released',
               body: `Payment for "${task.title}" was auto-released after ${timeout}h. You can dispute within 24h.`,
               data: { taskId: task.id, autoReleased: true, disputeWindowHours: 24 },

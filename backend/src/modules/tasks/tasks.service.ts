@@ -11,7 +11,7 @@ import { DIRTY_LEVEL_PRICING } from './tasks.schema'
 import { emitTaskUpdated } from '../../realtime/socket'
 import { logTaskEvent } from '../../lib/event-log'
 import { payoutQueue, PAYOUT_QUEUE } from '../../jobs/payout.job'
-import { selectVerificationPoints } from '../reference-points/reference-points.service'
+// selectVerificationPoints removed — hidden verification points dropped
 import { verifyPaymentSignature, refundPayment } from '../payments/payment.service'
 import { logger } from '../../lib/logger'
 import type {
@@ -452,7 +452,7 @@ export async function rejectTask(buyerId: string, taskId: string, input: ReasonI
         await prisma.notification.create({
           data: {
             userId: buyerId,
-            type: 'BUYER_WARNING',
+            type: 'TASK_DISPUTED',  // reusing existing type for buyer warning
             title: 'Rejection Warning',
             body: `AI verified this work at ${Math.round(task.aiScore! * 100)}%. Repeated rejections of verified work may result in account review.`,
             data: { taskId, aiScore: task.aiScore },

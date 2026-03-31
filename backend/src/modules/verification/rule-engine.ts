@@ -302,7 +302,9 @@ const motionSignatureLayer: ScoringLayerConfig = {
   },
 }
 
-const citizenMeshLayer: ScoringLayerConfig = {
+// REMOVED from scoring pipeline — kept as reference for when citizen base grows
+// @ts-ignore — intentionally unused, preserved for future re-activation
+const _citizenMeshLayer: ScoringLayerConfig = {
   id: 'citizen_mesh',
   name: 'Citizen Mesh Verification',
   maxPoints: 5,

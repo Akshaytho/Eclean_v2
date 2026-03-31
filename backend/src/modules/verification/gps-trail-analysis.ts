@@ -66,7 +66,7 @@ export async function analyzeGPSTrail(taskId: string): Promise<GPSTrailAnalysis 
 
   const logs = await prisma.taskLocationLog.findMany({
     where: { taskId },
-    orderBy: { timestamp: 'asc' },
+    orderBy: { createdAt: 'asc' },
   })
 
   if (logs.length < 2) {
@@ -108,7 +108,7 @@ export async function analyzeGPSTrail(taskId: string): Promise<GPSTrailAnalysis 
     // Time segment calculation (time between this point and previous)
     if (i > 0) {
       const prev = logs[i - 1]
-      const segmentMs = log.timestamp.getTime() - prev.timestamp.getTime()
+      const segmentMs = log.createdAt.getTime() - prev.createdAt.getTime()
 
       // Check for GPS gaps
       if (segmentMs > GAP_THRESHOLD_MS) {
@@ -134,8 +134,8 @@ export async function analyzeGPSTrail(taskId: string): Promise<GPSTrailAnalysis 
     wasAtLocation = isAtLocation
   }
 
-  const firstTimestamp = logs[0].timestamp.getTime()
-  const lastTimestamp = logs[logs.length - 1].timestamp.getTime()
+  const firstTimestamp = logs[0].createdAt.getTime()
+  const lastTimestamp = logs[logs.length - 1].createdAt.getTime()
   const totalDurationMs = lastTimestamp - firstTimestamp
   const totalDurationSecs = Math.round(totalDurationMs / 1000)
   const totalDurationHours = totalDurationMs / 3600000
