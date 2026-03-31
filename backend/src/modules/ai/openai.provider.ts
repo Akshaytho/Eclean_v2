@@ -1,8 +1,10 @@
 /**
- * OpenAI Verification Provider — gpt-4o-mini
+ * OpenAI Verification Provider — gpt-4o
  *
  * Single merged call: verification + fraud in one JSON response
- * Images at 768px via Cloudinary transformation (detail: "auto")
+ * Images at 1024px via Cloudinary transformation (detail: "high")
+ * Sends ALL reference point pairs for maximum accuracy
+ * Budget: ₹5/task (~$0.06) — covers up to 5 pairs comfortably
  * Fallback: parse failure → null (caller handles MANUAL_REVIEW)
  */
 
@@ -15,10 +17,10 @@ import type {
   VerificationResult,
 } from './verification.interface'
 
-const MODEL = 'gpt-4o-mini'
+const MODEL = 'gpt-4o'
 
 export class OpenAIProvider implements AIVerificationProvider {
-  name = 'openai-gpt4o-mini'
+  name = 'openai-gpt4o'
   private client: OpenAI
 
   constructor() {
@@ -26,15 +28,14 @@ export class OpenAIProvider implements AIVerificationProvider {
   }
 
   async verify(images: VerificationImage[], metadata: VerificationMetadata): Promise<VerificationResult> {
-    // Resize images to 768px via Cloudinary URL transformation for cost efficiency
-    // 768px → 2x2 tiles → 765 tokens/image (vs 85K at full res)
+    // Resize images to 1024px via Cloudinary URL transformation
     const imageContent = images.map((img) => ({
       type: 'image_url' as const,
       image_url: {
         url: img.url.includes('/upload/')
-          ? img.url.replace('/upload/', '/upload/w_768,h_768,c_limit/')
+          ? img.url.replace('/upload/', '/upload/w_1024,h_1024,c_limit/')
           : img.url,
-        detail: 'auto' as const,
+        detail: 'high' as const,
       },
     }))
 
@@ -59,6 +60,8 @@ export class OpenAIProvider implements AIVerificationProvider {
   }
 
   private buildPrompt(images: VerificationImage[], metadata: VerificationMetadata): string {
+    const pairCount = Math.floor(images.length / 2)
+
     const imageDesc = images.map((img) =>
       `${img.role === 'reference' ? 'BUYER REFERENCE' : 'WORKER AFTER'} (Point ${img.pointIndex}${img.label ? `: ${img.label}` : ''}, GPS match: ${img.gpsScore ?? 'unknown'}/100)`,
     ).join('\n')
@@ -77,23 +80,26 @@ ${metadata.motionData ? `- Motion: ${Math.round(metadata.motionData.cleaningPct 
 ${metadata.envMatchScores.length > 0 ? `- Environmental match scores: [${metadata.envMatchScores.join(', ')}]` : '- Environmental: no data'}
 ${metadata.zoneDirtyScore != null ? `- Zone dirty score: ${metadata.zoneDirtyScore}/100` : '- Zone: no data'}
 
-IMAGES:
+IMAGES (${pairCount} before/after pairs — assess ALL of them):
 ${imageDesc}
 
-VERIFICATION CHECKS (assess each):
+VERIFICATION CHECKS (assess across ALL pairs):
 1. Do photos match the task description and category "${metadata.taskCategory}"?
 2. Are before and after taken from approximately the same angle and distance?
-3. Is the area VISIBLY cleaner in the after photo?
+3. Is the area VISIBLY cleaner in the after photos?
 4. Are before and after DIFFERENT images (not identical/screenshot)?
 5. Evidence of actual cleaning work (mop marks, wet surfaces, removed trash)?
 6. Any text, watermark, screenshot artifact, or UI overlay visible?
 7. Indoor/outdoor consistency with task category?
+8. Are ALL pairs consistent? (same location, same time of day, same weather)
+9. Does any single pair look faked while others look real?
 
-FRAUD CHECKS (assess from metadata):
+FRAUD CHECKS (assess from metadata + images):
 1. Any GPS scores suspiciously low (<25) or suspiciously identical?
 2. Time reasonable for ${metadata.totalReferencePoints} reference points?
 3. Motion data consistent with cleaning work?
 4. Any statistical anomalies?
+5. Do the images look like they came from the same session/device?
 
 Return ONLY valid JSON, no markdown, no explanation outside JSON:
 {"verification":{"score":0.85,"label":"GOOD","reasoning":"...","workEvident":true,"suspiciousActivity":false,"recommendation":"APPROVE"},"fraud":{"probability":0.1,"anomalies":[],"recommendation":"PASS"}}`

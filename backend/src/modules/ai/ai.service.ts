@@ -5,8 +5,8 @@
  * Provider: configurable (OpenAI by default, can swap to Anthropic/custom)
  * Fallback: parse failure or timeout → MANUAL_REVIEW (never auto-pass on failure)
  *
- * Cost: ~$0.0006 per verification (2 images at 768px + metadata + prompt)
- * Budget: $14 → ~23,000 verifications
+ * Cost: ~$0.04-0.06 per verification (ALL pairs at 1024px, gpt-4o, detail:high)
+ * Budget: ₹5/task (~$0.06) — deducted from buyer payment
  */
 
 import { z } from 'zod'
@@ -63,7 +63,7 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
   })
   if (!task) throw new Error(`Task ${taskId} not found`)
 
-  // Build images: send the WEAKEST pair (lowest GPS score) — catches most suspicious point
+  // Build images: send ALL pairs for maximum accuracy (₹5/task budget allows it)
   const images = buildImages(task)
 
   // Build metadata context
@@ -165,7 +165,7 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
   }
 }
 
-// ─── Image Selection: send the WEAKEST pair ──────────────────────────────────
+// ─── Image Selection: send ALL pairs for maximum accuracy ───────────────────
 
 function buildImages(task: {
   referencePoints: Array<{ id: string; pointIndex: number; label: string | null; buyerImageUrl: string; isVerificationPoint: boolean }>
@@ -173,7 +173,8 @@ function buildImages(task: {
   media: Array<{ type: string; url: string }>
 }): VerificationImage[] {
   if (task.referencePoints.length > 0 && task.workerSubmissions.length > 0) {
-    // New flow: find the pair with LOWEST GPS score (most suspicious)
+    // Send ALL pairs — AI sees every before/after comparison
+    // Sorted by GPS score (weakest first) so AI focuses on suspicious ones
     const pairs = task.referencePoints
       .map((rp) => {
         const sub = task.workerSubmissions.find(
@@ -184,13 +185,14 @@ function buildImages(task: {
       .filter((p) => p.sub != null)
       .sort((a, b) => a.gpsScore - b.gpsScore) // weakest first
 
-    const weakest = pairs[0]
-    if (weakest) {
-      return [
-        { url: weakest.rp.buyerImageUrl, role: 'reference', pointIndex: weakest.rp.pointIndex, label: weakest.rp.label, gpsScore: weakest.gpsScore },
-        { url: weakest.sub!.imageUrl, role: 'after', pointIndex: weakest.rp.pointIndex, label: weakest.rp.label, gpsScore: weakest.gpsScore },
-      ]
+    const images: VerificationImage[] = []
+    for (const pair of pairs) {
+      images.push(
+        { url: pair.rp.buyerImageUrl, role: 'reference', pointIndex: pair.rp.pointIndex, label: pair.rp.label, gpsScore: pair.gpsScore },
+        { url: pair.sub!.imageUrl, role: 'after', pointIndex: pair.rp.pointIndex, label: pair.rp.label, gpsScore: pair.gpsScore },
+      )
     }
+    return images
   }
 
   // Legacy flow: BEFORE + AFTER
