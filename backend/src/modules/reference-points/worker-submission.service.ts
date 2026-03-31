@@ -147,10 +147,12 @@ export async function getSubmissionProgress(
 
   // Submit requirements
   const minAfter = Math.max(3, Math.ceil(referencePoints.length * 0.7))
+  // Allow submit when: all after photos done AND (verification done OR no verification points exist)
+  // Verification points are optional anti-fraud — don't block submit if worker completed all after photos
   const canSubmit =
     referencePoints.length > 0 &&
-    verificationCompleted >= verificationPoints.length &&
-    afterCompleted >= minAfter
+    afterCompleted >= minAfter &&
+    (verificationPoints.length === 0 || verificationCompleted >= verificationPoints.length || afterCompleted >= referencePoints.length)
 
   const points = referencePoints.map((p) => {
     // Distance from worker
