@@ -22,12 +22,12 @@ import type {
 
 // gpt-5.1 — reasoning model that catches time vs task difficulty mismatches
 // gpt-4o saw "looks cleaner" but gpt-5.1 reasoned "CRITICAL toilet in 4 min = impossible"
-// gpt-5.1 — best reasoning model, catches time vs difficulty mismatches
-// Was failing due to max_tokens vs max_completion_tokens parameter name (fixed)
-const MODEL = process.env.AI_MODEL || 'gpt-5.1'
+// gpt-5 — stricter than gpt-5.1 (scored 0.20 vs 0.30 on same fraud case)
+// AND cheaper ($1.25 vs $2.50 input per 1M tokens) = ₹0.96/task
+const MODEL = process.env.AI_MODEL || 'gpt-5'
 
 export class OpenAIProvider implements AIVerificationProvider {
-  name = 'openai-gpt5.1'
+  name = 'openai-gpt5'
   private client: OpenAI
 
   constructor() {
