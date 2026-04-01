@@ -91,5 +91,14 @@ export async function buildApp(): Promise<FastifyInstance> {
     env:       env.NODE_ENV,
   }))
 
+  // TEMP debug — remove before production
+  app.get('/debug/reverify', async (req, reply) => {
+    const { taskId } = req.query as { taskId: string }
+    if (!taskId) return reply.status(400).send({ error: 'taskId required' })
+    const { verifyTaskSubmission } = require('./modules/ai/ai.service')
+    const result = await verifyTaskSubmission(taskId)
+    return reply.send({ result })
+  })
+
   return app
 }

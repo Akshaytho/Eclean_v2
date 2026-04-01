@@ -22,6 +22,8 @@ import type {
 
 // gpt-5.1 — reasoning model that catches time vs task difficulty mismatches
 // gpt-4o saw "looks cleaner" but gpt-5.1 reasoned "CRITICAL toilet in 4 min = impossible"
+// gpt-5.1 — best reasoning model, catches time vs difficulty mismatches
+// Was failing due to max_tokens vs max_completion_tokens parameter name (fixed)
 const MODEL = process.env.AI_MODEL || 'gpt-5.1'
 
 export class OpenAIProvider implements AIVerificationProvider {
@@ -48,7 +50,7 @@ export class OpenAIProvider implements AIVerificationProvider {
 
     const response = await this.client.chat.completions.create({
       model: MODEL,
-      max_tokens: 1024,
+      max_completion_tokens: 1024,  // newer models use this instead of max_tokens
       messages: [{
         role: 'user',
         content: [
@@ -99,12 +101,13 @@ VERIFICATION CHECKS (assess across ALL pairs):
 8. Are ALL pairs consistent? (same location, same time of day, same weather)
 9. Does any single pair look faked while others look real?
 
-FRAUD CHECKS (assess from metadata + images):
-1. Any GPS scores suspiciously low (<25) or suspiciously identical?
-2. Time reasonable for ${metadata.totalReferencePoints} reference points?
-3. Motion data consistent with cleaning work?
-4. Any statistical anomalies?
+CRITICAL REASONING CHECKS (think step by step):
+1. TIME vs DIFFICULTY: The worker spent ${metadata.timeSpentSecs ? Math.round(metadata.timeSpentSecs / 60) : '?'} minutes on a ${metadata.dirtyLevel} ${metadata.taskCategory} task with ${metadata.totalReferencePoints} areas. Is this physically possible? A CRITICAL dirty public toilet takes at minimum 15-20 minutes. A HEAVY street cleaning takes 20-30 minutes. If time is suspiciously low for the dirty level, lower your score significantly.
+2. REMAINING DIRT: Look carefully at the AFTER photos. Are there still visible stains, dirt, or debris that should have been cleaned? If the task is marked CRITICAL or HEAVY but after photos still show significant dirt, the work is incomplete.
+3. Any GPS scores suspiciously low (<25) or suspiciously identical?
+4. Motion data consistent with cleaning work? No motion data means phone was stationary — worker may not have been physically cleaning.
 5. Do the images look like they came from the same session/device?
+6. Could these photos have been taken without actually doing the cleaning? (e.g., just wetting the floor, or photographing from a different angle to hide remaining dirt)
 
 Return ONLY valid JSON, no markdown, no explanation outside JSON:
 {"verification":{"score":0.85,"label":"GOOD","reasoning":"...","workEvident":true,"suspiciousActivity":false,"recommendation":"APPROVE"},"fraud":{"probability":0.1,"anomalies":[],"recommendation":"PASS"}}`
