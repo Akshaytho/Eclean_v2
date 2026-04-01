@@ -1,0 +1,86 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#8B5CF6', 'secondaryColor': '#EDE9FE', 'lineColor': '#8B5CF6'}}}%%
+
+flowchart TD
+    subgraph TRIGGER["⏰ TRIGGER"]
+        T1["Worker completes task<br/>Status: APPROVED"]
+        T2["Random delay: 1-48 hours<br/>(prevents gaming)"]
+        T3["citizen-verify-scheduler job<br/>Runs every hour via BullMQ cron"]
+        T1 --> T2 --> T3
+    end
+
+    subgraph SELECT["🎯 CITIZEN SELECTION"]
+        S1["Find citizens within 500m<br/>of task location"]
+        S2{"Filters:<br/>✓ Active in last 7 days<br/>✓ Notifications enabled<br/>✓ Not buyer/worker of task<br/>✓ Not notified in 24h<br/>✓ < 3 pending verifications<br/>✓ Trust score > 30"}
+        S3["Select based on task value:<br/>< ₹500: 1 citizen<br/>₹500-2000: 2 citizens<br/>> ₹2000: 3 citizens"]
+        S4["Prefer:<br/>├── Closer distance<br/>└── Previous verify experience"]
+
+        S1 --> S2 --> S3 --> S4
+    end
+
+    subgraph NOTIFY["📱 NOTIFICATION"]
+        N1["Push notification sent:<br/>'📸 Quick verify near Park Gate!<br/>Is this area clean? ₹5 reward'"]
+        N2["Notification expires: 24 hours"]
+        N3{"Citizen<br/>responds?"}
+        N4["Try another batch<br/>after 12 hours"]
+        N5["Max 3 batches per task<br/>then mark 'unverified'"]
+
+        N1 --> N2 --> N3
+        N3 -->|"No response"| N4 --> N5
+    end
+
+    subgraph CITIZEN_FLOW["👤 CITIZEN VERIFICATION FLOW"]
+        C1["Citizen opens app<br/>from notification"]
+        C2["CitizenVerifyScreen shows:<br/>┌─────────────────────┐<br/>│ Worker's 'after' photo│<br/>│ [cleaned area image]  │<br/>└─────────────────────┘"]
+        C3["Options:<br/>📸 Take photo of area NOW<br/>OR<br/>Quick rate: 😊 😐 😠"]
+        C4["If photo: Open CaptureCamera<br/>Standard mode (no side-by-side)<br/>Capture GPS + timestamp"]
+        C5["Submit rating + optional photo<br/>POST /citizen/verify/{taskId}"]
+
+        C1 --> C2 --> C3 --> C4 --> C5
+    end
+
+    subgraph COMPARE["🔍 COMPARISON"]
+        CP1["Backend receives citizen submission"]
+        CP2{"Photo<br/>provided?"}
+        CP3["AI compares citizen photo<br/>vs worker 'after' photo<br/>Same location + still clean?"]
+        CP4["Rating only:<br/>Lower confidence"]
+        CP5{"Area still<br/>clean?"}
+
+        CP1 --> CP2
+        CP2 -->|"Yes"| CP3 --> CP5
+        CP2 -->|"No (rating only)"| CP4 --> CP5
+    end
+
+    subgraph RESULT["📊 RESULTS"]
+        R1["✅ CLEAN CONFIRMED<br/>├── Worker trust score: +1<br/>├── Citizen reward: ₹5<br/>└── Task verification: CONFIRMED"]
+        R2["❌ DIRTY FOUND<br/>├── Worker trust score: -3<br/>├── Citizen reward: ₹10 (bonus!)<br/>├── Escalate to supervisor<br/>└── Flag worker for review"]
+        R3["🤷 PARTIALLY CLEAN<br/>├── Worker trust score: 0<br/>├── Citizen reward: ₹5<br/>└── Log for analytics"]
+        R4["⚖️ CITIZENS DISAGREE<br/>├── 2 say clean, 1 says dirty<br/>├── Escalate to supervisor<br/>└── All citizens get rewarded"]
+    end
+
+    subgraph REWARDS["💰 CITIZEN REWARDS"]
+        RW1["Rating only (no photo): ₹2"]
+        RW2["Rating + photo (clean): ₹5"]
+        RW3["Rating + photo (found fraud): ₹10"]
+        RW4["10th verification streak: ₹20 bonus"]
+        RW5["Accumulated in citizen wallet<br/>Minimum withdrawal: ₹50<br/>Paid via UPI"]
+    end
+
+    subgraph TRUST["⭐ WORKER TRUST SCORE"]
+        TS1["Range: 0-100<br/>Start: 50 (neutral)"]
+        TS2["TIERS:<br/>0-20: BLOCKED (no tasks)<br/>21-40: PROBATION (limited)<br/>41-60: STANDARD (normal)<br/>61-80: TRUSTED (priority)<br/>81-100: ELITE (instant pay)"]
+        TS3["INCREASES:<br/>+2: Task approved by buyer<br/>+1: Citizen confirms clean<br/>+3: AI score > 90<br/>+5: 10-task streak"]
+        TS4["DECREASES:<br/>-5: Task rejected<br/>-3: Citizen says dirty<br/>-10: AI detects fraud<br/>-15: Confirmed fraud"]
+    end
+
+    T3 --> SELECT
+    S4 --> N1
+    N3 -->|"Responds"| C1
+    C5 --> CP1
+    CP5 -->|"Yes"| R1
+    CP5 -->|"No"| R2
+    CP5 -->|"Partial"| R3
+    R1 --> TRUST
+    R2 --> TRUST
+    R1 --> REWARDS
+    R2 --> REWARDS
+    R3 --> REWARDS

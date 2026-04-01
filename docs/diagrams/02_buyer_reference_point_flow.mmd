@@ -1,0 +1,67 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#3B82F6', 'secondaryColor': '#DBEAFE', 'lineColor': '#3B82F6'}}}%%
+
+flowchart TD
+    subgraph STEP1["Step 1: Choose Category"]
+        S1A["Street Cleaning"]
+        S1B["Drain Cleaning"]
+        S1C["Wall Cleaning"]
+        S1D["Park Cleanup"]
+    end
+
+    subgraph STEP2["Step 2: Task Details"]
+        S2A["Title: Street near park gate"]
+        S2B["Description: Garbage dumped..."]
+        S2C["Urgency: LOW | MEDIUM | HIGH"]
+        S2D["Area Size: SMALL | MEDIUM | LARGE"]
+        S2E["Environment: INDOOR | OUTDOOR"]
+    end
+
+    subgraph STEP3["Step 3: Set Location"]
+        S3A["📍 Map View<br/>Drop pin on location"]
+        S3B["Use My Current GPS"]
+        S3C["Auto-fill address"]
+    end
+
+    subgraph STEP4["Step 4: Document Area (NEW)"]
+        direction TB
+        S4A["Open CaptureCamera<br/>photoType = REFERENCE"]
+        S4B["📸 Capture Photo<br/>Parallel: Photo + GPS + Hash"]
+        S4C["Add Label (optional)<br/>'Near the gate'<br/>'Drain corner'"]
+        S4D["Save to local state<br/>referencePhotos array"]
+        S4E{"More<br/>photos?"}
+        S4F["Grid View:<br/>┌──┐ ┌──┐ ┌──┐ ┌──┐<br/>│📷│ │📷│ │📷│ │➕│<br/>│1 │ │2 │ │3 │ │Add│<br/>└──┘ └──┘ └──┘ └──┘"]
+        S4G["Progress: 3/10 captured<br/>✅ Minimum 3 required"]
+
+        S4A --> S4B --> S4C --> S4D --> S4E
+        S4E -->|"Yes (max 10)"| S4A
+        S4E -->|"No"| S4F
+        S4F --> S4G
+    end
+
+    subgraph STEP5["Step 5: Confirm & Pay"]
+        S5A["Task Summary:<br/>Title + Category + Location<br/>Reference Points: 4 photos"]
+        S5B["💳 Razorpay Checkout<br/>Task Fee: ₹500<br/>Platform Fee: ₹50<br/>Total: ₹550"]
+        S5C["Payment Success"]
+    end
+
+    subgraph UPLOAD["Post-Payment Upload"]
+        U1["POST /api/v1/buyer/tasks<br/>Create task → get taskId"]
+        U2["POST /tasks/{id}/environment<br/>Send buyer's EnvDNA"]
+        U3["FOR EACH photo:<br/>POST /tasks/{id}/reference-points<br/>file + pointIndex + label + GPS"]
+        U4["Update task:<br/>totalReferencePoints = count"]
+        U5["✅ Task OPEN<br/>Visible to workers"]
+
+        U1 --> U2 --> U3 --> U4 --> U5
+    end
+
+    subgraph METADATA["Auto-Captured Per Photo"]
+        M1["GPS: lat, lng (expo-location)"]
+        M2["Timestamp: ISO 8601 UTC"]
+        M3["Hash: SHA-256 (expo-crypto)"]
+        M4["Device ID: model name"]
+        M5["EnvDNA: Mag + Baro + Light + Cell"]
+    end
+
+    STEP1 --> STEP2 --> STEP3 --> STEP4 --> STEP5
+    S5C --> U1
+    S4B -.->|"Silently captured"| METADATA

@@ -1,0 +1,83 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#F59E0B', 'secondaryColor': '#FEF3C7', 'lineColor': '#F59E0B'}}}%%
+
+flowchart TD
+    subgraph INPUT["📥 INPUT: All Evidence"]
+        I1["WorkerPointSubmissions<br/>Photos + GPS + Hash + EnvDNA"]
+        I2["TaskReferencePoints<br/>Buyer photos + GPS"]
+        I3["TaskMotionSummary<br/>Cleaning %, Walking %, etc."]
+        I4["WorkerEnvironmentCapture<br/>EnvDNA at start + photos + submit"]
+        I5["TaskEnvironmentFingerprint<br/>Buyer's EnvDNA baseline"]
+        I6["Task metadata<br/>Duration, location, category"]
+    end
+
+    subgraph RULE["⚡ RULE ENGINE (Instant — 5ms)"]
+        R1["1️⃣ Verification Completeness: 20 pts<br/>verDone / verRequired × 20<br/>Example: 2/2 = 20 pts"]
+        R2["2️⃣ Photo Coverage: 25 pts<br/>min(afterCount / totalPoints, 1) × 25<br/>Example: 4/4 = 25 pts"]
+        R3["3️⃣ GPS Proximity Average: 25 pts<br/>avgLocationScore / 100 × 25<br/>Example: avg 90 = 22.5 pts"]
+        R4["4️⃣ Time on Site: 15 pts<br/>min(actual / expected, 1) × 15<br/>Expected = max(5, points × 3) min"]
+        R5["5️⃣ No Fraud Flags: 15 pts<br/>15 - (flaggedPhotos × 5)<br/>Example: 0 flags = 15 pts"]
+        R6["SUBTOTAL: /100"]
+        R7["6️⃣ EnvDNA Bonus: +5 pts<br/>matchScore > 80% → +5"]
+        R8["7️⃣ Motion Bonus: +5 pts<br/>cleaningPct > 50% → +5<br/>redFlag → -10 penalty"]
+        R9["FINAL SCORE<br/>Normalized to 0-100"]
+
+        R1 --> R6
+        R2 --> R6
+        R3 --> R6
+        R4 --> R6
+        R5 --> R6
+        R6 --> R7 --> R8 --> R9
+    end
+
+    subgraph AI_VERIFY["🤖 AI VERIFIER (Async — ~10s)"]
+        AV1["Model: Claude Sonnet 4.5"]
+        AV2["Input: Paired before/after images<br/>Per reference point"]
+        AV3["Task: Assess cleaning quality<br/>Same location? Cleaner? Work evident?"]
+        AV4["Output:<br/>score: 0-1<br/>label: EXCELLENT|GOOD|UNCERTAIN|POOR<br/>workEvident: boolean<br/>recommendation: APPROVE|REVIEW|REJECT"]
+        AV1 --> AV2 --> AV3 --> AV4
+    end
+
+    subgraph AI_COST["💰 Two-Phase Cost Optimization"]
+        AC1["Phase 1: Quick Check<br/>Send only 2 verification pairs (4 images)<br/>Cost: ~$0.01"]
+        AC2{"Score > 0.8?"}
+        AC3["✅ SKIP Phase 2<br/>Save $0.03"]
+        AC4["Phase 2: Full Analysis<br/>Send ALL pairs<br/>Cost: ~$0.03-0.05"]
+        AC1 --> AC2
+        AC2 -->|"Yes (80% of tasks)"| AC3
+        AC2 -->|"No"| AC4
+    end
+
+    subgraph AI_ADVERSARY["🕵️ AI ADVERSARY (Async — ~15s)"]
+        AA1["Model: Claude Sonnet 4.5<br/>DIFFERENT system prompt:<br/>'Find ANY reason this is fraud'"]
+        AA2["Checks:<br/>├── Photo consistency (clouds, shadows, lighting)<br/>├── GPS path logic (no teleportation)<br/>├── Temporal consistency (timestamps in order)<br/>├── EnvDNA match (buyer vs worker fingerprint)<br/>├── Motion data (cleaning activity present?)<br/>├── AI generation artifacts<br/>└── Historical patterns (repeat offender?)"]
+        AA3["Output:<br/>fraudProbability: 0-1<br/>anomalies: [{type, description, severity}]<br/>recommendation: PASS|FLAG|REJECT"]
+        AA1 --> AA2 --> AA3
+    end
+
+    subgraph DECISION["🎯 DECISION MATRIX"]
+        D1{"AI Verifier<br/>+ AI Adversary<br/>+ Rule Score"}
+        D2["✅ AUTO-APPROVE<br/>Rule > 95<br/>Verifier: APPROVE<br/>Adversary: PASS<br/>→ Instant payment"]
+        D3["🔍 SUPERVISOR REVIEW<br/>AIs disagree<br/>OR Rule 65-94<br/>→ Buyer/supervisor decides"]
+        D4["❌ AUTO-REJECT<br/>Rule < 65<br/>Both AIs reject<br/>→ Worker notified with reason"]
+
+        D1 -->|"All agree PASS<br/>+ high score"| D2
+        D1 -->|"Disagreement<br/>or medium score"| D3
+        D1 -->|"All agree FAIL<br/>or low score"| D4
+    end
+
+    subgraph OUTCOMES["📊 OUTCOMES"]
+        O1["APPROVED:<br/>├── Create Payout (10% platform fee)<br/>├── Worker trust score +2<br/>├── Update completedTasks count<br/>└── Queue citizen mesh (1-48h)"]
+        O2["REVIEWED:<br/>├── Buyer sees paired photos + scores<br/>├── AI reasoning displayed<br/>└── Buyer approves or rejects"]
+        O3["REJECTED:<br/>├── Worker trust score -5<br/>├── Worker can dispute<br/>└── If disputed → supervisor review"]
+    end
+
+    INPUT --> RULE
+    INPUT --> AI_VERIFY
+    AV4 -->|"Triggers adversary"| AI_ADVERSARY
+    AI_VERIFY -.-> AI_COST
+    R9 --> DECISION
+    AV4 --> DECISION
+    AA3 --> DECISION
+    D2 --> O1
+    D3 --> O2
+    D4 --> O3

@@ -1,0 +1,69 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#8B5CF6', 'secondaryColor': '#EDE9FE', 'lineColor': '#8B5CF6'}}}%%
+
+flowchart TD
+    subgraph OVERVIEW["🔇 SILENT WITNESS PROTOCOL — Zero Worker Effort"]
+        OV1["Worker experience: UNCHANGED<br/>Accept → Go → Clean → Photo → Submit<br/><br/>Phone does everything silently.<br/>Worker never knows these layers exist."]
+    end
+
+    subgraph LAYER1["🧬 LAYER 1: Environmental DNA Fingerprinting"]
+        direction TB
+        L1A["WHAT: Multi-sensor location signature<br/>├── WiFi SSIDs + signal strengths (Android)<br/>├── Cell tower ID + signal strength<br/>├── Magnetometer XYZ (unique per building)<br/>├── Barometric pressure (altitude/floor)<br/>└── Ambient light level (indoor/outdoor)"]
+        L1B["WHEN CAPTURED:<br/>├── Buyer: during reference photo capture<br/>├── Worker: on 'Start Work' tap<br/>├── Worker: with each photo capture<br/>└── Worker: on task submit"]
+        L1C["HOW COMPARED:<br/>WiFi match: 30 pts<br/>Cell tower: 25 pts<br/>Magnetometer proximity: 25 pts<br/>Barometer match: 10 pts<br/>Light consistency: 10 pts<br/>= Score 0-100"]
+        L1D["WHY UNFAKEABLE:<br/>To spoof this, fraudster needs to:<br/>├── Set up fake WiFi networks with exact signal strengths<br/>├── Place fake cell towers<br/>├── Manipulate magnetic fields<br/>├── Change atmospheric pressure<br/>└── PHYSICALLY IMPOSSIBLE remotely"]
+        L1E["IMPLEMENTATION:<br/>useEnvironmentalDNA() hook<br/>~60 lines mobile code<br/>expo-sensors + NetInfo"]
+
+        L1A --> L1B --> L1C --> L1D --> L1E
+    end
+
+    subgraph LAYER2["🏃 LAYER 2: Motion Signature Classification"]
+        direction TB
+        L2A["WHAT: Accelerometer patterns = work proof<br/><br/>Sweeping:  ╱╲╱╲╱╲╱╲ (rhythmic, 0.5-2 Hz)<br/>Scrubbing: ⫿⫿⫿⫿⫿⫿ (high freq, small amp)<br/>Walking:   ⋀_⋀_⋀_⋀_ (regular Z impulse)<br/>Standing:  ________ (flat line — NO WORK)<br/>Vehicle:   ~∿╱~∿╱~ (irregular vibration)"]
+        L2B["WHEN: Entire task duration<br/>Sampled at 10Hz<br/>Processed in 30-second windows<br/>Classification per window"]
+        L2C["OUTPUT (on submit):<br/>cleaningPct: 0.65 (65% of time cleaning)<br/>walkingPct: 0.20<br/>standingPct: 0.10<br/>vehiclePct: 0.05"]
+        L2D["FRAUD DETECTION:<br/>🔴 RED FLAG: vehicle > 30% (drove around)<br/>🔴 RED FLAG: standing > 70% (stood still)<br/>🔴 RED FLAG: cleaning < 10% for 20+ min task<br/>🟡 YELLOW: standing > 40%<br/>🟡 YELLOW: cleaning < 30%<br/>🟢 GREEN: cleaning > 50%, walking 10-30%"]
+        L2E["V1 IMPLEMENTATION (No ML):<br/>Simple threshold rules on<br/>accelerometer variance<br/>~100 lines mobile code<br/>expo-sensors Accelerometer"]
+
+        L2A --> L2B --> L2C --> L2D --> L2E
+    end
+
+    subgraph LAYER5["🏘️ LAYER 5: Citizen Mesh Verification"]
+        direction TB
+        L5A["WHEN: 1-48 hours AFTER task completion<br/>Random delay prevents gaming<br/>Worker is long gone"]
+        L5B["WHO: Citizens within 500m<br/>├── Must have app + notifications<br/>├── Active in last 7 days<br/>├── Not buyer or worker of this task<br/>├── Not notified in last 24h<br/>└── Select 1-3 based on task value"]
+        L5C["CITIZEN RECEIVES:<br/>'📸 Quick verify near Park Gate!<br/>Is this area clean? ₹5 reward'"]
+        L5D["CITIZEN FLOW (10 seconds):<br/>1. See worker's 'after' photo<br/>2. Open camera → snap current state<br/>3. Rate: 😊 Clean | 😐 Partial | 😠 Dirty<br/>4. Done → ₹5 credited"]
+        L5E["RESULT:<br/>Clean → Worker trust +1, Citizen ₹5<br/>Dirty → Worker trust -3, Citizen ₹10<br/>Multiple citizens disagree → Supervisor"]
+        L5F["IMPLEMENTATION:<br/>~200 lines backend<br/>~150 lines mobile<br/>1 new screen + 1 cron job"]
+
+        L5A --> L5B --> L5C --> L5D --> L5E --> L5F
+    end
+
+    subgraph LAYER6["⚔️ LAYER 6: Adversarial Dual-AI"]
+        direction TB
+        L6A["TWO AIs WITH OPPOSING GOALS:<br/><br/>AI-1 (Verifier): 'Was the work done well?'<br/>AI-2 (Adversary): 'Is ANY of this evidence fake?'"]
+        L6B["AI ADVERSARY CHECKS:<br/>├── Photo EXIF vs metadata timestamps<br/>├── Cloud/sky patterns across photos<br/>├── Shadow angles vs timestamp (sun position)<br/>├── EnvDNA: buyer vs worker match<br/>├── Motion: cleaning activity vs duration<br/>├── AI generation artifacts in photos<br/>├── GPS path logic (no teleportation)<br/>└── Historical pattern matching"]
+        L6C["DECISION:<br/>Both PASS → AUTO-APPROVE (instant pay)<br/>Disagree → SUPERVISOR REVIEW<br/>Both FAIL → AUTO-REJECT"]
+        L6D["IMPLEMENTATION:<br/>~120 lines backend<br/>Same Claude API, different prompts<br/>Two-phase to save 55% cost"]
+
+        L6A --> L6B --> L6C --> L6D
+    end
+
+    subgraph FRAUD_MATRIX["🛡️ FRAUD DETECTION COVERAGE"]
+        FM1["GPS spoofing → CAUGHT BY: EnvDNA + Motion"]
+        FM2["No actual cleaning → CAUGHT BY: Motion + AI + Citizen"]
+        FM3["AI-generated photos → CAUGHT BY: Hash + Adversarial AI"]
+        FM4["Wrong location → CAUGHT BY: GPS + EnvDNA + Citizen"]
+        FM5["Partial cleaning → CAUGHT BY: Coverage + AI + Citizen"]
+        FM6["Old/stock photos → CAUGHT BY: EnvDNA + Hash + Motion"]
+        FM7["Rushed job → CAUGHT BY: Motion + Time + AI"]
+    end
+
+    OVERVIEW --> LAYER1
+    OVERVIEW --> LAYER2
+    OVERVIEW --> LAYER5
+    OVERVIEW --> LAYER6
+    LAYER1 --> FRAUD_MATRIX
+    LAYER2 --> FRAUD_MATRIX
+    LAYER5 --> FRAUD_MATRIX
+    LAYER6 --> FRAUD_MATRIX

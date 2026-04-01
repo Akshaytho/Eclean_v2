@@ -1,0 +1,69 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#DC2626', 'lineColor': '#DC2626'}}}%%
+
+flowchart LR
+    subgraph FRAUD["🚨 FRAUD ATTEMPTS"]
+        F1["🗺️ GPS Spoofing<br/>Fake location from home"]
+        F2["🧹 No Actual Cleaning<br/>Visit site, take photos, leave"]
+        F3["🤖 AI-Generated Photos<br/>Use AI to make clean images"]
+        F4["📍 Wrong Location<br/>Photos from different place"]
+        F5["½ Partial Cleaning<br/>Clean 2 of 7 spots"]
+        F6["📷 Old/Stock Photos<br/>Reuse previous photos"]
+        F7["⏱️ Rushed Job<br/>5 min for 2-hour task"]
+        F8["👤 Identity Fraud<br/>Send someone else"]
+    end
+
+    subgraph LAYERS["🛡️ DETECTION LAYERS"]
+        L1["📍 GPS Match<br/>Haversine distance<br/>per reference point"]
+        L2["🧬 EnvDNA<br/>WiFi + Cell + Mag<br/>+ Baro + Light"]
+        L3["🏃 Motion Sig<br/>Accelerometer<br/>Activity classification"]
+        L4["🔒 Photo Hash<br/>SHA-256 chain<br/>Tamper detection"]
+        L5["🤖 AI Verifier<br/>Paired image<br/>quality analysis"]
+        L6["🕵️ AI Adversary<br/>Cross-modal<br/>fraud detection"]
+        L7["🏘️ Citizen Mesh<br/>Post-task<br/>crowd verification"]
+        L8["⭐ Trust Score<br/>Historical<br/>pattern analysis"]
+    end
+
+    F1 -->|"❌ CAUGHT"| L2
+    F1 -->|"❌ CAUGHT"| L3
+
+    F2 -->|"❌ CAUGHT"| L3
+    F2 -->|"❌ CAUGHT"| L5
+    F2 -->|"❌ CAUGHT"| L7
+
+    F3 -->|"❌ CAUGHT"| L4
+    F3 -->|"❌ CAUGHT"| L6
+
+    F4 -->|"❌ CAUGHT"| L1
+    F4 -->|"❌ CAUGHT"| L2
+    F4 -->|"❌ CAUGHT"| L7
+
+    F5 -->|"❌ CAUGHT"| L5
+    F5 -->|"❌ CAUGHT"| L7
+
+    F6 -->|"❌ CAUGHT"| L2
+    F6 -->|"❌ CAUGHT"| L4
+    F6 -->|"❌ CAUGHT"| L3
+
+    F7 -->|"❌ CAUGHT"| L3
+    F7 -->|"❌ CAUGHT"| L5
+
+    F8 -->|"❌ CAUGHT"| L3
+    F8 -->|"❌ CAUGHT"| L8
+
+    style F1 fill:#FEE2E2,stroke:#DC2626
+    style F2 fill:#FEE2E2,stroke:#DC2626
+    style F3 fill:#FEE2E2,stroke:#DC2626
+    style F4 fill:#FEE2E2,stroke:#DC2626
+    style F5 fill:#FEE2E2,stroke:#DC2626
+    style F6 fill:#FEE2E2,stroke:#DC2626
+    style F7 fill:#FEE2E2,stroke:#DC2626
+    style F8 fill:#FEE2E2,stroke:#DC2626
+
+    style L1 fill:#DBEAFE,stroke:#3B82F6
+    style L2 fill:#EDE9FE,stroke:#8B5CF6
+    style L3 fill:#D1FAE5,stroke:#10B981
+    style L4 fill:#FEF3C7,stroke:#F59E0B
+    style L5 fill:#DBEAFE,stroke:#3B82F6
+    style L6 fill:#FEE2E2,stroke:#EF4444
+    style L7 fill:#EDE9FE,stroke:#8B5CF6
+    style L8 fill:#D1FAE5,stroke:#10B981

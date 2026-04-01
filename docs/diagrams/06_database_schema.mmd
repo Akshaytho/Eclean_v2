@@ -1,0 +1,149 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#EF4444', 'lineColor': '#6B7280'}}}%%
+
+erDiagram
+    Task ||--o{ TaskReferencePoint : "has reference points"
+    Task ||--o{ WorkerPointSubmission : "has worker submissions"
+    Task ||--o| TaskEnvironmentFingerprint : "has buyer env fingerprint"
+    Task ||--o{ WorkerEnvironmentCapture : "has worker env captures"
+    Task ||--o| TaskMotionSummary : "has motion summary"
+    Task ||--o{ CitizenVerification : "has citizen verifications"
+    Task ||--o{ TaskMedia : "has legacy media"
+    TaskReferencePoint ||--o{ WorkerPointSubmission : "has worker submissions"
+
+    Task {
+        string id PK
+        string buyerId FK
+        string workerId FK
+        string title
+        string description
+        string category
+        string status
+        string indoorOutdoor "NEW: INDOOR|OUTDOOR|MIXED"
+        int totalReferencePoints "NEW: 0-10"
+        string areaSizeEstimate "NEW: SMALL|MEDIUM|LARGE"
+        datetime workStartedAt "NEW"
+        int workDurationSecs "NEW"
+        string deviceIntegrityStatus "NEW"
+        int ruleEngineScore "NEW: 0-100"
+        string ruleEngineBreakdown "NEW: JSON"
+        float adversarialScore "NEW: 0-1"
+        string adversarialAnomalies "NEW: JSON"
+        string finalDecision "NEW: AUTO_APPROVE|REVIEW|REJECT"
+        float envMatchScore "NEW: 0-100"
+        float motionCleaningPct "NEW: 0-1"
+        boolean motionHasRedFlag "NEW"
+        int trustScoreChange "NEW"
+    }
+
+    TaskReferencePoint {
+        string id PK
+        string taskId FK
+        int pointIndex "1-10"
+        string label "optional buyer note"
+        string buyerImageUrl "Cloudinary URL"
+        string buyerImagePublicId
+        float buyerLat
+        float buyerLng
+        float buyerHeading
+        boolean isVerificationPoint "2 random points"
+        datetime createdAt
+    }
+
+    WorkerPointSubmission {
+        string id PK
+        string taskId FK
+        string referencePointId FK
+        string workerId FK
+        string mediaType "AFTER or VERIFICATION"
+        string imageUrl "Cloudinary URL"
+        string imagePublicId
+        float workerLat
+        float workerLng
+        float workerHeading
+        string photoHash "SHA-256"
+        datetime capturedAt
+        string deviceId
+        string idempotencyKey UK
+        string status "UPLOADED|FAILED"
+        float envMagX "Magnetometer"
+        float envMagY
+        float envMagZ
+        float envBarometer
+        float envAmbientLight
+        string envCellType
+        float locationMatchScore "0-100"
+        float visualSimilarityScore "future"
+        datetime createdAt
+    }
+
+    TaskEnvironmentFingerprint {
+        string id PK
+        string taskId FK_UK
+        float magX
+        float magY
+        float magZ
+        float barometer
+        float ambientLight
+        string cellType
+        string cellCarrier
+        string wifiNetworks "JSON array"
+        datetime capturedAt
+    }
+
+    WorkerEnvironmentCapture {
+        string id PK
+        string taskId FK
+        string workerId FK
+        string captureType "START|PHOTO|SUBMIT"
+        float magX
+        float magY
+        float magZ
+        float barometer
+        float ambientLight
+        string cellType
+        string cellCarrier
+        string wifiNetworks "JSON array"
+        float matchScore "0-100 vs buyer"
+        datetime capturedAt
+    }
+
+    TaskMotionSummary {
+        string id PK
+        string taskId FK_UK
+        string workerId FK
+        float cleaningPct "0-1"
+        float walkingPct "0-1"
+        float standingPct "0-1"
+        float vehiclePct "0-1"
+        int totalWindows "30-sec windows"
+        int durationSecs
+        boolean hasRedFlag
+        boolean hasYellowFlag
+    }
+
+    CitizenVerification {
+        string id PK
+        string taskId FK
+        string citizenId FK
+        string photoUrl "optional Cloudinary URL"
+        string photoPublicId
+        string rating "CLEAN|PARTIALLY|DIRTY"
+        float citizenLat
+        float citizenLng
+        boolean matchesWorker "AI comparison"
+        int rewardAmount "paise"
+        boolean rewardPaid
+        datetime verifiedAt
+    }
+
+    TaskMedia {
+        string id PK
+        string taskId FK
+        string url "Cloudinary URL"
+        string publicId
+        string mimeType
+        int sizeBytes
+        string type "BEFORE|AFTER|PROOF|REFERENCE|VERIFICATION|ARRIVAL"
+        string idempotencyKey UK
+        datetime createdAt
+    }

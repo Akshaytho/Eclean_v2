@@ -1,0 +1,93 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#10B981', 'secondaryColor': '#D1FAE5', 'lineColor': '#10B981'}}}%%
+
+flowchart TD
+    subgraph ACCEPT["Task Acceptance"]
+        A1["Worker taps 'Accept Task'"]
+        A2["POST /worker/tasks/{id}/accept"]
+        A3["Backend: selectVerificationPoints()<br/>Randomly pick 2 points<br/>Mark isVerificationPoint = true<br/>DO NOT reveal to worker"]
+        A4["Mobile: Preload reference images<br/>Download all buyer photos<br/>to device storage<br/>Works offline after this"]
+        A1 --> A2 --> A3 --> A4
+    end
+
+    subgraph TRAVEL["Travel to Site"]
+        T1["Worker navigates to location"]
+        T2["Distance indicator:<br/>'📍 250m from task'"]
+        T3{"Within<br/>500m?"}
+        T4["'Start Work' button active"]
+        T5["'Too far to start'<br/>button disabled"]
+        T1 --> T2 --> T3
+        T3 -->|"Yes"| T4
+        T3 -->|"No"| T5
+        T5 --> T1
+    end
+
+    subgraph START["Start Work"]
+        ST1["Worker taps 'Start Work'"]
+        ST2["POST /worker/tasks/{id}/start<br/>Geofence check: 500m"]
+        ST3["Status: IN_PROGRESS<br/>Timer starts from server time"]
+        ST4["🔇 SILENT: Capture EnvDNA"]
+        ST5["🔇 SILENT: Start Motion Tracking<br/>Accelerometer 10Hz"]
+        ST6["🔇 SILENT: GPS tracking<br/>socket.emit every 10s"]
+        ST1 --> ST2 --> ST3
+        ST3 --> ST4
+        ST3 --> ST5
+        ST3 --> ST6
+    end
+
+    subgraph NAVIGATOR["Reference Point Navigator Screen"]
+        N1["Map View<br/>📍1 📍2 📍3 📍4<br/>🔵 Worker location"]
+        N2["Point List (sorted by distance):<br/>✅ Point 1 · Gate · 12m<br/>⬜ Point 2 · Drain · 8m<br/>⬜ Point 3 · Wall · 45m<br/>⬜ Point 4 · Tree · 120m"]
+        N3["Progress Bar:<br/>1/4 after · 0/2 verified"]
+        N4["'📸 Capture Next Point' button"]
+    end
+
+    subgraph PROXIMITY["Proximity-Based Reveal"]
+        P1{"Worker GPS<br/>within 50m of<br/>verification point?"}
+        P2["🔒 VERIFY badge appears<br/>'This is a verification point'"]
+        P3["Point shows as regular<br/>No special badge"]
+        P1 -->|"Yes"| P2
+        P1 -->|"No"| P3
+    end
+
+    subgraph CAMERA["Side-by-Side Camera"]
+        direction TB
+        CAM1["Open CaptureCamera<br/>referenceImage = buyer's photo URL<br/>referenceLabel = 'Near gate'<br/>pointIndex = 3"]
+        CAM2["┌────────────┐ ┌────────────┐<br/>│ BUYER'S    │ │ YOUR       │<br/>│ REFERENCE  │ │ CAMERA     │<br/>│ [dirty]    │ │ [live]     │<br/>└────────────┘ └────────────┘"]
+        CAM3["GPS Proximity Bar:<br/>🟢 < 15m: 'At the spot ✅'<br/>🟡 15-50m: 'Walk closer'<br/>🔴 > 50m: 'Too far'"]
+        CAM4["Worker taps 📸 Capture"]
+        CAM5["Parallel execution:<br/>├── takePictureAsync (quality 0.92)<br/>├── getCurrentPositionAsync<br/>└── environmentalDNA.capture()"]
+        CAM6["SHA-256 hash computed"]
+        CAM7["Preview with comparison:<br/>┌──────┐ → ┌──────┐<br/>│dirty │   │clean │<br/>└──────┘   └──────┘<br/>📍 GPS: 8m · Hash: b4e2..."]
+        CAM8{"Retake or<br/>Use Photo?"}
+        CAM9["Upload:<br/>POST /tasks/{id}/points/{ptId}/submit<br/>file + mediaType + GPS + hash + envDNA"]
+        CAM10["Backend:<br/>├── Upload to Cloudinary<br/>├── Compute locationMatchScore<br/>├── Create WorkerPointSubmission<br/>└── Emit socket: photo_added"]
+
+        CAM1 --> CAM2 --> CAM3 --> CAM4 --> CAM5 --> CAM6 --> CAM7 --> CAM8
+        CAM8 -->|"Retake"| CAM1
+        CAM8 -->|"Use Photo"| CAM9 --> CAM10
+    end
+
+    subgraph SUBMIT["Submit Work"]
+        SB1{"All verification<br/>photos done?<br/>70%+ regular done?<br/>Min 3 photos?"}
+        SB2["Submit button ACTIVE"]
+        SB3["Submit button DISABLED<br/>'Need 1 more verification photo'"]
+        SB4["Worker taps Submit"]
+        SB5["Send motion summary<br/>POST /tasks/{id}/motion-summary"]
+        SB6["Send final EnvDNA<br/>POST /tasks/{id}/environment"]
+        SB7["Navigate to SubmitProofScreen<br/>Review all pairs → Confirm"]
+        SB8["POST /worker/tasks/{id}/submit"]
+        SB9["Status: SUBMITTED<br/>→ Rule Engine<br/>→ AI Verifier<br/>→ AI Adversary"]
+
+        SB1 -->|"Yes"| SB2
+        SB1 -->|"No"| SB3
+        SB2 --> SB4 --> SB5 --> SB6 --> SB7 --> SB8 --> SB9
+    end
+
+    A4 --> T1
+    T4 --> ST1
+    ST3 --> NAVIGATOR
+    N4 --> P1
+    P2 --> CAM1
+    P3 --> CAM1
+    CAM10 --> NAVIGATOR
+    N3 --> SB1

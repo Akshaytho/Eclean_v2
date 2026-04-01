@@ -1,0 +1,92 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#3B82F6', 'secondaryColor': '#10B981', 'tertiaryColor': '#F59E0B', 'primaryTextColor': '#1F2937', 'lineColor': '#6B7280'}}}%%
+
+flowchart TD
+    subgraph BUYER["🔵 BUYER FLOW"]
+        B1["📝 Create Task<br/>Category + Details"]
+        B2["📍 Set Location<br/>GPS + Address"]
+        B3["📸 Document Area<br/>3-10 Reference Photos<br/>Each with GPS + Label"]
+        B4["💳 Pay via Razorpay"]
+        B5["📋 Review Submissions<br/>See paired before/after"]
+        B6{"Approve<br/>or Reject?"}
+        B1 --> B2 --> B3 --> B4
+        B5 --> B6
+    end
+
+    subgraph SYSTEM_OPEN["⚙️ TASK CREATION"]
+        S1["Task Status: OPEN<br/>Upload ref photos to Cloudinary<br/>Create TaskReferencePoint records<br/>Capture buyer EnvDNA"]
+    end
+
+    subgraph WORKER["🟢 WORKER FLOW"]
+        W1["🔍 Browse Open Tasks<br/>Filter by distance, category"]
+        W2["👆 Accept Task"]
+        W3["🚶 Travel to Location"]
+        W4["▶️ Start Work<br/>Geofence check: 500m"]
+        W5["📸 Capture Photos<br/>Side-by-side with buyer ref<br/>Per reference point"]
+        W6["✅ Submit Work"]
+        W1 --> W2 --> W3 --> W4 --> W5 --> W6
+    end
+
+    subgraph SILENT["🔇 SILENT LAYERS (Zero Worker Effort)"]
+        SL1["🧬 Layer 1: Environmental DNA<br/>WiFi + Cell + Magnetometer<br/>+ Barometer + Light<br/>Captured on Start + Each Photo"]
+        SL2["🏃 Layer 2: Motion Signature<br/>Accelerometer 10Hz<br/>Classifies: CLEANING | WALKING<br/>| STANDING | VEHICLE<br/>Entire task duration"]
+    end
+
+    subgraph VERIFICATION["🟠 BACKEND VERIFICATION"]
+        V1["⚡ Rule Engine (5ms)<br/>Verification: 20pts<br/>Coverage: 25pts<br/>GPS: 25pts<br/>Time: 15pts<br/>Fraud flags: 15pts<br/>+ EnvDNA bonus: 5pts<br/>+ Motion bonus: 5pts"]
+        V2["🤖 AI Verifier (~10s)<br/>Claude Sonnet 4.5<br/>Paired image analysis<br/>Score + Recommendation"]
+        V3["🕵️ AI Adversary (~15s)<br/>Claude Sonnet 4.5<br/>Fraud detection focus<br/>Cross-checks ALL evidence"]
+        V4{"Decision<br/>Matrix"}
+        V5["✅ AUTO-APPROVE<br/>Score > 95<br/>Both AIs pass"]
+        V6["🔍 SUPERVISOR REVIEW<br/>AIs disagree"]
+        V7["❌ AUTO-REJECT<br/>Both AIs reject"]
+        V1 --> V4
+        V2 --> V4
+        V3 --> V4
+        V4 --> V5
+        V4 --> V6
+        V4 --> V7
+    end
+
+    subgraph CITIZEN["🟣 CITIZEN MESH (Post-Task)"]
+        C1["⏰ 1-48 hours later<br/>Random delay"]
+        C2["📱 Citizen within 500m<br/>Gets push notification"]
+        C3["📸 Takes photo of area<br/>+ Rates: Clean/Dirty"]
+        C4["🏆 Reward: ₹5-10"]
+        C5["📊 Worker Trust Score<br/>Updated"]
+        C1 --> C2 --> C3 --> C4 --> C5
+    end
+
+    subgraph ACCEPT["⚙️ TASK ACCEPTANCE"]
+        A1["Status: ACCEPTED<br/>Randomly select 2 verification points<br/>(hidden from worker)<br/>Preload images to device"]
+    end
+
+    subgraph START["⚙️ TASK START"]
+        ST1["Status: IN_PROGRESS<br/>Start timer<br/>Begin GPS tracking<br/>Activate silent layers"]
+    end
+
+    subgraph SUBMIT["⚙️ TASK SUBMISSION"]
+        SB1["Validate:<br/>✓ All verification photos<br/>✓ 70%+ regular points<br/>✓ Minimum 3 after photos<br/>Status: SUBMITTED"]
+    end
+
+    subgraph COMPLETE["⚙️ TASK COMPLETION"]
+        CP1["Create Payout (10% fee)<br/>Update worker stats<br/>Update trust score<br/>Queue citizen mesh"]
+    end
+
+    %% Connections between subgraphs
+    B4 --> S1
+    S1 -->|"Task visible to workers"| W1
+    W2 --> A1
+    A1 --> W3
+    W4 --> START
+    START --> SL1
+    START --> SL2
+    W6 --> SUBMIT
+    SB1 --> V1
+    SB1 --> V2
+    V2 -->|"After verifier completes"| V3
+    V5 --> CP1
+    V6 -->|"Buyer reviews"| B5
+    B6 -->|"Approve"| CP1
+    B6 -->|"Reject"| W4
+    CP1 --> C1
+    C5 -->|"Trust -3 if dirty"| V6
