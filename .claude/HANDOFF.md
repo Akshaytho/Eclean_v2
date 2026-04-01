@@ -4,130 +4,108 @@
 
 ---
 
-## Last Session: 2026-03-31 (Session 7 — Testing + AI Verification Architecture + Reviewer Feedback)
+## Last Session: 2026-03-31 (Session 8 — APK Build + AI Testing + Worker UI Redesign)
 
-### Status: 229/229 tests passing, AI verification architecture finalized, deployed to Railway
+### Status: Worker UI redesigned, AI verification tested end-to-end, backend fixes deployed
 
 ### What was completed:
 
-**Live Testing on iPhone (Expo Go):**
-- Buyer flow tested: login → post task → 5 reference photos → pay → BuyerTaskDetail shows paired photos
-- Worker flow tested: login → view reference photos → accept → start → submit
-- Found and fixed: reference point 403 for workers (OPEN tasks), React hooks ordering, camera issues in Expo Go
-- Found and fixed: work window blocking (disabled hardcoded window), start work alert noise
-- Found and fixed: rating SQL ROUND cast error, payout status FAILED → PENDING
+**APK Build:**
+- Fixed EAS build: .Claude casing, lucide-react-native upgrade (0.456→1.7), sentry/svg versions
+- Removed react-native-razorpay (unused, blocked New Architecture)
+- Added expo-build-properties, .npmrc, .easignore
+- GitHub Actions APK build workflow triggered (build-apk.yml)
 
-**AI Verification — Complete Architecture Rewrite:**
-- Switched from Anthropic Claude (out of credits) to OpenAI gpt-4o-mini
-- Provider abstraction: `verification.interface.ts` → swap AI providers with one config change
-- Single merged call: verification + fraud detection in ONE API call (was two separate calls)
-- 768px images via Cloudinary URL transform, detail:"auto" (~765 tokens/image)
-- Cost: ~$0.0006/verification ($14 budget = ~23,000 verifications)
-- Fallback: API failure after 2 retries → MANUAL_REVIEW, never auto-pass without AI
+**AI Verification End-to-End Test:**
+- Tested on real APK: buyer posted task → 4 reference photos → worker captured 4 after photos → submitted
+- AI (gpt-4o-mini → gpt-4o → gpt-4.1 tested) correctly detected indoor photos for outdoor task (score: 0)
+- Rule engine scored 78/100 (GPS perfect, time good, but hidden verification points missing)
+- Measured actual token cost: ~6,700 input tokens per call with 8 images
+- Budget: ₹5/task, actual cost: ₹1.33 (gpt-4.1) or ₹0.96 (gpt-5)
 
-**AI Prompt — 7 Verification + 4 Fraud Checks:**
-1. Photos match task description and category?
-2. Same angle and distance in before vs after?
-3. Area visibly cleaner?
-4. Before/after are different images?
-5. Cleaning evidence (mop marks, removed trash)?
-6. Watermarks, screenshots, UI artifacts?
-7. Indoor/outdoor consistent with task category?
-+ Fraud: GPS anomalies, timing, motion, statistical patterns
+**Backend Verification Fixes (9 critical fixes):**
+- Rule engine: removed verification completeness + citizen mesh layers
+- GPS proximity: 30→35 pts, Time on site: 20→25 pts
+- Hidden verification points no longer created on accept
+- GPS trail analysis function built (timeAtLocation, departures, speed)
+- Worker Grace decision: 60-84 + GPS proves presence → 12h auto-release
+- Payment auto-release BullMQ job (AUTO_PASS: immediate, Grace: 12h, Review: 72h)
+- Geofence GPS retry (3 retries, not hard block)
+- Buyer false rejection: -10 trust (was -5), warning on 1st, flag on 3rd
+- GPS interval: 15s→30s, motion tracking moved to Start Work
+- AI model: gpt-4.1 default via env variable, sends ALL pairs
 
-**Decision Logic (finalized per reviewer feedback):**
-- Rule ≥ 85 AND AI ≥ 0.75 AND fraud < 0.3 → AUTO_PASS
-- AI < 0.3 AND rule < 70 → REJECT (both signals bad)
-- AI < 0.3 AND rule ≥ 70 → MANUAL_REVIEW (bad photos, good metadata = buyer decides)
-- Fraud ≥ 0.8 → forces MANUAL_REVIEW even if AUTO_PASS (buyer sees anomalies)
-- Rule < 40 → HUMAN_REVIEW (skip AI, GPS drift possible)
-- API failure → MANUAL_REVIEW (never auto-pass on failure)
+**Worker UI Redesign (complete rewrite):**
+- WorkerHomeScreen: 2 queries (was 5), total earned, worker levels (Bronze/Silver/Gold/Diamond)
+- FindWorkScreen: ₹ price on map pins, empty state with expand radius + notify
+- TaskDetailScreen: Swiggy-style swipeable gallery, "ACCEPT TASK — EARN ₹200" CTA
+- ActiveTaskScreen ACCEPTED: Ola-style navigation card + GPS retry indicator
+- ActiveTaskScreen IN_PROGRESS: Zomato progress tracker + FindMyArrow direction component
+- SubmitProofScreen: motion status in summary, navigates to PostSubmission
+- PostSubmissionScreen (NEW): "Zomato order placed" verification tracking
+- ReportIssueScreen (NEW): cancel without penalty (5 categories + photo)
+- FindMyArrow (NEW): iPhone Find My style compass arrow with noise dampening
 
-**Rule Engine — Reweighted + Smart Normalization:**
-- GPS proximity: 30pts (was 25)
-- Photo coverage: 25pts (unchanged)
-- Time on site: 20pts (was 15)
-- Verification completeness: 20pts (unchanged)
-- Duplicate image check: 10pts (was 15)
-- GPS fraud flags: 10pts (unchanged)
-- Bonus layers (EnvDNA, Zone Intelligence, Motion, Citizen): 5pts each
-- Smart normalization: exclude no-data bonus layers from maxPossible
-  (fixes: every worker hitting MANUAL_REVIEW during pilot when sensor data unavailable)
+**Honesty Pass:**
+- "This Week" → "Total Earned" (no weekly API exists)
+- Worker level progression bar removed (no backend benefits yet)
+- Camera: skip gallery compression, defer to background (2-3s faster)
+- Upload: removed double compression
+- FindMyArrow: rolling average of 5 readings, circular mean, shortest rotation path
+- Map added back to TaskDetail (120px strip)
+- Android: native markers with ₹ title (custom views break on Android)
+- Offline bar: honest "will upload when connected"
+- PostSubmission polling: 3s→10s
 
-**Weakest Pair Selection:**
-- AI receives the pair with LOWEST GPS score (most suspicious)
-- Not random, not first — the weakest link gets AI scrutiny
-
-**Tests — 229/229 Passing:**
-- rule-engine.test.ts: 12 unit tests (human behavior scenarios)
-- rule-engine-edge-cases.test.ts: 29 tests (boundaries, corruption, fraud, chaos)
-- reference-points.test.ts: 22 integration tests (full lifecycle)
-- reference-points-edge-cases.test.ts: 12 tests (concurrent accept, cancellation, limits)
-- critical-gaps.test.ts: 13 tests (payment trigger, schema validation, buyer fraud, expiry)
-- All existing tests: 141/141 (auth, tasks, wallet, admin, citizen, etc.)
-- Test isolation fixed: cleanTestData in beforeAll, not afterAll
-
-**New Feature — Task Expiry Job:**
-- `task-expiry.job.ts`: BullMQ repeatable every 30 min
-- Releases ACCEPTED tasks stuck 2+ hours
-- Releases IN_PROGRESS tasks stuck 4+ hours
-- Worker trust decremented, notification sent
-
-**Duplicate Image Detection Layer:**
-- Rule engine layer catches workers reusing buyer's reference photos
-- URL match + photoHash match detection
-- Found during live testing: identical photos scored 90% → now caught
-
-**Buyer Accountability:**
-- falseRejectionCount increments when buyer rejects AI-approved (≥0.85) work
-- Auto-flags buyer at 3+ false rejections
-- buyerTrustScore decrements by 5 per false rejection
+**External Review:**
+- Got detailed review from Akshay's friend — 8 critical UX issues identified
+- Key insight: "You're punishing honest workers to catch rare fraudsters"
+- All feedback incorporated into VERIFICATION_FLOW.md and UI flow doc
+- Decision: keep motion/EnvDNA/zone (Indian fraud patterns), drop hidden verification + citizen mesh
 
 ### Production State:
-- Railway deployed with all changes (latest: c7524a6)
-- OpenAI API key configured on Railway (OPENAI_API_KEY)
-- Docker Postgres + Redis running locally for tests
-- 2 test tasks in production DB (Drain clean: APPROVED, Bathroom cleaning: REJECTED)
+- Railway deployed with all backend fixes (latest: ef5f202)
+- OpenAI API key configured, gpt-4.1 as default model
+- AI verification working end-to-end (tested with real photos)
+- APK build pending on GitHub Actions
 
 ### What needs to happen next:
 
-**Priority 1 — Before pilot:**
-- Deploy latest code to Railway (`railway up`)
-- Build dev client for iPhone (`npx expo run:ios`) — camera + sensors don't work in Expo Go
-- Test full flow with dev client: reference photos → side-by-side camera → submit → AI scores
-- Worker flow UI redesign (TaskDetailScreen, ActiveTaskScreen, ReferencePointNavigator)
+**Priority 1 — Test the redesigned UI:**
+- Build new APK with UI changes (GitHub Actions or EAS)
+- Test full flow: find task → accept → navigate → start → capture with FindMyArrow → submit → PostSubmission screen
+- Test empty states (0 tasks), Report Issue flow, offline behavior
 
-**Priority 2 — Week 2 after pilot:**
-- Perceptual hashing (pHash) for duplicate/recycled photo detection across ALL tasks
-- Buyer feedback loop: after 200 tasks, correlate ruleEngineBreakdown with approve/reject outcomes
-- Resolution ladder: 256px → 768px → full based on borderline score
+**Priority 2 — Implement missing backend pieces:**
+- Weekly earnings API endpoint (for future "This Week" feature)
+- Worker level benefits in backend (priority queue for Silver+, bonus for Gold+)
+- Actual offline photo queue (MMKV-based, sync on reconnect)
+- RejectionDetailScreen (shows which photo failed + why + dispute)
 
-**Priority 3 — After 200 real tasks:**
-- Threshold recalibration from real outcome data
-- MobileNet embedding layer for manipulated duplicate detection
-- Citizen anti-collusion (different phone + 7-day account age)
-
-**Priority 4 — After 5000 tasks:**
-- Custom fine-tuned verification model from labeled data
-- Training flywheel
+**Priority 3 — Buyer UI redesign:**
+- Same treatment as worker: simplify, remove clutter, payment timeline
+- BuyerTaskDetailScreen needs StatusTimeline + AIScoreCard wired in
+- Payment auto-release notifications on buyer side
 
 ### Key Architecture Decisions Made This Session:
-1. AI provider abstracted behind interface (swap OpenAI/Anthropic/custom)
-2. Single merged call (verification + fraud) not two separate calls
-3. Anchoring bias acknowledged but irrelevant for pilot scale
-4. Smart normalization (exclude no-data bonus layers) — self-healing as layers enable
-5. Auto-reject requires BOTH AI AND rule engine agreement
-6. Fraud score has teeth (≥0.8 overrides AUTO_PASS) but never auto-rejects alone
-7. Cost optimization is solved ($0.0006/task) — focus on fraud resistance (moat), not cost
+1. gpt-4.1 as default AI model (₹1.33/task, better than gpt-4o-mini)
+2. Send ALL photo pairs to AI (not just weakest) — ₹5 budget allows it
+3. Hidden verification points removed (confusing UX for low-literacy workers)
+4. Motion/EnvDNA/Zone kept as bonus-only (never negative score)
+5. Payment auto-release: AUTO_PASS immediate, Grace 12h, Review 72h
+6. Worker Grace: 60-84 score + GPS trail proves presence → 12h soft pass
+7. FindMyArrow instead of mini-map (universal, no text, no translation)
+8. Camera: skip gallery compression on confirm (2-3s faster)
 
-### Branch: image_capture_workflow (20+ commits)
-### Latest commit: c7524a6
+### Branch: image_capture_workflow
+### Latest commit: c27961b
 
 ### New files this session:
-- `backend/src/modules/ai/verification.interface.ts`
-- `backend/src/modules/ai/openai.provider.ts`
-- `backend/src/jobs/task-expiry.job.ts`
-- `backend/tests/rule-engine-edge-cases.test.ts`
-- `backend/tests/reference-points-edge-cases.test.ts`
-- `backend/tests/critical-gaps.test.ts`
-- `docs/test-documentation.md`
+- `backend/src/jobs/payment-release.job.ts`
+- `backend/src/modules/verification/gps-trail-analysis.ts`
+- `mobile/src/components/maps/FindMyArrow.tsx`
+- `mobile/src/screens/worker/PostSubmissionScreen.tsx`
+- `mobile/src/screens/worker/ReportIssueScreen.tsx`
+- `docs/VERIFICATION_FLOW.md`
+- `docs/diagrams/09_worker_ui_flow.md`
+- `docs/diagrams/00-08_*.mmd` (system diagrams)
