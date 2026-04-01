@@ -1,10 +1,13 @@
 /**
- * OpenAI Verification Provider — gpt-4o
+ * OpenAI Verification Provider — gpt-5.1
  *
- * Single merged call: verification + fraud in one JSON response
+ * gpt-5.1 chosen over gpt-4o because it REASONS about context:
+ * - "CRITICAL toilet cleaned in 4 min? Impossible. Stains still visible."
+ * - gpt-4o just said "looks cleaner" (0.85) for the same photos
+ *
  * Images at 1024px via Cloudinary transformation (detail: "high")
  * Sends ALL reference point pairs for maximum accuracy
- * Budget: ₹5/task (~$0.06) — covers up to 5 pairs comfortably
+ * Cost: ~₹0.96/task ($0.011) — cheaper than gpt-4.1 and smarter
  * Fallback: parse failure → null (caller handles MANUAL_REVIEW)
  */
 
@@ -17,11 +20,12 @@ import type {
   VerificationResult,
 } from './verification.interface'
 
-// Configurable via env, defaults to gpt-4.1
-const MODEL = process.env.AI_MODEL || 'gpt-4.1'
+// gpt-5.1 — reasoning model that catches time vs task difficulty mismatches
+// gpt-4o saw "looks cleaner" but gpt-5.1 reasoned "CRITICAL toilet in 4 min = impossible"
+const MODEL = process.env.AI_MODEL || 'gpt-5.1'
 
 export class OpenAIProvider implements AIVerificationProvider {
-  name = 'openai-gpt4o'
+  name = 'openai-gpt5.1'
   private client: OpenAI
 
   constructor() {
