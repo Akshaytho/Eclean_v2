@@ -62,17 +62,15 @@ export function MyTasksScreen() {
   const navigation = useNavigation<Nav>()
   const [activeTab, setActiveTab] = useState<Tab>('active')
 
+  // Fetch per-tab with server-side status filter — avoids fetching all 100+ tasks
+  const statusFilter = TAB_STATUSES[activeTab].join(',')
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['worker', 'my-tasks'],
-    queryFn:  () => workerTasksApi.myTasks({ limit: 100 }),
+    queryKey: ['worker', 'my-tasks', activeTab],
+    queryFn:  () => workerTasksApi.myTasks({ status: statusFilter, limit: 20 }),
     staleTime: 15_000,
   })
 
-  const allTasks = data?.tasks ?? []
-  const tasks = useMemo(
-    () => allTasks.filter(t => TAB_STATUSES[activeTab].includes(t.status)),
-    [allTasks, activeTab],
-  )
+  const tasks = data?.tasks ?? []
 
   return (
     <View style={styles.container}>

@@ -61,8 +61,8 @@ export function WalletScreen() {
 
         <View style={styles.summaryRow}>
           <SummaryCard
-            label="Available"
-            amount={wallet?.availableCents ?? 0}
+            label="Paid to Bank"
+            amount={wallet?.paidOutCents ?? wallet?.availableCents ?? 0}
             color="#fff"
           />
           <SummaryCard

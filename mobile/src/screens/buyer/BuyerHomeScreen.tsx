@@ -78,7 +78,7 @@ export function BuyerHomeScreen() {
     const nr = tasks.filter(t => t.status === 'SUBMITTED' || t.status === 'VERIFIED')
     const op = tasks.filter(t => t.status === 'OPEN')
     const done = allTasks.filter(t => t.status === 'APPROVED' || t.status === 'COMPLETED')
-    return { inProgress: ip, needsReview: nr, openTasks: op, completed: done, recentDone: done.slice(0, 3) }
+    return { inProgress: ip.slice(0, 5), needsReview: nr.slice(0, 5), openTasks: op.slice(0, 5), completed: done, recentDone: done.slice(0, 3) }
   }, [tasks, allTasks])
 
   const firstName = user?.name?.split(' ')[0] ?? 'there'

@@ -1,5 +1,9 @@
-export function timeAgo(isoDate: string): string {
-  const diff = Date.now() - new Date(isoDate).getTime()
+export function timeAgo(isoDate: string | null | undefined): string {
+  if (!isoDate) return ''
+  const time = new Date(isoDate).getTime()
+  if (isNaN(time)) return ''
+  const diff = Date.now() - time
+  if (diff < 0) return 'just now' // future date — treat as now
   const mins = Math.floor(diff / 60_000)
   if (mins < 1)  return 'just now'
   if (mins < 60) return `${mins}m ago`
@@ -12,14 +16,15 @@ export function timeAgo(isoDate: string): string {
 
 // Elapsed time in seconds from a startedAt ISO string
 export function elapsedSeconds(startedAt: string): number {
-  return Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
+  return Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000))
 }
 
 // Format seconds as HH:MM:SS
 export function formatDuration(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600)
-  const m = Math.floor((totalSeconds % 3600) / 60)
-  const s = totalSeconds % 60
+  const safe = Math.max(0, Math.floor(totalSeconds))
+  const h = Math.floor(safe / 3600)
+  const m = Math.floor((safe % 3600) / 60)
+  const s = safe % 60
   const pad = (n: number) => n.toString().padStart(2, '0')
   return h > 0
     ? `${pad(h)}:${pad(m)}:${pad(s)}`

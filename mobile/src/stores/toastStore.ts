@@ -14,6 +14,9 @@ export interface Toast {
   duration: number
 }
 
+// Track timeout IDs so we can clean up if toast is manually dismissed
+const timeoutMap = new Map<string, ReturnType<typeof setTimeout>>()
+
 interface ToastState {
   toasts: Toast[]
   show:   (message: string, type?: ToastType, duration?: number) => void
@@ -32,16 +35,27 @@ export const useToastStore = create<ToastState>((set, get) => ({
       toasts: [...state.toasts.slice(-2), toast], // keep max 3
     }))
 
-    // auto-dismiss
-    setTimeout(() => {
+    // auto-dismiss with tracked timeout
+    const tid = setTimeout(() => {
+      timeoutMap.delete(id)
       get().hide(id)
     }, duration)
+    timeoutMap.set(id, tid)
   },
 
-  hide: (id) =>
-    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+  hide: (id) => {
+    // Clear timeout if toast dismissed early (e.g. by user tap)
+    const tid = timeoutMap.get(id)
+    if (tid) { clearTimeout(tid); timeoutMap.delete(id) }
+    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }))
+  },
 
-  clear: () => set({ toasts: [] }),
+  clear: () => {
+    // Clear all pending timeouts
+    timeoutMap.forEach(tid => clearTimeout(tid))
+    timeoutMap.clear()
+    set({ toasts: [] })
+  },
 }))
 
 // ─── Convenience helpers (call outside components) ───────────────────────────

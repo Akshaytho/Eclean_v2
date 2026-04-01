@@ -93,6 +93,28 @@ export async function submitPointPhoto(params: {
     },
   })
 
+  // If this is an AFTER submission for a verification point, also create a VERIFICATION record
+  // from the same upload (avoids double upload from mobile — Bug #51 fix)
+  if (mediaType === 'AFTER' && refPoint.isVerificationPoint) {
+    await prisma.workerPointSubmission.create({
+      data: {
+        taskId,
+        referencePointId,
+        workerId,
+        mediaType:          'VERIFICATION',
+        imageUrl:           uploadResult.secure_url,
+        imagePublicId:      uploadResult.public_id,
+        workerLat:          deviceMeta?.capturedLat ?? null,
+        workerLng:          deviceMeta?.capturedLng ?? null,
+        photoHash:          deviceMeta?.photoHash ?? null,
+        capturedAt:         deviceMeta?.capturedAt ? new Date(deviceMeta.capturedAt) : null,
+        deviceId:           deviceMeta?.deviceId ?? null,
+        idempotencyKey:     idempotencyKey ? `${idempotencyKey}_verification` : null,
+        locationMatchScore: locationScore,
+      },
+    }).catch(() => {}) // non-critical: AFTER is the primary record
+  }
+
   // Fire socket event
   emitTaskPhotoAdded(taskId, submission)
 

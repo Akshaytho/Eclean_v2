@@ -8,6 +8,7 @@ import { createPayoutWorker } from './jobs/payout.job'
 import { createCleanupWorker, scheduleCleanupJobs } from './jobs/cleanup.job'
 import { createAnalyticsWorker, scheduleAnalyticsJobs } from './jobs/analytics-aggregate.job'
 import { createPaymentReleaseWorker, schedulePaymentReleaseJob } from './jobs/payment-release.job'
+import { createTaskExpiryWorker } from './jobs/task-expiry.job'
 
 if (env.SENTRY_DSN) {
   Sentry.init({
@@ -35,6 +36,7 @@ const start = async (): Promise<void> => {
     const cleanupWorker   = createCleanupWorker()
     const analyticsWorker = createAnalyticsWorker()
     const paymentReleaseWorker = createPaymentReleaseWorker()
+    const taskExpiryWorker     = createTaskExpiryWorker()
     await scheduleCleanupJobs()
     await scheduleAnalyticsJobs()
     await schedulePaymentReleaseJob()
@@ -52,6 +54,7 @@ const start = async (): Promise<void> => {
       await cleanupWorker.close()
       await analyticsWorker.close()
       await paymentReleaseWorker.close()
+      await taskExpiryWorker.close()
       await app.close()
       process.exit(0)
     }

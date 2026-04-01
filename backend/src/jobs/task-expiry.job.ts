@@ -13,6 +13,7 @@ import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { bullmqConnection as connection } from '../lib/bullmq'
 import { emitTaskUpdated } from '../realtime/socket'
+import { notifyUser } from '../lib/notify'
 
 export const TASK_EXPIRY_QUEUE = 'task-expiry'
 
@@ -60,16 +61,14 @@ export function createTaskExpiryWorker(): Worker {
               data: { activeTaskId: null },
             }).catch(() => {})
 
-            // Notify worker
-            await prisma.notification.create({
-              data: {
-                userId: task.workerId,
-                type: 'TASK_REJECTED',
-                title: 'Task Released',
-                body: `Task "${task.title}" was released because it wasn't started in time. It's now available for other workers.`,
-                data: { taskId: task.id },
-              },
-            }).catch(() => {})
+            // Notify worker (DB + push + socket)
+            await notifyUser({
+              userId: task.workerId,
+              type: 'TASK_REJECTED',
+              title: 'Task Released',
+              body: `Task "${task.title}" was released because it wasn't started in time. It's now available for other workers.`,
+              data: { taskId: task.id },
+            })
 
             // Decrement worker trust score slightly
             await prisma.workerProfile.update({

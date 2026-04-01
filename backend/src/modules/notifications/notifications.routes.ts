@@ -27,7 +27,7 @@ export async function notificationsRoutes(fastify: FastifyInstance): Promise<voi
     '/',
     { preHandler: [authenticate, validate({ query: notifListQuerySchema })] },
     async (request, reply) => {
-      const result = await notifService.getNotifications(request.user.id, request.query.page)
+      const result = await notifService.getNotifications(request.user.id, request.query.page, request.query.limit)
       return reply.send(result)
     },
   )

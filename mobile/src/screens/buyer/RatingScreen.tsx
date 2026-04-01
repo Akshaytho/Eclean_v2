@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import { ChevronLeft, Star } from 'lucide-react-native'
@@ -22,11 +22,20 @@ export function RatingScreen() {
   const [rating,   setRating]  = useState(0)
   const [comment,  setComment] = useState('')
 
+  // Fetch task to validate status before allowing rating
+  const { data: task, isLoading: taskLoading } = useQuery({
+    queryKey: ['buyer-task', taskId],
+    queryFn:  () => buyerTasksApi.getTask(taskId),
+    staleTime: 30_000,
+  })
+
+  const canRate = task && (task.status === 'APPROVED' || task.status === 'COMPLETED') && !task.rating
+
   const mutation = useMutation({
     mutationFn: () => buyerTasksApi.rate(taskId, rating, comment.trim() || undefined),
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ['buyer-task', taskId] })
-      Alert.alert('Thanks for your feedback! 🙏', '', [
+      Alert.alert('Thanks for your feedback!', '', [
         { text: 'Done', onPress: () => navigation.goBack() },
       ])
     },
@@ -36,6 +45,35 @@ export function RatingScreen() {
   })
 
   const LABELS = ['', 'Terrible', 'Poor', 'OK', 'Good', 'Excellent!']
+
+  if (taskLoading) {
+    return <View style={[s.root, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator size="large" color={B.primary} /></View>
+  }
+
+  if (task?.rating) {
+    return (
+      <View style={s.root}>
+        <LinearGradient colors={B.gradient} style={[s.header, { paddingTop: (insets.top > 0 ? insets.top : 24) + 8 }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+            <ChevronLeft size={22} color="#fff" />
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>Already Rated</Text>
+          <View style={{ width: 36 }} />
+        </LinearGradient>
+        <View style={[s.body, { alignItems: 'center', justifyContent: 'center' }]}>
+          <Text style={s.prompt}>You've already rated this task</Text>
+          <View style={s.stars}>
+            {[1, 2, 3, 4, 5].map(n => (
+              <Star key={n} size={48} color={n <= task.rating ? '#F59E0B' : B.text.muted} fill={n <= task.rating ? '#F59E0B' : 'none'} />
+            ))}
+          </View>
+          <TouchableOpacity style={s.skipBtn} onPress={() => navigation.goBack()}>
+            <Text style={[s.skipText, { color: B.primary }]}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    )
+  }
 
   return (
     <View style={s.root}>
@@ -79,9 +117,9 @@ export function RatingScreen() {
         />
 
         <TouchableOpacity
-          style={[s.submitBtn, (rating === 0 || mutation.isPending) && s.submitBtnDisabled]}
+          style={[s.submitBtn, (rating === 0 || mutation.isPending || !canRate) && s.submitBtnDisabled]}
           onPress={() => mutation.mutate()}
-          disabled={rating === 0 || mutation.isPending}
+          disabled={rating === 0 || mutation.isPending || !canRate}
           activeOpacity={0.85}
         >
           {mutation.isPending

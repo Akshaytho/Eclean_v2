@@ -8,12 +8,14 @@ import {
 } from '../../lib/errors'
 import { assertTransition } from './tasks.state-machine'
 import { DIRTY_LEVEL_PRICING } from './tasks.schema'
-import { emitTaskUpdated } from '../../realtime/socket'
+import { emitTaskUpdated, emitNotification } from '../../realtime/socket'
+import { sendPush } from '../../lib/push'
 import { logTaskEvent } from '../../lib/event-log'
 import { payoutQueue, PAYOUT_QUEUE } from '../../jobs/payout.job'
 // selectVerificationPoints removed — hidden verification points dropped
 import { verifyPaymentSignature, refundPayment } from '../payments/payment.service'
 import { logger } from '../../lib/logger'
+import { env } from '../../config/env'
 import type {
   CreateTaskInput,
   ReasonInput,
@@ -113,7 +115,13 @@ export async function createTask(buyerId: string, input: CreateTaskInput) {
     )
   }
 
-  // ── Razorpay payment verification (when payment fields are provided) ─────
+  // ── Razorpay payment enforcement ─────────────────────────────────────────
+  // In production, buyers MUST pay before creating a task
+  const razorpayConfigured = env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_ID !== 'test_mode'
+  if (razorpayConfigured && (!input.razorpayOrderId || !input.razorpayPaymentId || !input.razorpaySignature)) {
+    throw new BadRequestError('Payment is required to create a task. Please complete payment first.')
+  }
+
   let razorpayOrderId:   string | null = null
   let razorpayPaymentId: string | null = null
 
@@ -274,6 +282,13 @@ export async function cancelTaskAsBuyer(
 
   emitTaskUpdated(taskId, 'CANCELLED')
   logTaskEvent(taskId, 'status_changed', buyerId, 'BUYER', { from: task.status, to: 'CANCELLED', reason: input.reason })
+
+  // Push + socket for worker: buyer cancelled task
+  if (task.workerId) {
+    void sendPush(task.workerId, 'Task Cancelled by Buyer', `Task "${task.title}" was cancelled: ${input.reason}`, { taskId })
+    emitNotification(task.workerId, { type: 'TASK_REJECTED', title: 'Task Cancelled by Buyer', body: input.reason, data: { taskId } })
+  }
+
   return result
 }
 
@@ -379,6 +394,12 @@ export async function approveTask(buyerId: string, taskId: string) {
 
   emitTaskUpdated(taskId, 'APPROVED')
   logTaskEvent(taskId, 'status_changed', buyerId, 'BUYER', { from: task.status, to: 'APPROVED', rateCents: task.rateCents })
+
+  // Push + socket for worker: task approved
+  const workerAmtDisplay = (task.rateCents - Math.floor(task.rateCents * 0.10)) / 100
+  void sendPush(task.workerId!, 'Task Approved!', `Your work has been approved. ₹${workerAmtDisplay} will be credited.`, { taskId })
+  emitNotification(task.workerId!, { type: 'PAYMENT_RECEIVED', title: 'Task Approved!', body: `₹${workerAmtDisplay} will be credited.`, data: { taskId } })
+
   return updatedTask
 }
 
@@ -427,6 +448,12 @@ export async function rejectTask(buyerId: string, taskId: string, input: ReasonI
   )
   emitTaskUpdated(taskId, 'REJECTED')
   logTaskEvent(taskId, 'status_changed', buyerId, 'BUYER', { from: task.status, to: 'REJECTED', reason: input.reason })
+
+  // Push + socket for worker: task rejected
+  if (task.workerId) {
+    void sendPush(task.workerId, 'Task Rejected', `Your submission for "${task.title}" was rejected. You can retry or dispute.`, { taskId })
+    emitNotification(task.workerId, { type: 'TASK_REJECTED', title: 'Task Rejected', body: `Rejected: ${input.reason}`, data: { taskId } })
+  }
 
   // Buyer accountability: stricter protection for workers
   // 1st false rejection: warning notification + -10 trust
@@ -555,10 +582,8 @@ export async function acceptTask(workerId: string, taskId: string) {
           data:  { status: 'ACCEPTED', workerId },
         })
 
-        await tx.workerProfile.update({
-          where: { userId: workerId },
-          data:  { activeTaskId: taskId },
-        })
+        // activeTaskId is set on START (not accept) to allow queuing multiple ACCEPTED tasks
+        // The @unique constraint on activeTaskId protects against multiple IN_PROGRESS tasks
 
         await recordEvent(tx, taskId, workerId, 'WORKER', 'OPEN', 'ACCEPTED')
 
@@ -580,9 +605,9 @@ export async function acceptTask(workerId: string, taskId: string) {
   emitTaskUpdated(taskId, 'ACCEPTED')
   logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'OPEN', to: 'ACCEPTED' })
 
-  // REMOVED: Hidden verification points dropped — confusing UX for workers
-  // with budget phones and GPS drift. All reference points are now visible.
-  // selectVerificationPoints(taskId) — no longer called
+  // Push + socket for buyer: worker accepted
+  void sendPush(result.buyerId, 'Worker Assigned', `A worker has accepted your task "${result.title}".`, { taskId })
+  emitNotification(result.buyerId, { type: 'TASK_ASSIGNED', title: 'Worker Assigned', body: `A worker has accepted your task "${result.title}".`, data: { taskId } })
 
   return result
 }
@@ -654,6 +679,12 @@ export async function startTask(workerId: string, taskId: string, input?: StartT
           data:  { status: 'IN_PROGRESS', startedAt: new Date() },
         })
 
+        // Set activeTaskId on START (not accept) — allows queuing multiple ACCEPTED tasks
+        await tx.workerProfile.update({
+          where: { userId: workerId },
+          data:  { activeTaskId: taskId },
+        })
+
         await recordEvent(tx, taskId, workerId, 'WORKER', fresh.status, 'IN_PROGRESS')
 
         await tx.notification.create({
@@ -673,6 +704,11 @@ export async function startTask(workerId: string, taskId: string, input?: StartT
   )
   emitTaskUpdated(taskId, 'IN_PROGRESS')
   logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'ACCEPTED', to: 'IN_PROGRESS' })
+
+  // Push + socket for buyer: work started
+  void sendPush(task.buyerId, 'Work Started', `Worker has started cleaning for "${task.title}".`, { taskId })
+  emitNotification(task.buyerId, { type: 'TASK_STARTED', title: 'Work Started', body: `Worker started "${task.title}".`, data: { taskId } })
+
   return result
 }
 
@@ -685,22 +721,26 @@ export async function cancelTaskAsWorker(
 ) {
   const task = await fetchTaskOrThrow(taskId)
   if (task.workerId !== workerId) throw new ForbiddenError('Not your task')
-  assertTransition(task.status, 'CANCELLED', 'WORKER')
+  // Worker cancel returns task to OPEN so other workers can pick it up
+  assertTransition(task.status, 'OPEN', 'WORKER')
 
   const result = await withSerializableRetry(() =>
     prisma.$transaction(
       async (tx) => {
         const fresh = await tx.task.findUnique({ where: { id: taskId } })
         if (!fresh) throw new NotFoundError('Task not found')
-        if (fresh.status === 'CANCELLED') throw new ConflictError('Task is already cancelled')
-        assertTransition(fresh.status, 'CANCELLED', 'WORKER')
+        if (fresh.status === 'OPEN') throw new ConflictError('Task is already open')
+        assertTransition(fresh.status, 'OPEN', 'WORKER')
 
         const updated = await tx.task.update({
           where: { id: taskId },
           data:  {
-            status:             'CANCELLED',
+            status:             'OPEN',
+            workerId:           null,               // release task for other workers
             cancellationReason: input.reason,
-            cancelledAt:        new Date(),
+            startedAt:          null,                // clear all timestamps
+            submittedAt:        null,
+            completedAt:        null,
           },
         })
 
@@ -709,15 +749,15 @@ export async function cancelTaskAsWorker(
           data:  { activeTaskId: null },
         })
 
-        await recordEvent(tx, taskId, workerId, 'WORKER', fresh.status, 'CANCELLED', input.reason)
+        await recordEvent(tx, taskId, workerId, 'WORKER', fresh.status, 'OPEN', input.reason)
 
         await tx.notification.create({
           data: {
             userId: fresh.buyerId,
             type:   'TASK_REJECTED',
-            title:  'Task Cancelled by Worker',
-            body:   `Worker cancelled task "${fresh.title}": ${input.reason}`,
-            data:   { taskId },
+            title:  'Worker Left Task',
+            body:   `Worker left task "${fresh.title}": ${input.reason}. It's now available for other workers.`,
+            data:   { taskId, reopened: true },
           },
         })
 
@@ -726,8 +766,8 @@ export async function cancelTaskAsWorker(
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     ),
   )
-  emitTaskUpdated(taskId, 'CANCELLED')
-  logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: task.status, to: 'CANCELLED', reason: input.reason })
+  emitTaskUpdated(taskId, 'OPEN')
+  logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: task.status, to: 'OPEN', reason: input.reason })
   return result
 }
 
@@ -815,6 +855,11 @@ export async function submitTask(workerId: string, taskId: string) {
   )
   emitTaskUpdated(taskId, 'SUBMITTED')
   logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'IN_PROGRESS', to: 'SUBMITTED' })
+
+  // Push + socket for buyer: work submitted, please review
+  void sendPush(task.buyerId, 'Work Submitted', `Worker has submitted work for "${task.title}". Please review.`, { taskId })
+  emitNotification(task.buyerId, { type: 'TASK_SUBMITTED', title: 'Work Submitted', body: `Worker submitted work for "${task.title}".`, data: { taskId } })
+
   return result
 }
 
@@ -858,6 +903,11 @@ export async function retryTask(workerId: string, taskId: string) {
   })
   emitTaskUpdated(taskId, 'IN_PROGRESS')
   logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'REJECTED', to: 'IN_PROGRESS', action: 'retry' })
+
+  // Push + socket for buyer: worker retrying
+  void sendPush(task.buyerId, 'Worker Retrying', `Worker is retrying work for "${task.title}".`, { taskId })
+  emitNotification(task.buyerId, { type: 'TASK_STARTED', title: 'Worker Retrying', body: `Worker accepted feedback and is retrying.`, data: { taskId } })
+
   return result
 }
 
@@ -901,6 +951,11 @@ export async function disputeTask(workerId: string, taskId: string, input: Reaso
   )
   emitTaskUpdated(taskId, 'DISPUTED')
   logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: task.status, to: 'DISPUTED', reason: input.reason })
+
+  // Push + socket for buyer: worker disputed
+  void sendPush(task.buyerId, 'Task Disputed', `Worker has raised a dispute for "${task.title}".`, { taskId })
+  emitNotification(task.buyerId, { type: 'TASK_DISPUTED', title: 'Task Disputed', body: input.reason, data: { taskId } })
+
   return result
 }
 

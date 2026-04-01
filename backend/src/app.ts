@@ -41,7 +41,9 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // ── Plugins ──────────────────────────────────────────────────────────────────
   void app.register(cors, {
-    origin: true, // allow all origins (pre-launch — tighten before production)
+    origin: env.NODE_ENV === 'production'
+      ? env.CORS_ORIGINS.split(',').map(o => o.trim())
+      : true,
     credentials: true,
   })
   void app.register(helmet, { contentSecurityPolicy: false })
@@ -53,9 +55,11 @@ export async function buildApp(): Promise<FastifyInstance> {
     global: false,
   })
 
-  // Allow empty body for application/json
-  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+  // Allow empty body for application/json + capture raw body for webhook signature verification
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
     if (!body || (body as string).length === 0) { done(null, {}); return }
+    // Store raw body for webhook signature verification (Razorpay, etc.)
+    ;(req as any).rawBody = body as string
     try { done(null, JSON.parse(body as string)) } catch (err) { done(err as Error, undefined) }
   })
 

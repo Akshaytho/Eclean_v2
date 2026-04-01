@@ -6,9 +6,9 @@
  * Replaces the 3-photo section of ActiveTaskScreen when task has reference points.
  */
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity, Alert,
   ScrollView, Image, Modal, ActivityIndicator, Linking, Platform,
 } from 'react-native'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -100,7 +100,11 @@ export function ReferencePointNavigator() {
     refetchInterval: 15_000,
   })
 
+  // Refs to avoid stale closure in onCapture callback
+  const activePointRef = useRef<{ pointId: string; isVerification: boolean }>({ pointId: '', isVerification: false })
+
   const openCamera = useCallback((point: SubmissionProgress['points'][number]) => {
+    activePointRef.current = { pointId: point.id, isVerification: point.isVerificationPoint }
     setCameraState({
       visible: true,
       pointId: point.id,
@@ -114,7 +118,8 @@ export function ReferencePointNavigator() {
 
   const onCapture = useCallback(async (result: CaptureResult) => {
     setCameraState(s => ({ ...s, visible: false }))
-    if (!cameraState.pointId) return
+    const { pointId, isVerification } = activePointRef.current
+    if (!pointId) return
 
     const meta = result.photo.metadata ? {
       lat:       result.photo.metadata.lat,
@@ -125,21 +130,17 @@ export function ReferencePointNavigator() {
     } : undefined
 
     try {
-      // Always submit as AFTER (counts toward coverage requirement)
+      // Upload once as AFTER — backend detects isVerificationPoint and creates
+      // both AFTER + VERIFICATION records from the single upload
       await referencePointsApi.submitPoint(
-        taskId, cameraState.pointId, 'AFTER', result.photo.fullUri, meta,
+        taskId, pointId, 'AFTER', result.photo.fullUri, meta,
       )
-
-      // If verification point, ALSO submit as VERIFICATION (proves presence)
-      if (cameraState.isVerification) {
-        await referencePointsApi.submitPoint(
-          taskId, cameraState.pointId, 'VERIFICATION', result.photo.fullUri, meta,
-        )
-      }
-    } catch { /* upload handled by retry/offline queue */ }
+    } catch {
+      Alert.alert('Upload Failed', 'Photo upload failed. Check your connection and try again.')
+    }
 
     qc.invalidateQueries({ queryKey: ['submission-progress', taskId] })
-  }, [taskId, cameraState.pointId, cameraState.isVerification, qc])
+  }, [taskId, qc])
 
   if (isLoading || !progress) {
     return <View style={s.center}><ActivityIndicator color={W.primary} size="large" /></View>

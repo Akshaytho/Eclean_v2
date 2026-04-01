@@ -8,6 +8,7 @@ import { authorize } from '../../middleware/authorize'
 import { validate } from '../../middleware/validate'
 import { prisma } from '../../lib/prisma'
 import { logger } from '../../lib/logger'
+import { notifyUser } from '../../lib/notify'
 import { env } from '../../config/env'
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -60,7 +61,8 @@ export async function payoutsRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send({
         pendingCents,
         processingCents,
-        availableCents,
+        paidOutCents:    availableCents,   // renamed: money already sent to bank
+        availableCents,                     // kept for backwards compatibility
         totalEarnedCents,
         completedTasksCount: profile?.completedTasks ?? 0,
       })
@@ -161,7 +163,8 @@ export async function payoutsRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       if (env.RAZORPAY_WEBHOOK_SECRET && signature) {
-        const rawBody = JSON.stringify(body)
+        // Use the actual raw HTTP body bytes for HMAC — JSON.stringify may differ from the original
+        const rawBody = (request as any).rawBody ?? JSON.stringify(body)
         const expected = crypto
           .createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET)
           .update(rawBody)
@@ -227,14 +230,20 @@ async function handlePayoutProcessed(body: Record<string, unknown>): Promise<voi
     data:  { status: 'COMPLETED', paidAt: new Date() },
   })
 
-  await prisma.notification.create({
-    data: {
-      userId: payout.workerId,
-      type:   'PAYMENT_RECEIVED',
-      title:  'Payment Received!',
-      body:   `₹${payout.workerAmountCents / 100} has been credited to your bank account for "${payout.task.title}".`,
-      data:   { payoutId: payout.id, taskId: payout.taskId },
-    },
+  // Transition task from APPROVED to COMPLETED now that money has settled
+  await prisma.task.update({
+    where: { id: payout.taskId },
+    data:  { status: 'COMPLETED' },
+  }).catch((err) => {
+    logger.warn({ taskId: payout.taskId, err }, 'Could not transition task to COMPLETED')
+  })
+
+  await notifyUser({
+    userId: payout.workerId,
+    type:   'PAYMENT_RECEIVED',
+    title:  'Payment Received!',
+    body:   `₹${payout.workerAmountCents / 100} has been credited to your bank account for "${payout.task.title}".`,
+    data:   { payoutId: payout.id, taskId: payout.taskId },
   })
 
   logger.info({ payoutId: payout.id, razorpayPayoutId }, 'Payout marked COMPLETED via webhook')
@@ -262,14 +271,12 @@ async function handlePayoutFailed(body: Record<string, unknown>): Promise<void> 
     data:  { status: 'FAILED' },
   })
 
-  await prisma.notification.create({
-    data: {
-      userId: payout.workerId,
-      type:   'PAYMENT_RECEIVED',
-      title:  'Payment Failed',
-      body:   `We could not process your payment of ₹${payout.workerAmountCents / 100} for "${payout.task.title}". Our team has been notified.`,
-      data:   { payoutId: payout.id, taskId: payout.taskId },
-    },
+  await notifyUser({
+    userId: payout.workerId,
+    type:   'PAYMENT_RECEIVED',
+    title:  'Payment Failed',
+    body:   `We could not process your payment of ₹${payout.workerAmountCents / 100} for "${payout.task.title}". Our team has been notified.`,
+    data:   { payoutId: payout.id, taskId: payout.taskId },
   })
 
   const admins = await prisma.user.findMany({

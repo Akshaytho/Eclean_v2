@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma'
+import { notifyUser } from '../../lib/notify'
 import type { CreateReportInput, ListReportsQuery } from './citizen.schema'
 
 // ─── Create citizen report ─────────────────────────────────────────────────────
@@ -26,14 +27,12 @@ export async function createReport(citizenId: string, input: CreateReportInput) 
 
   await Promise.all(
     recipients.map(r =>
-      prisma.notification.create({
-        data: {
-          userId: r.id,
-          type:   'CITIZEN_REPORT_CREATED',
-          title:  'New Citizen Report',
-          body:   `Citizen report (${input.urgency}): ${input.description.slice(0, 80)}`,
-          data:   { reportId: report.id, urgency: input.urgency, category: input.category },
-        },
+      notifyUser({
+        userId: r.id,
+        type:   'CITIZEN_REPORT_CREATED',
+        title:  'New Citizen Report',
+        body:   `Citizen report (${input.urgency}): ${input.description.slice(0, 80)}`,
+        data:   { reportId: report.id, urgency: input.urgency, category: input.category },
       }),
     ),
   )

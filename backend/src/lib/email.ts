@@ -80,7 +80,7 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
   const client = getClient()
 
   if (!client) {
-    console.log(`[DEV EMAIL] Verify email for ${to} → ${url}`)
+    logger.info(`[DEV EMAIL] Verify email for ${to} → ${url}`)
     return
   }
 
@@ -110,11 +110,15 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
 // ─── sendPasswordResetEmail ───────────────────────────────────────────────────
 
 export async function sendPasswordResetEmail(to: string, token: string): Promise<void> {
-  const url    = `${env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`
+  // Use deep link for mobile-first: eclean://reset-password opens the app directly
+  // Falls back to FRONTEND_URL if a web reset page exists
+  const url    = env.FRONTEND_URL.includes('localhost')
+    ? `eclean://reset-password?token=${encodeURIComponent(token)}`
+    : `${env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(token)}`
   const client = getClient()
 
   if (!client) {
-    console.log(`[DEV EMAIL] Password reset for ${to} → ${url}`)
+    logger.info(`[DEV EMAIL] Password reset for ${to} → ${url}`)
     return
   }
 

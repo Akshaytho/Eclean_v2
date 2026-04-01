@@ -2,6 +2,7 @@ import type { DirtyLevel } from '@prisma/client'
 import { prisma } from '../../lib/prisma'
 import { payoutQueue, PAYOUT_QUEUE } from '../../jobs/payout.job'
 import { NotFoundError, BadRequestError } from '../../lib/errors'
+import { notifyUser } from '../../lib/notify'
 import { DIRTY_LEVEL_PRICING } from '../tasks/tasks.schema'
 import { assertTransition } from '../tasks/tasks.state-machine'
 import type {
@@ -355,14 +356,12 @@ export async function verifyUserIdentity(userId: string) {
     data:  { identityVerified: true },
   })
 
-  await prisma.notification.create({
-    data: {
-      userId,
-      type:  'IDENTITY_VERIFIED',
-      title: 'Identity Verified',
-      body:  'Your identity has been verified by an admin. You can now accept higher-value tasks.',
-      data:  { verified: true },
-    },
+  await notifyUser({
+    userId,
+    type:  'IDENTITY_VERIFIED',
+    title: 'Identity Verified',
+    body:  'Your identity has been verified by an admin. You can now accept higher-value tasks.',
+    data:  { verified: true },
   })
 
   return { userId, identityVerified: true }

@@ -8,6 +8,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 
 import { useAuthStore }       from '../stores/authStore'
 import { COLORS }             from '../constants/colors'
+import { NavigatorErrorBoundary } from '../components/NavigatorErrorBoundary'
 import type { RootStackParamList } from './types'
 
 // Auth screens
@@ -64,14 +65,13 @@ export function RootNavigator() {
       {!isLoggedIn || !user ? (
         <Stack.Screen name="Auth" component={AuthStack} />
       ) : user.role === 'WORKER' ? (
-        <Stack.Screen name="WorkerStack" component={WorkerNavigator} />
+        <Stack.Screen name="WorkerStack">{() => <NavigatorErrorBoundary label="Worker"><WorkerNavigator /></NavigatorErrorBoundary>}</Stack.Screen>
       ) : user.role === 'BUYER' ? (
-        <Stack.Screen name="BuyerStack" component={BuyerNavigator} />
+        <Stack.Screen name="BuyerStack">{() => <NavigatorErrorBoundary label="Buyer"><BuyerNavigator /></NavigatorErrorBoundary>}</Stack.Screen>
       ) : user.role === 'SUPERVISOR' ? (
-        <Stack.Screen name="SupervisorStack" component={SupervisorNavigator} />
+        <Stack.Screen name="SupervisorStack">{() => <NavigatorErrorBoundary label="Supervisor"><SupervisorNavigator /></NavigatorErrorBoundary>}</Stack.Screen>
       ) : (
-        // CITIZEN and ADMIN both fall into CitizenStack for now
-        <Stack.Screen name="CitizenStack" component={CitizenNavigator} />
+        <Stack.Screen name="CitizenStack">{() => <NavigatorErrorBoundary label="Citizen"><CitizenNavigator /></NavigatorErrorBoundary>}</Stack.Screen>
       )}
     </Stack.Navigator>
   )

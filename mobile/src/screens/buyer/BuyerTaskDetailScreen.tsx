@@ -80,6 +80,9 @@ export function BuyerTaskDetailScreen() {
   // Reject modal state
   const [rejectModal,  setRejectModal]  = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  // Cancel modal state
+  const [cancelModal,  setCancelModal]  = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
   // Full-screen photo viewer
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
 
@@ -154,6 +157,32 @@ export function BuyerTaskDetailScreen() {
       Alert.alert('Error', err?.response?.data?.error?.message ?? 'Could not reject')
     },
   })
+
+  // ── Cancel mutation (buyer cancels own task) ───────────────────────────
+  const cancelMutation = useMutation({
+    mutationFn: (reason: string) => buyerTasksApi.cancel(taskId, reason),
+    onSuccess: () => {
+      setCancelModal(false)
+      setCancelReason('')
+      qc.invalidateQueries({ queryKey: ['buyer-task', taskId] })
+      qc.invalidateQueries({ queryKey: ['buyer-tasks'] })
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      Alert.alert('Task Cancelled', 'Your task has been cancelled. A refund will be processed.')
+      navigation.goBack()
+    },
+    onError: (err: any) => {
+      Alert.alert('Error', err?.response?.data?.error?.message ?? 'Could not cancel task')
+    },
+  })
+
+  const handleCancelSubmit = () => {
+    const reason = cancelReason.trim()
+    if (reason.length < 10) {
+      Alert.alert('Too short', 'Please provide at least 10 characters.')
+      return
+    }
+    cancelMutation.mutate(reason)
+  }
 
   const handleApprove = () => {
     if (isActing.current) return
@@ -416,6 +445,18 @@ export function BuyerTaskDetailScreen() {
         </View>
       )}
 
+      {/* ── Cancel button (OPEN / ACCEPTED / IN_PROGRESS) ── */}
+      {(task.status === 'OPEN' || task.status === 'ACCEPTED' || task.status === 'IN_PROGRESS') && !canAct && (
+        <View style={s.footer}>
+          <Button
+            label="Cancel Task"
+            onPress={() => setCancelModal(true)}
+            variant="danger"
+            fullWidth
+          />
+        </View>
+      )}
+
       {/* ── Rate worker (after approval) ── */}
       {(task.status === 'APPROVED' || task.status === 'COMPLETED') && (
         <View style={s.footer}>
@@ -459,6 +500,46 @@ export function BuyerTaskDetailScreen() {
                 label={rejectMutation.isPending ? 'Sending...' : 'Submit Rejection'}
                 onPress={handleRejectSubmit}
                 loading={rejectMutation.isPending}
+                variant="danger"
+                style={{ flex: 2 } as any}
+              />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Cancel reason modal ── */}
+      <Modal visible={cancelModal} transparent animationType="slide" onRequestClose={() => { setCancelModal(false); setCancelReason('') }}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => { setCancelModal(false); setCancelReason('') }} />
+          <View style={s.modalBox}>
+            <Text style={s.modalTitle}>Cancel this task?</Text>
+            <Text style={s.modalSub}>
+              {task?.workerId
+                ? 'The assigned worker will be notified. The task will be available for other workers.'
+                : 'A refund will be processed.'}
+              {' '}Min 10 characters required.
+            </Text>
+            <TextInput
+              style={s.modalInput}
+              placeholder="Reason for cancellation..."
+              value={cancelReason}
+              onChangeText={setCancelReason}
+              multiline
+              numberOfLines={4}
+              placeholderTextColor={B.text.muted}
+            />
+            <View style={s.modalActions}>
+              <Button
+                label="Keep Task"
+                variant="ghost"
+                onPress={() => { setCancelModal(false); setCancelReason('') }}
+                style={{ flex: 1 }}
+              />
+              <Button
+                label={cancelMutation.isPending ? 'Cancelling...' : 'Cancel Task'}
+                onPress={handleCancelSubmit}
+                loading={cancelMutation.isPending}
                 variant="danger"
                 style={{ flex: 2 } as any}
               />

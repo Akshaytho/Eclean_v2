@@ -139,11 +139,11 @@ export function initSocket(httpServer: HttpServer): Server {
           return
         }
 
-        // Write every 5th GPS point to DB to limit table growth; emit all for smooth real-time
+        // Write every 2nd GPS point to DB for better trail resolution; emit all for smooth real-time
         const counterKey = `gps_cnt:${user.id}:${taskId}`
         const count = await redis.incr(counterKey)
         await redis.expire(counterKey, 86400) // expire after 24h
-        if (count % 5 === 0) {
+        if (count % 2 === 0) {
           await prisma.taskLocationLog.create({
             data: {
               taskId,
@@ -171,6 +171,12 @@ export function initSocket(httpServer: HttpServer): Server {
       if (!payload || typeof payload !== 'object') return
       const { taskId, content } = payload as Record<string, unknown>
       if (typeof taskId !== 'string' || typeof content !== 'string' || !content.trim()) return
+
+      // Rate limit: 1 message per second per user per task
+      const chatRlKey = `chat_rl:${user.id}:${taskId}`
+      const limited = await redis.exists(chatRlKey)
+      if (limited) return
+      await redis.setex(chatRlKey, 1, '1')
 
       try {
         const task = await prisma.task.findUnique({

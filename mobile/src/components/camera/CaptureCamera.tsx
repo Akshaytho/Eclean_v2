@@ -88,11 +88,19 @@ export const CaptureCamera = React.memo(function CaptureCamera({
       ])
       if (!photo) throw new Error('Camera failed')
 
-      // Hash from file info (fast) instead of reading entire file as base64 (slow)
-      const photoHash = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        `${photo.uri}-${photo.width}-${photo.height}-${Date.now()}`
-      ).catch(() => `fallback-${Date.now()}`)
+      // Hash actual file bytes for real tamper detection
+      let photoHash: string
+      try {
+        const fileBytes = await FileSystem.readAsStringAsync(photo.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        })
+        photoHash = await Crypto.digestStringAsync(
+          Crypto.CryptoDigestAlgorithm.SHA256,
+          fileBytes,
+        )
+      } catch {
+        photoHash = `fallback-${Date.now()}-${photo.width}x${photo.height}`
+      }
 
       const metadata: CaptureMetadata = {
         lat:       locResult?.coords.latitude  ?? null,

@@ -10,21 +10,22 @@ export async function saveDeviceToken(userId: string, token: string): Promise<vo
   })
 }
 
-export async function getNotifications(userId: string, page: number) {
-  const skip = (page - 1) * PAGE_SIZE
+export async function getNotifications(userId: string, page: number, limit = PAGE_SIZE) {
+  const take = Math.min(limit, 50)
+  const skip = (page - 1) * take
 
   const [notifications, total, unreadCount] = await Promise.all([
     prisma.notification.findMany({
       where:   { userId },
       orderBy: { createdAt: 'desc' },
       skip,
-      take:    PAGE_SIZE,
+      take,
     }),
     prisma.notification.count({ where: { userId } }),
     prisma.notification.count({ where: { userId, isRead: false } }),
   ])
 
-  return { notifications, total, unreadCount, page, limit: PAGE_SIZE }
+  return { notifications, total, unreadCount, page, limit: take }
 }
 
 export async function markOneRead(userId: string, id: string) {

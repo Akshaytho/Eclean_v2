@@ -3,6 +3,7 @@ import { logger } from '../lib/logger'
 import { prisma } from '../lib/prisma'
 import { bullmqConnection as connection } from '../lib/bullmq'
 import { verifyTaskSubmission } from '../modules/ai/ai.service'
+import { notifyUser } from '../lib/notify'
 // adversarialCheck merged into verifyTaskSubmission — single call now
 
 // ─── Queue (used by controller to enqueue jobs) ───────────────────────────────
@@ -31,24 +32,20 @@ export function createAiVerifyWorker(): Worker {
         if (!task) return
 
         if (result.score >= 0.75 && result.recommendation === 'APPROVE') {
-          await prisma.notification.create({
-            data: {
-              userId: task.buyerId,
-              type:   'TASK_VERIFIED',
-              title:  'AI Verification Passed ✓',
-              body:   `Work for "${task.title}" scored ${Math.round(result.score * 100)}% — please review and approve.`,
-              data:   { taskId, score: result.score, label: result.label },
-            },
+          await notifyUser({
+            userId: task.buyerId,
+            type:   'TASK_VERIFIED',
+            title:  'AI Verification Passed ✓',
+            body:   `Work for "${task.title}" scored ${Math.round(result.score * 100)}% — please review and approve.`,
+            data:   { taskId, score: result.score, label: result.label },
           })
         } else if (result.score < 0.50 || result.recommendation === 'REJECT') {
-          await prisma.notification.create({
-            data: {
-              userId: task.buyerId,
-              type:   'TASK_REJECTED',
-              title:  'AI Verification Failed ✗',
-              body:   `Work for "${task.title}" scored ${Math.round(result.score * 100)}%. Reason: ${result.reasoning}`,
-              data:   { taskId, score: result.score, label: result.label, reasoning: result.reasoning },
-            },
+          await notifyUser({
+            userId: task.buyerId,
+            type:   'TASK_REJECTED',
+            title:  'AI Verification Failed ✗',
+            body:   `Work for "${task.title}" scored ${Math.round(result.score * 100)}%. Reason: ${result.reasoning}`,
+            data:   { taskId, score: result.score, label: result.label, reasoning: result.reasoning },
           })
         }
         // 0.50–0.74 or REVIEW: no auto-notification, enters manual review queue
@@ -65,16 +62,12 @@ export function createAiVerifyWorker(): Worker {
 
         const task = await prisma.task.findUnique({ where: { id: taskId } }).catch(() => null)
         if (task) {
-          await prisma.notification.create({
-            data: {
-              userId: task.buyerId,
-              type:   'TASK_SUBMITTED',
-              title:  'Manual Review Required',
-              body:   `AI verification unavailable for "${task.title}". Please review manually.`,
-              data:   { taskId },
-            },
-          }).catch(() => {
-            // Ignore notification failure
+          await notifyUser({
+            userId: task.buyerId,
+            type:   'TASK_SUBMITTED',
+            title:  'Manual Review Required',
+            body:   `AI verification unavailable for "${task.title}". Please review manually.`,
+            data:   { taskId },
           })
         }
       }

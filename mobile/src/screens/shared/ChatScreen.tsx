@@ -28,14 +28,12 @@ export function ChatScreen() {
   const historyQuery = useQuery({
     queryKey: ['chat-history', taskId],
     queryFn:  async () => {
-      // Try buyer route first, fallback to worker route
-      try {
-        const r = await apiClient.get(`/buyer/tasks/${taskId}/chat`, { params: { limit: 50 } })
-        return r.data.messages ?? []
-      } catch {
-        const r = await apiClient.get(`/worker/tasks/${taskId}/chat`, { params: { limit: 50 } })
-        return r.data.messages ?? []
-      }
+      // Use correct route based on user role — avoids wasted 403 for workers
+      const route = user?.role === 'BUYER'
+        ? `/buyer/tasks/${taskId}/chat`
+        : `/worker/tasks/${taskId}/chat`
+      const r = await apiClient.get(route, { params: { limit: 50 } })
+      return r.data.messages ?? []
     },
     staleTime: Infinity,
   })
@@ -52,7 +50,11 @@ export function ChatScreen() {
   useEffect(() => {
     joinTask(taskId)
     const handler = (msg: ChatMessage) => {
-      setMessages(prev => [...prev, msg])
+      setMessages(prev => {
+        // Dedup: socket reconnect may re-deliver messages
+        if (prev.some(m => m.id === msg.id)) return prev
+        return [...prev, msg]
+      })
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100)
     }
     socket?.on('chat:message', handler)
@@ -70,6 +72,27 @@ export function ChatScreen() {
   }
 
   const isMe = (msg: ChatMessage) => msg.from?.id === user?.id
+
+  if (historyQuery.isError) {
+    return (
+      <View style={s.root}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+            <ChevronLeft size={22} color={COLORS.neutral[900]} />
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>Chat</Text>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Text style={{ fontSize: 16, color: COLORS.neutral[500], textAlign: 'center' }}>
+            Could not load chat. You may not have access to this conversation.
+          </Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 16 }}>
+            <Text style={{ color: COLORS.brand.primary, fontWeight: '600' }}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    )
+  }
 
   return (
     <KeyboardAvoidingView

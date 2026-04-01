@@ -71,7 +71,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 
       const result = await authService.refresh(token)
       reply.setCookie('refreshToken', result.refreshToken, REFRESH_COOKIE_OPTS)
-      return reply.status(200).send({ accessToken: result.accessToken, refreshToken: result.refreshToken })
+      return reply.status(200).send({ accessToken: result.accessToken, refreshToken: result.refreshToken, expiresIn: 15 * 60 })
     },
   )
 

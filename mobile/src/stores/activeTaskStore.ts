@@ -33,7 +33,20 @@ export const useActiveTaskStore = create<ActiveTaskState>((set) => ({
     }),
 
   appendGPS: (coord) =>
-    set((state) => ({ gpsTrail: [...state.gpsTrail, coord] })),
+    set((state) => {
+      const trail = state.gpsTrail
+      if (trail.length < 500) {
+        return { gpsTrail: [...trail, coord] }
+      }
+      // Downsample: keep every other point from first half, all points from second half
+      const half = Math.floor(trail.length / 2)
+      const downsampled = [
+        ...trail.slice(0, half).filter((_, i) => i % 2 === 0),
+        ...trail.slice(half),
+        coord,
+      ]
+      return { gpsTrail: downsampled }
+    }),
 
   clearGPSTrail: () => set({ gpsTrail: [] }),
 

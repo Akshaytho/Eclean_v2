@@ -17,6 +17,8 @@ import { Queue, Worker } from 'bullmq'
 import { bullmqConnection as connection } from '../lib/bullmq'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
+import { payoutQueue, PAYOUT_QUEUE } from './payout.job'
+import { notifyUser } from '../lib/notify'
 
 export const PAYMENT_RELEASE_QUEUE = 'payment-auto-release'
 
@@ -68,36 +70,65 @@ export function createPaymentReleaseWorker(): Worker {
         if (timeout === undefined) continue
         if (hoursSinceSubmit < timeout) continue
 
-        // Auto-approve the task
+        // Auto-approve the task — full approval logic (matches approveTask in tasks.service.ts)
         try {
-          await prisma.task.update({
-            where: { id: task.id },
-            data: {
-              status: 'APPROVED',
-              completedAt: new Date(),
-            },
+          const platformFeeCents  = Math.floor(task.rateCents * 0.10)
+          const workerAmountCents = task.rateCents - platformFeeCents
+
+          const payout = await prisma.$transaction(async (tx) => {
+            await tx.task.update({
+              where: { id: task.id },
+              data: { status: 'APPROVED', completedAt: new Date() },
+            })
+
+            const newPayout = await tx.payout.create({
+              data: {
+                taskId: task.id,
+                workerId: task.workerId!,
+                buyerId: task.buyerId,
+                amountCents: task.rateCents,
+                platformFeeCents,
+                workerAmountCents,
+                status: 'PENDING',
+              },
+            })
+
+            await tx.workerProfile.update({
+              where: { userId: task.workerId! },
+              data: { activeTaskId: null, completedTasks: { increment: 1 } },
+            })
+
+            await tx.buyerProfile.update({
+              where: { userId: task.buyerId },
+              data: { totalSpentCents: { increment: task.rateCents } },
+            }).catch(() => {}) // buyer profile may not exist for admin-created tasks
+
+            return newPayout
           })
 
-          // Notify worker
-          await prisma.notification.create({
-            data: {
-              userId: task.workerId,
-              type: 'TASK_VERIFIED',
-              title: 'Payment Released',
-              body: `Payment for "${task.title}" has been auto-released. Thank you for your work!`,
-              data: { taskId: task.id, autoReleased: true },
-            },
+          // Enqueue payout job (after transaction commits)
+          await payoutQueue.add(
+            PAYOUT_QUEUE,
+            { payoutId: payout.id },
+            { jobId: `payout_${payout.id}` },
+          )
+
+          // Notify worker (DB + push + socket)
+          await notifyUser({
+            userId: task.workerId!,
+            type: 'PAYMENT_RECEIVED',
+            title: 'Payment Released',
+            body: `₹${workerAmountCents / 100} for "${task.title}" has been auto-released. Thank you for your work!`,
+            data: { taskId: task.id, payoutId: payout.id, autoReleased: true },
           })
 
-          // Notify buyer
-          await prisma.notification.create({
-            data: {
-              userId: task.buyerId,
-              type: 'TASK_VERIFIED',
-              title: 'Payment Auto-Released',
-              body: `Payment for "${task.title}" was auto-released after ${timeout}h. You can dispute within 24h.`,
-              data: { taskId: task.id, autoReleased: true, disputeWindowHours: 24 },
-            },
+          // Notify buyer (DB + push + socket)
+          await notifyUser({
+            userId: task.buyerId,
+            type: 'TASK_VERIFIED',
+            title: 'Payment Auto-Released',
+            body: `Payment for "${task.title}" was auto-released after ${timeout}h. You can dispute within 24h.`,
+            data: { taskId: task.id, autoReleased: true, disputeWindowHours: 24 },
           })
 
           released++

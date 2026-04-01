@@ -146,6 +146,13 @@ model WorkerProfile {
   // Trust score (Silent Witness Protocol)
   trustScore       Int      @default(70)  // 0-100, starts at 70 (trusted)
 
+  // Bank account for Razorpay payouts
+  bankAccountNumber      String?
+  ifscCode               String?
+  accountHolderName      String?
+  razorpayContactId      String?  // Razorpay Contact ID
+  razorpayFundAccountId  String?  // Razorpay Fund Account ID (required for payouts)
+
   user       User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   activeTask Task? @relation("WorkerActiveTask", fields: [activeTaskId], references: [id])
 }

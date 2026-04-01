@@ -8,7 +8,7 @@
  * Shows: full-screen map, GPS trail, worker info overlay, time on site counter
  */
 import React, { useEffect, useState, useRef } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert } from 'react-native'
 import MapView, { Marker, Polyline, Circle } from 'react-native-maps'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -50,9 +50,22 @@ export function LiveTrackScreen() {
       setTrail(prev => [...prev.slice(-200), coord])
     }
 
+    // Listen for task status changes (e.g. IN_PROGRESS → SUBMITTED)
+    const handleTaskUpdated = (data: { taskId: string; status: string }) => {
+      if (data.taskId === taskId && data.status !== 'IN_PROGRESS') {
+        Alert.alert(
+          'Task Updated',
+          data.status === 'SUBMITTED' ? 'Worker has submitted their work for review.' : `Task status: ${data.status}`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }],
+        )
+      }
+    }
+
     socket?.on('worker:location', handleLocation)
+    socket?.on('task:updated', handleTaskUpdated)
     return () => {
       socket?.off('worker:location', handleLocation)
+      socket?.off('task:updated', handleTaskUpdated)
       leaveTask(taskId)
     }
   }, [taskId, socket])
@@ -120,8 +133,11 @@ export function LiveTrackScreen() {
               coordinate={{ latitude: last.lat, longitude: last.lng }}
               title="Worker"
             >
-              <View style={styles.workerDot}>
-                <View style={styles.workerDotInner} />
+              <View style={styles.workerMarkerWrap}>
+                <PulsingRing />
+                <View style={styles.workerDot}>
+                  <View style={styles.workerDotInner} />
+                </View>
               </View>
             </Marker>
           </>
@@ -186,12 +202,43 @@ export function LiveTrackScreen() {
   )
 }
 
+// Animated pulsing ring around worker marker
+function PulsingRing() {
+  const scale = useRef(new Animated.Value(1)).current
+  const opacity = useRef(new Animated.Value(0.6)).current
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(scale, { toValue: 2.2, duration: 1200, useNativeDriver: true }),
+          Animated.timing(scale, { toValue: 1, duration: 0, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(opacity, { toValue: 0, duration: 1200, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0.6, duration: 0, useNativeDriver: true }),
+        ]),
+      ]),
+    )
+    pulse.start()
+    return () => pulse.stop()
+  }, [])
+
+  return (
+    <Animated.View style={{
+      position: 'absolute', width: 22, height: 22, borderRadius: 11,
+      backgroundColor: B.primary, transform: [{ scale }], opacity,
+    }} />
+  )
+}
+
 const styles = StyleSheet.create({
   root:          { flex: 1 },
   map:           { flex: 1 },
   back:          { position: 'absolute', top: 56, left: 16, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 22, padding: 10, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 },
 
   // Custom worker marker
+  workerMarkerWrap: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   workerDot:     { width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: B.primary },
   workerDotInner:{ width: 12, height: 12, borderRadius: 6, backgroundColor: B.primary },
 

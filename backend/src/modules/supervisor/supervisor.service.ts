@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma'
 import { NotFoundError, ForbiddenError } from '../../lib/errors'
+import { notifyUser } from '../../lib/notify'
 import type { FlagTaskInput, SupervisorTasksQuery } from './supervisor.schema'
 
 // ─── Dashboard: zones assigned to supervisor + active tasks ───────────────────
@@ -85,14 +86,12 @@ export async function flagTask(
 
   await Promise.all(
     admins.map(a =>
-      prisma.notification.create({
-        data: {
-          userId: a.id,
-          type:   'TASK_FLAGGED',
-          title:  'Task Flagged by Supervisor',
-          body:   `Task "${task.title}" has been flagged: ${input.reason}`,
-          data:   { taskId, reason: input.reason },
-        },
+      notifyUser({
+        userId: a.id,
+        type:   'TASK_FLAGGED',
+        title:  'Task Flagged by Supervisor',
+        body:   `Task "${task.title}" has been flagged: ${input.reason}`,
+        data:   { taskId, reason: input.reason },
       }),
     ),
   )

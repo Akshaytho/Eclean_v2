@@ -19,6 +19,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional().default(''),
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
+  RAZORPAY_ACCOUNT_NUMBER: z.string().optional(), // RazorpayX current account number for payouts
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
@@ -42,8 +43,8 @@ export const env: Env = parsed.data
 if (!env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY) {
   console.warn('⚠️  CLOUDINARY keys not set — media uploads will fail')
 }
-if (!env.ANTHROPIC_API_KEY) {
-  console.warn('⚠️  ANTHROPIC_API_KEY not set — AI verification will fail')
+if (!env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY) {
+  console.warn('⚠️  Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY set — AI verification will fail')
 }
 if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
   console.warn('⚠️  RAZORPAY keys not set — payment features disabled')

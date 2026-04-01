@@ -47,7 +47,7 @@ import type { SubmissionProgress } from '../../types'
 type Nav   = NativeStackNavigationProp<WorkerStackParamList, 'ActiveTask'>
 type Route = RouteProp<WorkerStackParamList, 'ActiveTask'>
 
-const GEOFENCE_RADIUS_KM = 0.5
+const GEOFENCE_RADIUS_KM = 2
 
 function openMapsNavigation(lat: number, lng: number) {
   const url = Platform.select({
@@ -76,6 +76,8 @@ export function ActiveTaskScreen() {
   const gpsRetryCount                    = useRef(0)
   const [cancelModal, setCancelModal]   = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  const [disputeModal, setDisputeModal] = useState(false)
+  const [disputeReason, setDisputeReason] = useState('')
   const [isOnline, setIsOnline]         = useState(true)
   const [cameraState, setCameraState]   = useState<{
     visible: boolean; pointId: string | null; pointIndex: number;
@@ -166,6 +168,28 @@ export function ActiveTaskScreen() {
     },
   })
 
+  const retryMutation = useMutation({
+    mutationFn: () => workerTasksApi.retry(taskId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['worker', 'task', taskId] })
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    },
+    onError: (err: any) => {
+      Alert.alert('Error', err?.response?.data?.error?.message ?? 'Could not retry task')
+    },
+  })
+
+  const disputeMutation = useMutation({
+    mutationFn: (reason: string) => workerTasksApi.dispute(taskId, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['worker', 'task', taskId] })
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    },
+    onError: (err: any) => {
+      Alert.alert('Error', err?.response?.data?.error?.message ?? 'Could not submit dispute')
+    },
+  })
+
   // ── Computed ──────────────────────────────────────────────────────────────
   const distanceKm = (currentLocation && task?.locationLat)
     ? haversineKm(currentLocation.lat, currentLocation.lng, task.locationLat, task.locationLng!)
@@ -187,7 +211,7 @@ export function ActiveTaskScreen() {
         setGpsRetrying(false)
         return
       }
-      Alert.alert('Too Far', `You're ${distanceKm ? `${distanceKm.toFixed(1)} km` : '?'} away. Get within 500m to start.`)
+      Alert.alert('Too Far', `You're ${distanceKm ? `${distanceKm.toFixed(1)} km` : '?'} away. Get within ${GEOFENCE_RADIUS_KM} km to start.`)
       gpsRetryCount.current = 0
       return
     }
@@ -202,7 +226,11 @@ export function ActiveTaskScreen() {
   const completedCount = progress?.afterCompleted ?? 0
   const totalCount = progress?.totalPoints ?? 0
 
+  // Ref to avoid stale closure in onCapture (same pattern as ReferencePointNavigator)
+  const activePointRef = useRef<string | null>(null)
+
   const openCameraForPoint = useCallback((point: SubmissionProgress['points'][number]) => {
+    activePointRef.current = point.id
     setCameraState({
       visible: true, pointId: point.id, pointIndex: point.pointIndex,
       label: point.label, buyerImageUrl: point.buyerImageUrl, distance: point.distanceFromWorker,
@@ -211,21 +239,216 @@ export function ActiveTaskScreen() {
 
   const onCapture = useCallback(async (result: CaptureResult) => {
     setCameraState(s => ({ ...s, visible: false }))
-    if (!cameraState.pointId) return
+    const pointId = activePointRef.current
+    if (!pointId) return
     const meta = result.photo.metadata ? {
       lat: result.photo.metadata.lat, lng: result.photo.metadata.lng,
       timestamp: result.photo.metadata.timestamp, deviceId: result.photo.metadata.deviceId,
       photoHash: result.photo.metadata.photoHash,
     } : undefined
     try {
-      await referencePointsApi.submitPoint(taskId, cameraState.pointId, 'AFTER', result.photo.fullUri, meta)
-    } catch {}
+      await referencePointsApi.submitPoint(taskId, pointId, 'AFTER', result.photo.fullUri, meta)
+    } catch {
+      Alert.alert('Upload Failed', 'Photo upload failed. Check your connection and try again.')
+    }
     qc.invalidateQueries({ queryKey: ['submission-progress', taskId] })
-  }, [taskId, cameraState.pointId])
+  }, [taskId, qc])
 
   // ── Loading ───────────────────────────────────────────────────────────────
   if (isLoading || !task) {
     return <View style={s.center}><ActivityIndicator color={W.primary} size="large" /></View>
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // REJECTED STATE — Show rejection reason + Retry / Dispute options
+  // ══════════════════════════════════════════════════════════════════════════
+  if (task.status === 'REJECTED') {
+    return (
+      <View style={s.root}>
+        <View style={s.progressHeader}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+            <Text style={s.backText}>{'<'}</Text>
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>Task Rejected</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <ScrollView contentContainerStyle={s.progressContent}>
+          {/* Rejection info */}
+          <View style={[s.progressCard, { borderColor: '#FECACA' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <AlertTriangle size={20} color="#DC2626" />
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#DC2626' }}>Work Rejected</Text>
+            </View>
+            {task.rejectionReason && (
+              <View style={{ backgroundColor: '#FEF2F2', padding: 12, borderRadius: 10, marginBottom: 12 }}>
+                <Text style={{ fontSize: 13, color: '#7F1D1D', fontWeight: '600', marginBottom: 4 }}>Buyer's reason:</Text>
+                <Text style={{ fontSize: 14, color: '#991B1B' }}>{task.rejectionReason}</Text>
+              </View>
+            )}
+            {task.aiScore != null && (
+              <View style={{ backgroundColor: '#F0F9FF', padding: 12, borderRadius: 10 }}>
+                <Text style={{ fontSize: 13, color: '#1E40AF', fontWeight: '600' }}>AI Verification Score: {task.aiScore}%</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Actions */}
+          <View style={{ gap: 12 }}>
+            <TouchableOpacity
+              style={[s.startBtn]}
+              onPress={() => {
+                Alert.alert(
+                  'Retry Work',
+                  'You can go back and redo the work. The task will return to IN_PROGRESS.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Retry', onPress: () => retryMutation.mutate() },
+                  ]
+                )
+              }}
+              activeOpacity={0.85}
+            >
+              <Play size={18} color="#fff" />
+              <Text style={s.startBtnText}>RETRY WORK</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.navigateBtn, { backgroundColor: '#F59E0B' }]}
+              onPress={() => setDisputeModal(true)}
+              activeOpacity={0.85}
+            >
+              <Flag size={18} color="#fff" />
+              <Text style={s.navigateBtnText}>DISPUTE REJECTION</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={s.footerBtn}
+              onPress={() => {
+                navigation.navigate('WorkerTabs', { screen: 'MyTasks' } as never)
+              }}
+            >
+              <Text style={[s.footerBtnText, { textAlign: 'center' }]}>Back to My Tasks</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+
+        {/* Dispute modal */}
+        <Modal visible={disputeModal} transparent animationType="slide" onRequestClose={() => setDisputeModal(false)}>
+          <View style={s.modalOverlay}>
+            <View style={s.modalCard}>
+              <Text style={s.modalTitle}>Dispute this rejection</Text>
+              <Text style={s.modalSub}>Explain why you believe the rejection is unfair (min 10 characters)</Text>
+              <TextInput
+                style={s.modalInput}
+                value={disputeReason}
+                onChangeText={setDisputeReason}
+                placeholder="I believe this rejection is unfair because..."
+                placeholderTextColor={W.text.muted}
+                multiline
+              />
+              <View style={s.modalBtns}>
+                <TouchableOpacity style={s.modalCancelBtn} onPress={() => setDisputeModal(false)}>
+                  <Text style={s.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.modalConfirmBtn, { backgroundColor: '#F59E0B' }]}
+                  onPress={() => {
+                    if (disputeReason.trim().length < 10) { Alert.alert('Too Short', 'Please provide at least 10 characters.'); return }
+                    setDisputeModal(false)
+                    disputeMutation.mutate(disputeReason.trim())
+                  }}
+                  disabled={disputeMutation.isPending}
+                >
+                  {disputeMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={s.modalConfirmText}>Submit Dispute</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    )
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DISPUTED STATE — Waiting for resolution
+  // ══════════════════════════════════════════════════════════════════════════
+  if (task.status === 'DISPUTED') {
+    return (
+      <View style={s.root}>
+        <View style={s.progressHeader}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+            <Text style={s.backText}>{'<'}</Text>
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>Under Review</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <View style={[s.center, { padding: 24, gap: 16 }]}>
+          <AlertTriangle size={48} color="#F59E0B" />
+          <Text style={{ fontSize: 18, fontWeight: '700', color: W.text.primary, textAlign: 'center' }}>Dispute Under Review</Text>
+          <Text style={{ fontSize: 14, color: W.text.muted, textAlign: 'center', lineHeight: 22 }}>
+            Your dispute has been submitted. Our team will review and resolve it within 48 hours.
+          </Text>
+          <TouchableOpacity style={s.footerBtn} onPress={() => navigation.navigate('WorkerTabs', { screen: 'MyTasks' } as never)}>
+            <Text style={[s.footerBtnText, { color: W.primary }]}>Back to My Tasks</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    )
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SUBMITTED STATE — Waiting for buyer review
+  // ══════════════════════════════════════════════════════════════════════════
+  if (task.status === 'SUBMITTED') {
+    return (
+      <View style={s.root}>
+        <View style={s.progressHeader}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+            <Text style={s.backText}>{'<'}</Text>
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>Submitted</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <View style={[s.center, { padding: 24, gap: 16 }]}>
+          <CheckCircle size={48} color={W.primary} />
+          <Text style={{ fontSize: 18, fontWeight: '700', color: W.text.primary, textAlign: 'center' }}>Work Submitted</Text>
+          <Text style={{ fontSize: 14, color: W.text.muted, textAlign: 'center', lineHeight: 22 }}>
+            Your work is being reviewed. You'll be notified when the buyer responds or payment is auto-released.
+          </Text>
+          <TouchableOpacity style={s.footerBtn} onPress={() => navigation.navigate('PostSubmission', { taskId } as never)}>
+            <Text style={[s.footerBtnText, { color: W.primary }]}>View Submission Status</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    )
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // APPROVED / COMPLETED STATE — Work done, payment released
+  // ══════════════════════════════════════════════════════════════════════════
+  if (task.status === 'APPROVED' || task.status === 'COMPLETED') {
+    return (
+      <View style={s.root}>
+        <View style={s.progressHeader}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+            <Text style={s.backText}>{'<'}</Text>
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>Completed</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <View style={[s.center, { padding: 24, gap: 16 }]}>
+          <CheckCircle size={48} color="#15803D" />
+          <Text style={{ fontSize: 18, fontWeight: '700', color: '#15803D', textAlign: 'center' }}>Task Approved!</Text>
+          <Text style={{ fontSize: 24, fontWeight: '800', color: W.text.primary }}>{formatMoney(task.rateCents, 'INR')}</Text>
+          <Text style={{ fontSize: 14, color: W.text.muted, textAlign: 'center', lineHeight: 22 }}>
+            Payment has been released to your account. Great work!
+          </Text>
+          <TouchableOpacity style={s.footerBtn} onPress={() => navigation.navigate('WorkerTabs', { screen: 'MyTasks' } as never)}>
+            <Text style={[s.footerBtnText, { color: W.primary }]}>Back to My Tasks</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    )
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -333,7 +556,7 @@ export function ActiveTaskScreen() {
           onReasonChange={setCancelReason}
           onCancel={() => setCancelModal(false)}
           onConfirm={() => {
-            if (cancelReason.trim().length < 5) { Alert.alert('Reason Required', 'At least 5 characters.'); return }
+            if (cancelReason.trim().length < 10) { Alert.alert('Reason Required', 'Please provide at least 10 characters.'); return }
             isCancelling.current = true; setCancelModal(false); cancelMutation.mutate(cancelReason.trim())
           }}
           isPending={cancelMutation.isPending}
@@ -507,7 +730,7 @@ export function ActiveTaskScreen() {
         onReasonChange={setCancelReason}
         onCancel={() => setCancelModal(false)}
         onConfirm={() => {
-          if (cancelReason.trim().length < 5) { Alert.alert('Reason Required', 'At least 5 characters.'); return }
+          if (cancelReason.trim().length < 10) { Alert.alert('Reason Required', 'Please provide at least 10 characters.'); return }
           isCancelling.current = true; setCancelModal(false); cancelMutation.mutate(cancelReason.trim())
         }}
         isPending={cancelMutation.isPending}
@@ -552,7 +775,7 @@ function CancelModal({ visible, reason, onReasonChange, onCancel, onConfirm, isP
       <View style={s.modalOverlay}>
         <View style={s.modalCard}>
           <Text style={s.modalTitle}>Cancel this task?</Text>
-          <Text style={s.modalSub}>Please tell us why (min 5 characters)</Text>
+          <Text style={s.modalSub}>Please tell us why (min 10 characters)</Text>
           <TextInput
             style={s.modalInput}
             value={reason}

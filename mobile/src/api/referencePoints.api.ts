@@ -18,7 +18,8 @@ async function compressPhoto(uri: string): Promise<string> {
       { compress: COMPRESS_QUALITY, format: ImageManipulator.SaveFormat.JPEG },
     )
     return result.uri
-  } catch {
+  } catch (err) {
+    console.warn('[compressPhoto] Compression failed, using original:', (err as Error)?.message)
     return uri
   }
 }

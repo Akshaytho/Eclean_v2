@@ -7,6 +7,7 @@ import { create } from 'zustand'
 import * as SecureStore from 'expo-secure-store'
 import type { User } from '../types'
 import { useSocketStore } from './socketStore'
+import { authApi } from '../api/auth.api'
 
 const KEYS = {
   ACCESS:  'eclean_access_token',
@@ -76,6 +77,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLoading: (isLoading) => set({ isLoading }),
 
   logout: async () => {
+    // Blacklist tokens on server before clearing locally
+    try { await authApi.logout() } catch {}
     useSocketStore.getState().disconnect()
     await clearTokens()
     set({ user: null, isLoggedIn: false, isLoading: false })

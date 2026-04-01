@@ -49,7 +49,7 @@ export function ProfileScreen() {
   const colors = ROLE_GRADIENTS[role] ?? ROLE_GRADIENTS.WORKER
   const wp     = (profile as any)?.workerProfile
   const bp     = (profile as any)?.buyerProfile
-  const stats  = buildStats(role, wp, bp)
+  const stats  = buildStats(role, wp, bp, profile)
   const initials = (user?.name ?? '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
 
   const handleLogout = () => {
@@ -169,7 +169,7 @@ export function ProfileScreen() {
   )
 }
 
-function buildStats(role: string, wp: any, bp: any) {
+function buildStats(role: string, wp: any, bp: any, profile: any) {
   if (role === 'WORKER') return [
     { label: 'Completed',  value: String(wp?.completedTasks ?? 0), icon: <CheckCircle size={18} color="#2E8B57" />, color: '#2E8B57' },
     { label: 'Rating',     value: wp?.rating > 0 ? `${wp.rating.toFixed(1)}★` : '—', icon: <Star size={18} color="#F59E0B" />, color: '#F59E0B' },
@@ -177,6 +177,17 @@ function buildStats(role: string, wp: any, bp: any) {
   if (role === 'BUYER') return [
     { label: 'Tasks Posted', value: String(bp?.totalTasksPosted ?? 0), icon: <ClipboardList size={18} color="#F43F5E" />, color: '#F43F5E' },
     { label: 'Total Spent',  value: bp?.totalSpentCents ? formatMoney(bp.totalSpentCents) : '₹0', icon: <Wallet size={18} color="#6366F1" />, color: '#6366F1' },
+  ]
+  if (role === 'SUPERVISOR') return [
+    { label: 'Zones Managed', value: String(profile?.supervisedZones?.length ?? 0), icon: <MapPin size={18} color="#8B5CF6" />, color: '#8B5CF6' },
+    { label: 'Role', value: 'Supervisor', icon: <Shield size={18} color="#0EA5E9" />, color: '#0EA5E9' },
+  ]
+  if (role === 'CITIZEN') return [
+    { label: 'Reports', value: String(profile?.citizenReports?.length ?? 0), icon: <ClipboardList size={18} color="#F59E0B" />, color: '#F59E0B' },
+    { label: 'Role', value: 'Citizen', icon: <User size={18} color="#2E8B57" />, color: '#2E8B57' },
+  ]
+  if (role === 'ADMIN') return [
+    { label: 'Role', value: 'Administrator', icon: <Shield size={18} color="#DC2626" />, color: '#DC2626' },
   ]
   return []
 }

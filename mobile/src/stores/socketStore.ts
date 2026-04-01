@@ -59,6 +59,16 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       set({ connected: false })
     })
 
+    // Bug #1 fix: refresh token on every reconnect attempt so we don't use stale tokens
+    socket.io.on('reconnect_attempt', async () => {
+      try {
+        const { accessToken } = await getTokens()
+        if (accessToken) {
+          socket.auth = { token: accessToken }
+        }
+      } catch {}
+    })
+
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         const s = get().socket

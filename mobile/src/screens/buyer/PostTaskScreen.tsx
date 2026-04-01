@@ -143,15 +143,16 @@ export function PostTaskScreen() {
         captureEnvDNA().then((envDNA) => {
           apiClient.post(`/tasks/${task.id}/environment`, {
             captureType: 'BUYER_CREATION', ...envDNA,
-          }).catch(() => {})
+          }).catch((e) => console.warn('EnvDNA upload failed:', e?.message))
         }).catch(() => {})
       }
 
       // Upload reference point photos in parallel (3 at a time for speed)
+      let failedUploads = 0
       const BATCH_SIZE = 3
       for (let i = 0; i < refPhotos.length; i += BATCH_SIZE) {
         const batch = refPhotos.slice(i, i + BATCH_SIZE)
-        await Promise.allSettled(
+        const results = await Promise.allSettled(
           batch.map((rp, batchIdx) =>
             referencePointsApi.upload(
               task.id,
@@ -159,16 +160,26 @@ export function PostTaskScreen() {
               rp.uri,
               rp.label || undefined,
               rp.lat != null ? { lat: rp.lat, lng: rp.lng!, timestamp: new Date().toISOString(), deviceId: 'mobile', photoHash: rp.photoHash ?? '' } : undefined,
-            ).catch(() => {}),
+            ),
           ),
         )
+        failedUploads += results.filter(r => r.status === 'rejected').length
       }
       // Legacy single reference photo (backward compat)
       if (refPhoto && refPhotos.length === 0) {
         try {
           await mediaApi.upload(task.id, refPhoto, 'REFERENCE')
-        } catch { /* non-critical */ }
+        } catch { failedUploads++ }
       }
+
+      if (failedUploads > 0) {
+        Alert.alert(
+          'Some Photos Failed',
+          `${failedUploads} photo(s) failed to upload. You can re-upload them from the task detail screen.`,
+          [{ text: 'OK' }],
+        )
+      }
+
       qc.invalidateQueries({ queryKey: ['buyer-tasks-active'] })
       setForm(INITIAL)
       setRefPhoto(null)
@@ -236,11 +247,23 @@ export function PostTaskScreen() {
     if (step === 0) return !!form.category
     if (step === 1) return form.title.trim().length > 3 && form.description.trim().length > 10
     if (step === 2) return true // location optional
-    if (step === 3) return refPhotos.length >= MIN_REF_PHOTOS // Document Area — min photos required
+    if (step === 3) return true // Photos recommended but optional — allows remote posting
     return true
   }
 
   const next = () => {
+    // Warn if no photos on step 3 (but don't block)
+    if (step === 3 && refPhotos.length === 0) {
+      Alert.alert(
+        'No Reference Photos',
+        'Adding reference photos helps workers understand the job and leads to better results. Continue without photos?',
+        [
+          { text: 'Add Photos', style: 'cancel' },
+          { text: 'Skip', onPress: () => setStep(s => s + 1) },
+        ],
+      )
+      return
+    }
     if (step < STEPS.length - 1) setStep(s => s + 1)
     else handlePayAndPost()
   }
@@ -472,7 +495,7 @@ export function PostTaskScreen() {
               {refPhotos.length > 0
                 ? <SummaryRow label="Reference Photos" value={`${refPhotos.length} points documented`} />
                 : refPhoto ? <SummaryRow label="Photo" value="Reference photo attached" /> : null}
-              <SummaryRow label="Work Window" value="07:00 AM – 04:30 PM" />
+              <SummaryRow label="Work Window" value={`${form.workWindowStart ?? '07:00'} – ${form.workWindowEnd ?? '11:30'}`} />
               <SummaryRow label="Upload By"   value="05:00 PM" />
               <View style={s.divider} />
               <View style={s.priceRow}>

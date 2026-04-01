@@ -12,6 +12,7 @@
 //       not inside a component or effect. Import this file in App.tsx before
 //       NavigationContainer to ensure the task is registered before the OS needs it.
 
+import { Alert } from 'react-native'
 import * as Location from 'expo-location'
 import * as TaskManager from 'expo-task-manager'
 import * as SecureStore from 'expo-secure-store'
@@ -61,11 +62,21 @@ export async function startBackgroundTracking(taskId: string): Promise<void> {
   const { status: fg } = await Location.requestForegroundPermissionsAsync()
   if (fg !== 'granted') {
     console.warn('[BG Location] Foreground permission not granted')
+    Alert.alert(
+      'Location Permission Required',
+      'eClean needs location access to track your work and verify GPS. Please enable it in Settings.',
+      [{ text: 'OK' }],
+    )
     return
   }
   const { status: bg } = await Location.requestBackgroundPermissionsAsync()
   if (bg !== 'granted') {
     console.warn('[BG Location] Background permission not granted')
+    Alert.alert(
+      'Background Location Required',
+      'eClean needs "Always Allow" location access to track GPS while your phone is locked. Please update in Settings.',
+      [{ text: 'OK' }],
+    )
     return
   }
 

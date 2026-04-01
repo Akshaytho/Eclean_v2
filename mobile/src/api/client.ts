@@ -9,6 +9,7 @@ import axios, { type AxiosRequestConfig, type InternalAxiosRequestConfig } from 
 import NetInfo from '@react-native-community/netinfo'
 import { API_URL } from '../constants/config'
 import { getTokens, clearTokens, saveTokens } from '../stores/authStore'
+import { useSocketStore } from '../stores/socketStore'
 import { navigationRef } from '../navigation/navigationRef'
 
 // ─── Axios instance ───────────────────────────────────────────────────────────
@@ -22,10 +23,15 @@ export const apiClient = axios.create({
 // ─── Prevent multiple simultaneous refresh calls ──────────────────────────────
 
 let isRefreshing = false
-let refreshQueue: Array<(token: string) => void> = []
+let refreshQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = []
 
 function processQueue(newToken: string): void {
-  refreshQueue.forEach((resolve) => resolve(newToken))
+  refreshQueue.forEach(({ resolve }) => resolve(newToken))
+  refreshQueue = []
+}
+
+function rejectQueue(error: unknown): void {
+  refreshQueue.forEach(({ reject }) => reject(error))
   refreshQueue = []
 }
 
@@ -64,8 +70,8 @@ apiClient.interceptors.response.use(
 
     if (isRefreshing) {
       // Wait for the ongoing refresh to finish, then retry
-      return new Promise<string>((resolve) => {
-        refreshQueue.push(resolve)
+      return new Promise<string>((resolve, reject) => {
+        refreshQueue.push({ resolve, reject })
       }).then((newToken) => {
         if (original.headers) {
           original.headers.Authorization = `Bearer ${newToken}`
@@ -90,11 +96,18 @@ apiClient.interceptors.response.use(
       await saveTokens({ accessToken: newAccess, refreshToken: newRefresh, expiresIn })
       processQueue(newAccess)
 
+      // Update socket auth with new token (prevents stale token on active connection)
+      const socket = useSocketStore.getState().socket
+      if (socket) {
+        socket.auth = { token: newAccess }
+      }
+
       if (original.headers) {
         original.headers.Authorization = `Bearer ${newAccess}`
       }
       return apiClient(original)
-    } catch {
+    } catch (refreshError) {
+      rejectQueue(refreshError)
       await clearTokens()
       navigationRef.current?.reset({ index: 0, routes: [{ name: 'Auth' }] })
       return Promise.reject(error)

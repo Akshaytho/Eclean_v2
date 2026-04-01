@@ -68,14 +68,15 @@ export function FindWorkScreen() {
 
   // Query open tasks
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['worker', 'tasks', 'open', currentLocation?.lat, currentLocation?.lng, selectedDirty, radiusKm],
+    queryKey: ['worker', 'tasks', 'open', currentLocation?.lat, currentLocation?.lng, radiusKm],
     queryFn: () =>
       workerTasksApi.getOpen({
         lat:      currentLocation?.lat,
         lng:      currentLocation?.lng,
-        radiusKm,
+        radiusKm: currentLocation ? radiusKm : undefined,
         limit:    50,
       }),
+    enabled: !!currentLocation, // Don't query without GPS — would fetch ALL tasks globally
     staleTime: 30_000,
   })
 

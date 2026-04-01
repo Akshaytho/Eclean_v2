@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { workerTasksApi } from '../../api/tasks.api'
+import { isMotionTrackingActive } from '../../services/motionTracker'
 import { mediaApi } from '../../api/media.api'
 import { referencePointsApi } from '../../api/referencePoints.api'
 import { useActiveTaskStore } from '../../stores/activeTaskStore'
@@ -227,8 +228,8 @@ export function SubmitProofScreen() {
           <CheckRow
             icon={<CheckCircle size={16} color={W.primary} />}
             label="Motion tracking"
-            value="Active"
-            ok
+            value={isMotionTrackingActive() ? 'Active' : 'Inactive'}
+            ok={isMotionTrackingActive()}
           />
           {task && (
             <CheckRow

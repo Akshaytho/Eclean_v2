@@ -273,6 +273,28 @@ export function TaskDetailScreen() {
               {task.status === 'IN_PROGRESS' ? 'Continue Working' : 'Go to Task'}
             </Text>
           </TouchableOpacity>
+        ) : (task.status === 'REJECTED') ? (
+          <TouchableOpacity
+            style={styles.acceptBtn}
+            onPress={() => navigation.replace('ActiveTask', { taskId })}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.acceptBtnText}>View Rejection & Retry</Text>
+          </TouchableOpacity>
+        ) : (task.status === 'SUBMITTED' || task.status === 'DISPUTED') ? (
+          <View style={[styles.acceptBtn, { backgroundColor: '#F59E0B' }]}>
+            <Text style={styles.acceptBtnText}>
+              {task.status === 'DISPUTED' ? 'Dispute Under Review' : 'Awaiting Review'}
+            </Text>
+          </View>
+        ) : (task.status === 'APPROVED' || task.status === 'COMPLETED') ? (
+          <View style={[styles.acceptBtn, { backgroundColor: '#16A34A' }]}>
+            <Text style={styles.acceptBtnText}>Completed — {formatMoney(task.rateCents, 'INR')}</Text>
+          </View>
+        ) : task.status === 'CANCELLED' ? (
+          <View style={[styles.acceptBtn, { backgroundColor: '#9CA3AF' }]}>
+            <Text style={styles.acceptBtnText}>Task Cancelled</Text>
+          </View>
         ) : null}
       </View>
 

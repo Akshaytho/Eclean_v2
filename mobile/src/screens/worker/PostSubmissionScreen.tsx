@@ -22,7 +22,7 @@ import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { RouteProp } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
-import { CheckCircle, Clock, Search, ClipboardList } from 'lucide-react-native'
+import { CheckCircle, Clock, Search, ClipboardList, Info } from 'lucide-react-native'
 
 import { ScreenWrapper } from '../../components/layout/ScreenWrapper'
 import { WORKER_THEME as W } from '../../constants/workerTheme'
@@ -47,13 +47,16 @@ export function PostSubmissionScreen() {
 
   const aiDone = task?.aiScore != null
   const decision = task?.finalDecision
+  const [aiTimedOut, setAiTimedOut] = useState(false)
 
   // Simulated progress steps
   const [step, setStep] = useState(1)
   useEffect(() => {
     const t1 = setTimeout(() => setStep(2), 800)
     const t2 = setTimeout(() => setStep(3), 1500)
-    return () => { clearTimeout(t1); clearTimeout(t2) }
+    // 10-minute timeout: if AI hasn't responded, show fallback
+    const timeout = setTimeout(() => { if (!aiDone) setAiTimedOut(true) }, 10 * 60 * 1000)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(timeout) }
   }, [])
 
   // When AI finishes, advance to step 5
@@ -77,16 +80,18 @@ export function PostSubmissionScreen() {
         <View style={s.progressCard}>
           <Text style={s.progressTitle}>Verification in progress</Text>
 
-          <ProgressStep done={step >= 1} label="Photos uploaded" />
-          <ProgressStep done={step >= 2} label="GPS verified" />
-          <ProgressStep done={step >= 3} label="Motion verified" />
+          <ProgressStep done={step >= 1} label="Photos submitted" />
+          <ProgressStep done={step >= 2} label="GPS data attached" />
+          <ProgressStep done={step >= 3} label="Motion data attached" />
           <ProgressStep
             done={aiDone}
+            verified
             loading={step >= 3 && !aiDone}
             label={aiDone ? 'AI verification complete' : 'AI checking your work...'}
           />
           <ProgressStep
             done={aiDone}
+            verified={aiDone && decision === 'AUTO_PASS'}
             label={aiDone
               ? decision === 'AUTO_PASS' ? 'Payment released!'
                 : decision === 'WORKER_GRACE' ? 'Payment in 12 hours'
@@ -96,8 +101,16 @@ export function PostSubmissionScreen() {
             }
           />
 
-          {!aiDone && (
+          {!aiDone && !aiTimedOut && (
             <Text style={s.reassurance}>Usually takes less than 1 minute</Text>
+          )}
+
+          {aiTimedOut && !aiDone && (
+            <View style={[s.resultBanner, { backgroundColor: '#FEF3C7' }]}>
+              <Text style={[s.resultBannerText, { color: '#92400E' }]}>
+                AI verification is taking longer than usual. Your work has been submitted and will be reviewed by the buyer. You can close this screen.
+              </Text>
+            </View>
           )}
 
           {aiDone && decision === 'AUTO_PASS' && (
@@ -173,11 +186,13 @@ export function PostSubmissionScreen() {
   )
 }
 
-function ProgressStep({ done, loading, label }: { done: boolean; loading?: boolean; label: string }) {
+function ProgressStep({ done, loading, label, verified }: { done: boolean; loading?: boolean; label: string; verified?: boolean }) {
   return (
     <View style={s.stepRow}>
-      {done ? (
+      {done && verified ? (
         <CheckCircle size={20} color={W.primary} />
+      ) : done ? (
+        <Info size={20} color="#3B82F6" />
       ) : loading ? (
         <ActivityIndicator size={16} color={W.primary} />
       ) : (

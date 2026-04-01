@@ -20,6 +20,7 @@ import { ScreenWrapper } from '../../components/layout/ScreenWrapper'
 import { CaptureCamera } from '../../components/camera/CaptureCamera'
 import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { workerTasksApi } from '../../api/tasks.api'
+import { mediaApi } from '../../api/media.api'
 import { useActiveTaskStore } from '../../stores/activeTaskStore'
 import { useBackgroundLocation } from '../../hooks/useBackgroundLocation'
 import type { CaptureResult } from '../../components/camera/CaptureCamera'
@@ -62,10 +63,28 @@ export function ReportIssueScreen() {
     },
   })
 
-  const handleSubmit = () => {
+  const [uploading, setUploading] = useState(false)
+
+  const handleSubmit = async () => {
     if (!selected) { Alert.alert('Select an issue', 'Please pick what went wrong'); return }
     const category = ISSUE_CATEGORIES.find(c => c.id === selected)
-    const reason = `[REPORT] ${category?.label ?? selected}${photoUri ? ' (photo attached)' : ''}`
+
+    let evidenceUrl = ''
+    // Upload photo evidence to server before cancelling
+    if (photoUri) {
+      setUploading(true)
+      try {
+        const uploaded = await mediaApi.upload(taskId, photoUri, 'PROOF')
+        evidenceUrl = uploaded?.url ?? ''
+      } catch {
+        // Non-blocking: still cancel even if upload fails
+      }
+      setUploading(false)
+    }
+
+    const reason = evidenceUrl
+      ? `[REPORT] ${category?.label ?? selected} | Evidence: ${evidenceUrl}`
+      : `[REPORT] ${category?.label ?? selected}`
     cancelMutation.mutate(reason)
   }
 
@@ -114,15 +133,15 @@ export function ReportIssueScreen() {
 
         {/* Submit */}
         <TouchableOpacity
-          style={[s.submitBtn, (!selected || cancelMutation.isPending) && s.submitBtnDisabled]}
+          style={[s.submitBtn, (!selected || cancelMutation.isPending || uploading) && s.submitBtnDisabled]}
           onPress={handleSubmit}
-          disabled={!selected || cancelMutation.isPending}
+          disabled={!selected || cancelMutation.isPending || uploading}
           activeOpacity={0.85}
         >
           <Text style={s.submitBtnText}>
-            {cancelMutation.isPending ? 'Submitting...' : 'SUBMIT REPORT'}
+            {uploading ? 'Uploading photo...' : cancelMutation.isPending ? 'Submitting...' : 'SUBMIT REPORT'}
           </Text>
-          <Text style={s.submitBtnSub}>Task cancelled, no penalty</Text>
+          <Text style={s.submitBtnSub}>Task returned to open — no penalty</Text>
         </TouchableOpacity>
       </View>
 

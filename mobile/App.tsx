@@ -27,6 +27,8 @@ import { useAuthStore }    from './src/stores/authStore'
 import { useSocketStore }  from './src/stores/socketStore'
 import { getTokens }       from './src/stores/authStore'
 import { authApi }         from './src/api/auth.api'
+import { ToastContainer }  from './src/components/ui/Toast'
+import { linking }         from './src/navigation/linking'
 
 // Keep splash visible until bootstrap completes
 SplashScreen.preventAutoHideAsync()
@@ -127,9 +129,10 @@ export default function App() {
     <ErrorBoundary>
       <GestureHandlerRootView style={styles.root}>
         <QueryClientProvider client={queryClient}>
-          <NavigationContainer ref={navigationRef}>
+          <NavigationContainer ref={navigationRef} linking={linking}>
             <StatusBar style="auto" />
             <RootNavigator />
+            <ToastContainer />
           </NavigationContainer>
         </QueryClientProvider>
       </GestureHandlerRootView>

@@ -8,8 +8,10 @@ const TRANSITIONS: Array<[TaskStatus, TaskStatus, Actor[]]> = [
   ['OPEN',        'ACCEPTED',    ['WORKER']],
   ['OPEN',        'CANCELLED',   ['BUYER']],
   ['ACCEPTED',    'IN_PROGRESS', ['WORKER']],
+  ['ACCEPTED',    'OPEN',        ['WORKER']],             // worker cancel → return to OPEN for other workers
   ['ACCEPTED',    'CANCELLED',   ['BUYER', 'WORKER']],
   ['IN_PROGRESS', 'SUBMITTED',   ['WORKER']],
+  ['IN_PROGRESS', 'OPEN',        ['WORKER']],             // worker cancel → return to OPEN for other workers
   ['IN_PROGRESS', 'CANCELLED',   ['BUYER', 'WORKER']],
   ['SUBMITTED',   'APPROVED',    ['BUYER']],
   ['SUBMITTED',   'REJECTED',    ['BUYER']],           // buyer rejects work

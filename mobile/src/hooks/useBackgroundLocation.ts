@@ -21,6 +21,7 @@ export function useBackgroundLocation() {
     hasBackgroundPerm,
     setLocation,
     setPermission,
+    setTracking,
   } = useLocationStore()
 
   const watchRef = useRef<Location.LocationSubscription | null>(null)
@@ -71,6 +72,7 @@ export function useBackgroundLocation() {
         await startBackgroundTracking(taskId)
       }
 
+      setTracking(true)
       return true
     },
     [checkPermissions, setLocation],
@@ -80,7 +82,8 @@ export function useBackgroundLocation() {
     watchRef.current?.remove()
     watchRef.current = null
     await stopBackgroundTracking()
-  }, [])
+    setTracking(false)
+  }, [setTracking])
 
   // Cleanup foreground watch on unmount
   useEffect(() => {

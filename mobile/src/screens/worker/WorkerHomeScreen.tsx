@@ -11,10 +11,10 @@
  * - Motion tracking explained honestly, not disguised as a "tip"
  */
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, Dimensions,
+  RefreshControl, Dimensions, Switch,
 } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
@@ -81,7 +81,7 @@ export function WorkerHomeScreen() {
   const workerLevel = useMemo(() => getWorkerLevel(completedTasks), [completedTasks])
 
   const totalEarned = wallet?.totalEarnedCents ?? 0
-  const inAccount = wallet?.availableCents ?? 0
+  const inAccount = wallet?.paidOutCents ?? wallet?.availableCents ?? 0
   const comingSoon = (wallet?.pendingCents ?? 0) + (wallet?.processingCents ?? 0)
 
   const onRefresh = () => {
@@ -91,10 +91,23 @@ export function WorkerHomeScreen() {
   }
 
   const isLoading = meQuery.isLoading
+  const [isOnline, setIsOnline] = useState(true)
 
   return (
     <ScreenWrapper backgroundColor={W.background}>
       <AppHeader title="eClean" theme="worker" onNotificationPress={() => navigation.navigate('Notifications' as any)} />
+
+      {/* Online/Offline toggle */}
+      <View style={s.statusToggle}>
+        <View style={[s.statusDot, { backgroundColor: isOnline ? '#22C55E' : '#9CA3AF' }]} />
+        <Text style={s.statusText}>{isOnline ? 'Online — accepting tasks' : 'Offline'}</Text>
+        <Switch
+          value={isOnline}
+          onValueChange={setIsOnline}
+          trackColor={{ false: '#D1D5DB', true: W.primary + '50' }}
+          thumbColor={isOnline ? W.primary : '#9CA3AF'}
+        />
+      </View>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
@@ -130,7 +143,7 @@ export function WorkerHomeScreen() {
           <View style={s.earningsSplit}>
             <View style={s.earningsSplitItem}>
               <View style={[s.earningsDot, { backgroundColor: W.primary }]} />
-              <Text style={s.earningsSplitLabel}>In your account</Text>
+              <Text style={s.earningsSplitLabel}>Paid to bank</Text>
               <Text style={s.earningsSplitVal}>{formatMoney(inAccount, 'INR')}</Text>
             </View>
             <View style={s.earningsSplitItem}>
@@ -240,6 +253,11 @@ export function WorkerHomeScreen() {
 
 const s = StyleSheet.create({
   scroll: { paddingBottom: 20 },
+
+  // Status toggle
+  statusToggle:  { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10, backgroundColor: W.surface, borderBottomWidth: 1, borderBottomColor: W.border },
+  statusDot:     { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  statusText:    { flex: 1, fontSize: 13, fontWeight: '600', color: W.text.secondary },
 
   // Greeting
   greetingBox: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4 },

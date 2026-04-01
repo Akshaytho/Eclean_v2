@@ -10,6 +10,7 @@ import { env } from '../config/env'
 import { logger } from '../lib/logger'
 import { prisma } from '../lib/prisma'
 import { bullmqConnection as connection } from '../lib/bullmq'
+import { notifyUser } from '../lib/notify'
 
 // ─── Queue (imported by services to enqueue jobs) ─────────────────────────────
 
@@ -82,14 +83,18 @@ export function createPayoutWorker(): Worker {
           data:  { status: 'COMPLETED', paidAt: new Date() },
         })
 
-        await prisma.notification.create({
-          data: {
-            userId: payout.workerId,
-            type:   'PAYMENT_RECEIVED',
-            title:  'Payment Received!',
-            body:   `₹${payout.workerAmountCents / 100} has been credited to your account for "${payout.task.title}".`,
-            data:   { payoutId, taskId: payout.taskId },
-          },
+        // Transition task APPROVED → COMPLETED (money settled)
+        await prisma.task.update({
+          where: { id: payout.taskId },
+          data:  { status: 'COMPLETED' },
+        }).catch(() => {})
+
+        await notifyUser({
+          userId: payout.workerId,
+          type:   'PAYMENT_RECEIVED',
+          title:  'Payment Received!',
+          body:   `₹${payout.workerAmountCents / 100} has been credited to your account for "${payout.task.title}".`,
+          data:   { payoutId, taskId: payout.taskId },
         })
 
         logger.info({ payoutId }, '[test_mode] Payout completed')
@@ -99,8 +104,30 @@ export function createPayoutWorker(): Worker {
       // ── PRODUCTION — Razorpay Payout API ─────────────────────────────────
       const rzp = getRazorpay()
       if (!rzp) {
-        // No Razorpay payout credentials — keep as PENDING for manual processing
         logger.warn({ payoutId }, 'Razorpay payout SDK not configured — payout stays PENDING for manual processing')
+        return
+      }
+
+      if (!env.RAZORPAY_ACCOUNT_NUMBER) {
+        logger.error({ payoutId }, 'RAZORPAY_ACCOUNT_NUMBER not set — payout stays PENDING')
+        return
+      }
+
+      // Look up worker's registered bank account (fund_account_id)
+      const workerProfile = await prisma.workerProfile.findUnique({
+        where: { userId: payout.workerId },
+        select: { razorpayFundAccountId: true },
+      })
+
+      if (!workerProfile?.razorpayFundAccountId) {
+        logger.error({ payoutId, workerId: payout.workerId }, 'Worker has no registered bank account (razorpayFundAccountId) — payout stays PENDING')
+        await notifyUser({
+          userId: payout.workerId,
+          type: 'PAYMENT_RECEIVED',
+          title: 'Bank Account Required',
+          body: `Please register your bank account to receive payment for "${payout.task.title}".`,
+          data: { payoutId, taskId: payout.taskId },
+        })
         return
       }
 
@@ -113,14 +140,15 @@ export function createPayoutWorker(): Worker {
         // Razorpay Payout API — requires RazorpayX + fund_account_id (bank account pre-registered)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rzpPayout = await (rzp as any).payouts.create({
-          account_number: env.RAZORPAY_KEY_ID, // RazorpayX account (env var)
-          amount:         payout.workerAmountCents,
-          currency:       payout.currency,
-          mode:           'IMPS',
-          purpose:        'payout',
+          account_number:       env.RAZORPAY_ACCOUNT_NUMBER,
+          fund_account_id:      workerProfile.razorpayFundAccountId,
+          amount:               payout.workerAmountCents,
+          currency:             payout.currency,
+          mode:                 'IMPS',
+          purpose:              'payout',
           queue_if_low_balance: true,
-          reference_id:   payoutId,
-          narration:      `eClean payment for ${payout.task.title}`,
+          reference_id:         payoutId,
+          narration:            `eClean payment for ${payout.task.title}`,
         })
 
         logger.info(
@@ -133,14 +161,12 @@ export function createPayoutWorker(): Worker {
           data:  { status: 'PROCESSING', razorpayPayoutId: rzpPayout.id as string },
         })
 
-        await prisma.notification.create({
-          data: {
-            userId: payout.workerId,
-            type:   'PAYMENT_RECEIVED',
-            title:  'Payout Initiated',
-            body:   `₹${payout.workerAmountCents / 100} payout for "${payout.task.title}" has been initiated and is being processed.`,
-            data:   { payoutId, taskId: payout.taskId },
-          },
+        await notifyUser({
+          userId: payout.workerId,
+          type:   'PAYMENT_RECEIVED',
+          title:  'Payout Initiated',
+          body:   `₹${payout.workerAmountCents / 100} payout for "${payout.task.title}" has been initiated and is being processed.`,
+          data:   { payoutId, taskId: payout.taskId },
         })
 
         logger.info({ payoutId }, 'Payout set to PROCESSING — awaiting Razorpay webhook')
@@ -152,14 +178,12 @@ export function createPayoutWorker(): Worker {
           data:  { status: 'FAILED' },
         })
 
-        await prisma.notification.create({
-          data: {
-            userId: payout.workerId,
-            type:   'PAYMENT_RECEIVED',
-            title:  'Payout Failed',
-            body:   `We could not process your payment for "${payout.task.title}". Our team has been notified.`,
-            data:   { payoutId, taskId: payout.taskId },
-          },
+        await notifyUser({
+          userId: payout.workerId,
+          type:   'PAYMENT_RECEIVED',
+          title:  'Payout Failed',
+          body:   `We could not process your payment for "${payout.task.title}". Our team has been notified.`,
+          data:   { payoutId, taskId: payout.taskId },
         })
 
         await notifyAdmins(`Payout ${payoutId} FAILED — Razorpay error: ${String(err)}`)

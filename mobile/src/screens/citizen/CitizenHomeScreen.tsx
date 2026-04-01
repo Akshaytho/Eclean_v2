@@ -61,7 +61,7 @@ export function CitizenHomeScreen() {
             <View style={s.metaItem}>
               <MapPin size={12} color={COLORS.neutral[400]} />
               <Text style={s.metaText} numberOfLines={1}>
-                {item.locationAddress ?? `${item.lat?.toFixed(4)}, ${item.lng?.toFixed(4)}`}
+                {item.locationAddress ?? `${item.locationLat?.toFixed(4)}, ${item.locationLng?.toFixed(4)}`}
               </Text>
             </View>
             <View style={s.metaItem}>
