@@ -32,6 +32,7 @@ import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { workerTasksApi } from '../../api/tasks.api'
 import { referencePointsApi } from '../../api/referencePoints.api'
 import { useBackgroundLocation } from '../../hooks/useBackgroundLocation'
+import { useEnvironmentalDNA } from '../../hooks/useEnvironmentalDNA'
 import { useActiveTaskStore } from '../../stores/activeTaskStore'
 import { useSocketStore } from '../../stores/socketStore'
 import { startMotionTracking, isMotionTrackingActive } from '../../services/motionTracker'
@@ -67,6 +68,7 @@ export function ActiveTaskScreen() {
   const { joinTask, leaveTask, connected } = useSocketStore()
   const { setActiveTask, gpsTrail, elapsedSecs, setElapsedSecs } = useActiveTaskStore()
   const { currentLocation, requestPermissions, startTracking, stopTracking } = useBackgroundLocation()
+  const { capture: captureEnvDNA } = useEnvironmentalDNA()
 
   const mapRef       = useRef<MapView>(null)
   const isStarting   = useRef(false)
@@ -136,8 +138,12 @@ export function ActiveTaskScreen() {
 
   // ── Mutations ─────────────────────────────────────────────────────────────
   const startMutation = useMutation({
-    mutationFn: () => workerTasksApi.start(taskId, currentLocation
-      ? { lat: currentLocation.lat, lng: currentLocation.lng } : undefined),
+    mutationFn: async () => {
+      // Capture environmental DNA (magnetometer, barometer, light, cell) for anti-spoofing
+      const envDNA = await captureEnvDNA().catch(() => null)
+      return workerTasksApi.start(taskId, currentLocation
+        ? { lat: currentLocation.lat, lng: currentLocation.lng, envDNA } : undefined)
+    },
     onSuccess: async () => {
       isStarting.current = false
       qc.invalidateQueries({ queryKey: ['worker', 'task', taskId] })

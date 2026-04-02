@@ -28,12 +28,18 @@ export function createTaskExpiryWorker(): Worker {
     async () => {
       logger.info('Task expiry check running')
 
+      // PERF: only select fields needed for expiry — skip large text fields (aiReasoning, etc.)
+      const expirySelect = {
+        id: true, title: true, status: true, workerId: true, buyerId: true,
+      } as const
+
       // 1. Find tasks stuck in ACCEPTED for too long
       const stuckAccepted = await prisma.task.findMany({
         where: {
           status: 'ACCEPTED',
           updatedAt: { lt: new Date(Date.now() - ACCEPTED_TIMEOUT_HOURS * 60 * 60 * 1000) },
         },
+        select: expirySelect,
       })
 
       // 2. Find tasks stuck in IN_PROGRESS with no recent activity
@@ -42,16 +48,33 @@ export function createTaskExpiryWorker(): Worker {
           status: 'IN_PROGRESS',
           updatedAt: { lt: new Date(Date.now() - IN_PROGRESS_TIMEOUT_HOURS * 60 * 60 * 1000) },
         },
+        select: expirySelect,
       })
 
       const allStuck = [...stuckAccepted, ...stuckInProgress]
 
       for (const task of allStuck) {
         try {
-          // Release task back to OPEN
-          await prisma.task.update({
-            where: { id: task.id },
-            data: { status: 'OPEN', workerId: null },
+          // Release task + cleanup in a single transaction to prevent race conditions
+          // Without this, a crash between status update and cleanup leaves stale worker photos
+          await prisma.$transaction(async (tx) => {
+            await tx.task.update({
+              where: { id: task.id },
+              data: { status: 'OPEN', workerId: null, startedAt: null, submittedAt: null },
+            })
+
+            // SECURITY: clean up worker's media/submissions to prevent piggyback attacks
+            await tx.taskMedia.deleteMany({
+              where: { taskId: task.id, type: { in: ['BEFORE', 'AFTER', 'PROOF'] } },
+            })
+            if (task.workerId) {
+              await tx.workerPointSubmission.deleteMany({
+                where: { taskId: task.id, workerId: task.workerId },
+              })
+              await tx.taskLocationLog.deleteMany({
+                where: { taskId: task.id, workerId: task.workerId },
+              })
+            }
           })
 
           // Free the worker

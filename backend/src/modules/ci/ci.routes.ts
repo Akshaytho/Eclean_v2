@@ -22,6 +22,12 @@ const CI_PASSWORD     = 'Test@1234'
 
 export async function ciRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/seed', async (request, reply) => {
+    // SECURITY: CI seed endpoint must NEVER run in production
+    // Creates accounts with known password Test@1234 — instant compromise if exposed
+    if (env.NODE_ENV === 'production') {
+      return reply.status(404).send({ error: 'Not found' })
+    }
+
     const ciSecret = env.CI_SECRET
     if (!ciSecret) {
       return reply.status(404).send({ error: 'Not found' })

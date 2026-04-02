@@ -184,3 +184,88 @@ eclean-admin/
 
 ### Branch: main (eclean-admin repo)
 ### Latest commit: 17b04bc
+
+---
+
+## Session 11 — 2026-04-02 (Full Security Audit + Load Testing + Performance Hardening)
+
+### Status: 49 fixes across 24 files — security, concurrency, performance
+
+### What was completed:
+
+**Phase 1 — CRITICAL money-at-risk fixes (5 fixes):**
+- Deleted unauthenticated `/debug/reverify` endpoint (was live in prod!)
+- Payment amount mismatch: verify Razorpay order amount === task rateCents
+- Webhook signature: always require secret, never skip regardless of NODE_ENV
+- Geofence bypass: lat/lng now REQUIRED in startTaskSchema (was optional)
+- Double refund: refundedAt flag set atomically inside tx, Razorpay call outside
+
+**Phase 2 — Serious exploit fixes (7 fixes):**
+- Removed BUYER from IN_PROGRESS→CANCELLED (prevents free labor theft)
+- Minimum time enforcement before submit (5/10/15/20 min by dirty level)
+- Authenticated logout with rate limiting
+- Refresh token rate limited (30/min)
+- Auto-release blocked for MANUAL_REVIEW with AI score < 0.50
+- Server-side SHA-256 hash recomputation on photo uploads
+- Duplicate payout already protected by @unique on Payout.taskId
+
+**Phase 3 — Hardening (8 fixes):**
+- Chat XSS: strip HTML tags, 2000 char limit
+- Account lockout: 5 failed logins = 15min cooldown (Redis, graceful degradation)
+- Media cleanup on worker cancel + task expiry (prevents piggyback fraud)
+- Dispute auto-resolution after 7 days (based on AI + rule engine scores)
+- Rating dedup: atomic conditional update prevents double-tap
+- Environmental DNA wired into worker start flow (magnetometer/barometer/light/cell)
+- EXIF extraction already implemented in lib/exif.ts (confirmed OK)
+
+**Phase 4 — Pre-launch (4 fixes):**
+- CI seed endpoint blocked in production
+- Email verification required for write operations (not reads)
+- Console.warn stripped in production builds (babel plugin)
+- CORS: always use explicit origins, no wildcard
+
+**QA Testing — Self-introduced bugs caught and fixed (11 fixes):**
+- Redis down no longer crashes login (try/catch with graceful degradation)
+- Logout no longer requires valid access token (was deadlock)
+- Email verify only on writes, not reads (existing users not locked out)
+- Lockout counter cleared AFTER isActive check
+- Refund moved outside serializable tx (was causing deadlocks)
+- Task expiry cleanup wrapped in transaction (was race condition)
+- Rate task: atomic conditional update (was double-tap race)
+- babel-plugin-transform-remove-console added to devDependencies
+- timeSpentSecs null now throws error instead of skipping check
+- API client type for start task made required (matches backend)
+- Buyer cancel IN_PROGRESS: user-friendly error message
+
+**Load Testing — Concurrency fixes (6 fixes):**
+- Prisma connection pool: 5 → 20 (was catastrophically low)
+- Upload concurrency limiter: max 10 simultaneous (50 uploads = OOM crash)
+- Accept task: optimistic locking replaces serializable tx (50 workers → 1 winner + 49 instant fail, no retry storm)
+- Serializable retry: 3→5 retries with exponential backoff + jitter
+- Global rate limiting: 100/min per user on all endpoints
+- GPS auth check cached in Redis (30s TTL, invalidated on status change)
+- AI verify concurrency: 1 → 3 parallel
+
+**Database Performance — Missing indexes (7 indexes):**
+- TaskMedia: `[taskId]`, `[taskId, type]`
+- TaskLocationLog: `[taskId, workerId]`, `[workerId, createdAt]`
+- Payout: `[workerId, status]`, `[status]`
+- CitizenReport: `[reporterId]`, `[zoneId, createdAt]`, `[status]`, `[linkedTaskId]`
+- ChatMessage: `[taskId, createdAt]`
+- Task expiry: select only needed fields (skip aiReasoning, etc.)
+
+### Schema changes (require migration before deploy):
+```bash
+cd backend && npx prisma migrate dev --name security-audit-session-11
+```
+New fields: `Task.refundedAt`, `Task.ratedAt`, `Task.buyerRating`, `AnalyticsPhotoMeta.serverPhotoHash`, `AnalyticsPhotoMeta.photoHashMatch`
+
+### Mobile dependency to install:
+```bash
+cd mobile && npm install
+```
+
+### Full report: `SECURITY_AUDIT.md` in repo root
+
+### Branch: imagecapture-bug-fixes
+### Files changed: 24 (23 modified + 1 new)

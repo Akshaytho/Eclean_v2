@@ -112,6 +112,22 @@ export function verifyPaymentSignature(
   }
 }
 
+// ─── Fetch Order (for amount verification) ──────────────────────────────────
+// Used to verify that the Razorpay order amount matches the task rate,
+// preventing a buyer from paying less than the task is worth.
+
+export async function fetchRazorpayOrder(
+  orderId: string,
+): Promise<{ amount: number; currency: string; status: string }> {
+  const rzp = getRazorpay()
+  const order = await rzp.orders.fetch(orderId)
+  return {
+    amount:   order.amount as number,
+    currency: order.currency as string,
+    status:   order.status as string,
+  }
+}
+
 // ─── Refund Payment ─────────────────────────────────────────────────────────
 // Called when buyer cancels a task that has been paid.
 // Full refund — partial refunds not supported in v1.

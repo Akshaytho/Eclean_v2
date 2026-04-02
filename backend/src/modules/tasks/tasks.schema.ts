@@ -73,16 +73,24 @@ export const taskIdParamSchema = z.object({
   taskId: z.string().min(1),
 })
 
-// ─── Start task (optional geofence body) ──────────────────────────────────────
-// Uses z.preprocess so null/undefined body (no Content-Type) becomes {} rather
-// than a Zod parse error — the geofence fields are genuinely optional.
-export const startTaskSchema = z.preprocess(
-  (val) => val ?? {},
-  z.object({
-    lat: z.number().min(-90).max(90).optional(),
-    lng: z.number().min(-180).max(180).optional(),
-  }),
-)
+// ─── Start task (GPS required for geofence verification) ─────────────────────
+// SECURITY: lat/lng are REQUIRED so the server can enforce the 2km geofence.
+// Without this, a worker could start a task from anywhere by sending an empty body.
+export const startTaskSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  envDNA: z.object({
+    magX: z.number().nullable(),
+    magY: z.number().nullable(),
+    magZ: z.number().nullable(),
+    barometer: z.number().nullable(),
+    ambientLight: z.number().nullable(),
+    cellType: z.string().nullable(),
+    cellCarrier: z.string().nullable(),
+    wifiNetworks: z.string().nullable(),
+    capturedAt: z.string(),
+  }).optional().nullable(),
+})
 
 // ─── Rating ────────────────────────────────────────────────────────────────────
 export const rateTaskSchema = z.object({

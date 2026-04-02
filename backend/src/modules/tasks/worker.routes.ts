@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { authenticate } from '../../middleware/authenticate'
+import { authenticate, requireVerifiedEmail } from '../../middleware/authenticate'
 import { authorize } from '../../middleware/authorize'
 import { validate } from '../../middleware/validate'
 import {
@@ -13,79 +13,80 @@ import {
 import * as ctrl from './tasks.controller'
 
 export async function workerRoutes(fastify: FastifyInstance): Promise<void> {
-  const auth = [authenticate, authorize(['WORKER'])]
+  // Read-only routes don't require email verification
+  const auth      = [authenticate, authorize(['WORKER'])]
+  // Write routes (accept, start, submit, cancel) require verified email
+  const authWrite = [authenticate, requireVerifiedEmail, authorize(['WORKER'])]
 
-  // GET /api/v1/worker/tasks/open
+  // GET /api/v1/worker/tasks/open — READ
   fastify.get(
     '/tasks/open',
     { preHandler: [...auth, validate({ query: openTasksQuerySchema })] },
     ctrl.getOpenTasks,
   )
 
-  // GET /api/v1/worker/my-tasks
+  // GET /api/v1/worker/my-tasks — READ
   fastify.get(
     '/my-tasks',
     { preHandler: [...auth, validate({ query: listTasksQuerySchema })] },
     ctrl.listWorkerTasks,
   )
 
-  // GET /api/v1/worker/tasks/:taskId
+  // GET /api/v1/worker/tasks/:taskId — READ
   fastify.get(
     '/tasks/:taskId',
     { preHandler: [...auth, validate({ params: taskIdParamSchema })] },
     ctrl.getWorkerTask,
   )
 
-  // POST /api/v1/worker/tasks/:taskId/accept
+  // POST /api/v1/worker/tasks/:taskId/accept — WRITE
   fastify.post(
     '/tasks/:taskId/accept',
-    { preHandler: [...auth, validate({ params: taskIdParamSchema })] },
+    { preHandler: [...authWrite, validate({ params: taskIdParamSchema })] },
     ctrl.acceptTask,
   )
 
-  // POST /api/v1/worker/tasks/:taskId/start
-  // Body { lat, lng } is optional — used for geofence check when task has a location
+  // POST /api/v1/worker/tasks/:taskId/start — WRITE
   fastify.post(
     '/tasks/:taskId/start',
-    { preHandler: [...auth, validate({ params: taskIdParamSchema, body: startTaskSchema })] },
+    { preHandler: [...authWrite, validate({ params: taskIdParamSchema, body: startTaskSchema })] },
     ctrl.startTask,
   )
 
-  // POST /api/v1/worker/tasks/:taskId/cancel
+  // POST /api/v1/worker/tasks/:taskId/cancel — WRITE
   fastify.post(
     '/tasks/:taskId/cancel',
-    { preHandler: [...auth, validate({ params: taskIdParamSchema, body: reasonSchema })] },
+    { preHandler: [...authWrite, validate({ params: taskIdParamSchema, body: reasonSchema })] },
     ctrl.cancelTaskAsWorker,
   )
 
-  // POST /api/v1/worker/tasks/:taskId/submit
+  // POST /api/v1/worker/tasks/:taskId/submit — WRITE
   fastify.post(
     '/tasks/:taskId/submit',
-    { preHandler: [...auth, validate({ params: taskIdParamSchema })] },
+    { preHandler: [...authWrite, validate({ params: taskIdParamSchema })] },
     ctrl.submitTask,
   )
 
-  // POST /api/v1/worker/tasks/:taskId/retry
+  // POST /api/v1/worker/tasks/:taskId/retry — WRITE
   fastify.post(
     '/tasks/:taskId/retry',
-    { preHandler: [...auth, validate({ params: taskIdParamSchema })] },
+    { preHandler: [...authWrite, validate({ params: taskIdParamSchema })] },
     ctrl.retryTask,
   )
 
-  // POST /api/v1/worker/tasks/:taskId/dispute
+  // POST /api/v1/worker/tasks/:taskId/dispute — WRITE
   fastify.post(
     '/tasks/:taskId/dispute',
-    { preHandler: [...auth, validate({ params: taskIdParamSchema, body: reasonSchema })] },
+    { preHandler: [...authWrite, validate({ params: taskIdParamSchema, body: reasonSchema })] },
     ctrl.disputeTask,
   )
 
-  // POST /api/v1/worker/tasks/:taskId/location
+  // POST /api/v1/worker/tasks/:taskId/location — location updates don't need email verify
   fastify.post(
     '/tasks/:taskId/location',
     { preHandler: [...auth, validate({ params: taskIdParamSchema, body: locationUpdateSchema })] },
     ctrl.updateLocation,
   )
-
 
   // PATCH /api/v1/worker/availability — toggle online/busy status
   fastify.patch(
@@ -93,7 +94,8 @@ export async function workerRoutes(fastify: FastifyInstance): Promise<void> {
     { preHandler: auth },
     ctrl.updateAvailability,
   )
-  // GET /api/v1/worker/tasks/:taskId/chat
+
+  // GET /api/v1/worker/tasks/:taskId/chat — READ
   fastify.get(
     '/tasks/:taskId/chat',
     { preHandler: [...auth, validate({ params: taskIdParamSchema })] },

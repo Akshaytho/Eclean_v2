@@ -55,11 +55,13 @@ export function createPaymentReleaseWorker(): Worker {
           rateCents: true,
           submittedAt: true,
           finalDecision: true,
+          aiScore: true,
         },
       })
 
       const now = Date.now()
       let released = 0
+      let escalated = 0
 
       for (const task of submittedTasks) {
         if (!task.submittedAt || !task.finalDecision || !task.workerId) continue
@@ -69,6 +71,24 @@ export function createPaymentReleaseWorker(): Worker {
 
         if (timeout === undefined) continue
         if (hoursSinceSubmit < timeout) continue
+
+        // SECURITY: don't auto-release MANUAL_REVIEW tasks with low AI scores
+        // These are likely fraudulent — escalate to admin/supervisor instead
+        if (task.finalDecision === 'MANUAL_REVIEW' && (task.aiScore === null || task.aiScore < 0.50)) {
+          logger.warn(
+            { taskId: task.id, aiScore: task.aiScore, hoursSinceSubmit: Math.round(hoursSinceSubmit) },
+            'MANUAL_REVIEW task with low AI score — skipping auto-release, needs admin review',
+          )
+          await notifyUser({
+            userId: task.buyerId,
+            type: 'TASK_VERIFIED',
+            title: 'Task Needs Review',
+            body: `Task "${task.title}" has a low verification score and requires manual review. Please check and approve or reject.`,
+            data: { taskId: task.id, needsManualReview: true },
+          }).catch(() => {})
+          escalated++
+          continue
+        }
 
         // Auto-approve the task — full approval logic (matches approveTask in tasks.service.ts)
         try {
@@ -139,7 +159,70 @@ export function createPaymentReleaseWorker(): Worker {
         }
       }
 
-      logger.info({ checked: submittedTasks.length, released }, 'Payment auto-release check complete')
+      logger.info({ checked: submittedTasks.length, released, escalated }, 'Payment auto-release check complete')
+
+      // ── Dispute resolution timeout (7 days) ───────────────────────────────
+      // SECURITY: disputes cannot lock funds indefinitely
+      // After 7 days, auto-resolve based on AI score
+      const DISPUTE_TIMEOUT_HOURS = 168 // 7 days
+      const disputedTasks = await prisma.task.findMany({
+        where: {
+          status: 'DISPUTED',
+          updatedAt: { lt: new Date(Date.now() - DISPUTE_TIMEOUT_HOURS * 3600000) },
+        },
+        select: {
+          id: true, title: true, buyerId: true, workerId: true,
+          rateCents: true, aiScore: true, ruleEngineScore: true,
+        },
+      })
+
+      for (const dt of disputedTasks) {
+        try {
+          // Resolve in favor of the party with stronger evidence
+          // AI score >= 0.50 OR rule engine score >= 50 → worker wins
+          const workerWins = (dt.aiScore !== null && dt.aiScore >= 0.50) ||
+                             (dt.ruleEngineScore !== null && dt.ruleEngineScore >= 50)
+
+          if (workerWins && dt.workerId) {
+            // Approve + pay worker
+            const platformFeeCents  = Math.floor(dt.rateCents * 0.10)
+            const workerAmountCents = dt.rateCents - platformFeeCents
+
+            const payout = await prisma.$transaction(async (tx) => {
+              await tx.task.update({
+                where: { id: dt.id },
+                data: { status: 'APPROVED', completedAt: new Date() },
+              })
+              return tx.payout.create({
+                data: {
+                  taskId: dt.id, workerId: dt.workerId!, buyerId: dt.buyerId,
+                  amountCents: dt.rateCents, platformFeeCents, workerAmountCents, status: 'PENDING',
+                },
+              })
+            })
+            await payoutQueue.add(PAYOUT_QUEUE, { payoutId: payout.id }, { jobId: `payout_${payout.id}` })
+            await notifyUser({ userId: dt.workerId, type: 'PAYMENT_RECEIVED', title: 'Dispute Resolved — You Won',
+              body: `Dispute for "${dt.title}" was auto-resolved in your favor after 7 days.`, data: { taskId: dt.id } })
+          } else {
+            // Cancel + refund buyer
+            await prisma.task.update({
+              where: { id: dt.id },
+              data: { status: 'CANCELLED', cancelledAt: new Date(), cancellationReason: 'Dispute auto-resolved after 7 days — insufficient work evidence' },
+            })
+            await notifyUser({ userId: dt.buyerId, type: 'TASK_VERIFIED', title: 'Dispute Resolved — Refund Issued',
+              body: `Dispute for "${dt.title}" was auto-resolved after 7 days. A refund will be processed.`, data: { taskId: dt.id } })
+          }
+
+          logger.info({ taskId: dt.id, workerWins, aiScore: dt.aiScore, ruleEngineScore: dt.ruleEngineScore },
+            'Dispute auto-resolved after 7 days')
+        } catch (err) {
+          logger.error({ taskId: dt.id, err }, 'Failed to auto-resolve dispute')
+        }
+      }
+
+      if (disputedTasks.length > 0) {
+        logger.info({ disputesResolved: disputedTasks.length }, 'Dispute auto-resolution complete')
+      }
     },
     { connection },
   )
