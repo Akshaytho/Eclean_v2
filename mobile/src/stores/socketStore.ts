@@ -66,7 +66,7 @@ export const useSocketStore = create<SocketState>((set, get) => ({
         if (accessToken) {
           socket.auth = { token: accessToken }
         }
-      } catch {}
+      } catch { /* graceful: token refresh failure during reconnect is non-fatal */ }
     })
 
     const appStateSub = AppState.addEventListener('change', (state) => {
