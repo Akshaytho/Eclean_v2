@@ -1,7 +1,7 @@
 import React, { useRef, useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, ActivityIndicator, Image, Modal, Dimensions,
+  ScrollView, ActivityIndicator, Modal, Dimensions,
 } from 'react-native'
 import MapView, { Marker } from 'react-native-maps'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { COLORS } from '../../constants/colors'
 import { WORKER_THEME as W } from '../../constants/workerTheme'
+import { CachedImage } from '../../components/ui/CachedImage'
 // DIRTY_LEVELS removed — unused import
 import { workerTasksApi } from '../../api/tasks.api'
 import { referencePointsApi } from '../../api/referencePoints.api'
@@ -147,10 +148,10 @@ export function TaskDetailScreen() {
                   activeOpacity={0.95}
                   onPress={() => setPreviewUrl(p.buyerImageUrl)}
                 >
-                  <Image
+                  <CachedImage
                     source={{ uri: p.buyerImageUrl }}
                     style={styles.heroImage}
-                    resizeMode="cover"
+                    contentFit="cover"
                   />
                 </TouchableOpacity>
               ))}
@@ -162,10 +163,10 @@ export function TaskDetailScreen() {
             </View>
           </View>
         ) : task.media?.filter(m => m.type === 'REFERENCE').length ? (
-          <Image
+          <CachedImage
             source={{ uri: task.media.filter(m => m.type === 'REFERENCE')[0].url }}
             style={styles.heroImage}
-            resizeMode="cover"
+            contentFit="cover"
           />
         ) : null}
 
@@ -348,7 +349,7 @@ export function TaskDetailScreen() {
       <Modal visible={!!previewUrl} transparent animationType="fade" onRequestClose={() => setPreviewUrl(null)}>
         <TouchableOpacity style={styles.previewOverlay} activeOpacity={1} onPress={() => setPreviewUrl(null)}>
           {previewUrl && (
-            <Image source={{ uri: previewUrl }} style={styles.previewImage} resizeMode="contain" />
+            <CachedImage source={{ uri: previewUrl }} style={styles.previewImage} contentFit="contain" />
           )}
           <Text style={styles.previewHint}>Tap to close</Text>
         </TouchableOpacity>

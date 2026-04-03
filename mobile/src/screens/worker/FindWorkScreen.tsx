@@ -15,7 +15,7 @@ import {
 // TODO: Replace with MapContainer wrapper when built (Sprint 4)
 import MapView, { Marker, Circle } from 'react-native-maps'
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import * as Location from 'expo-location'
@@ -89,7 +89,19 @@ export function FindWorkScreen() {
     staleTime: 30_000,
   })
 
+  const qc = useQueryClient()
   const allTasks = data?.tasks ?? []
+
+  // Prefetch top 3 task details so they open instantly on tap
+  useEffect(() => {
+    allTasks.slice(0, 3).forEach(t => {
+      qc.prefetchQuery({
+        queryKey: ['worker', 'task', t.id],
+        queryFn: () => workerTasksApi.getTask(t.id),
+        staleTime: 30_000,
+      })
+    })
+  }, [allTasks])
   const tasks = selectedDirty ? allTasks.filter(t => t.dirtyLevel === selectedDirty) : allTasks
   const mappableTasks = tasks.filter(t => t.locationLat != null)
 

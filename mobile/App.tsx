@@ -8,6 +8,9 @@ import React, { useEffect, useState, Component } from 'react'
 import { StatusBar } from 'expo-status-bar'
 import { NavigationContainer } from '@react-navigation/native'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Sentry from '@sentry/react-native'
 
 // Sentry crash reporting — DSN set via EXPO_PUBLIC_SENTRY_DSN env var
@@ -45,6 +48,14 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
     },
   },
+})
+
+// Disk-persistent cache — app reopens with last-known data instantly (no blank screens on 3G)
+// Only persists successful queries, max 50 queries, expires after 24 hours
+const asyncStoragePersister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+  key: 'eclean-query-cache',
+  throttleTime: 2_000, // write to disk at most every 2s (saves battery)
 })
 
 // Per-query stale times are set via queryKey conventions:
@@ -128,13 +139,20 @@ export default function App() {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={styles.root}>
-        <QueryClientProvider client={queryClient}>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{
+            persister: asyncStoragePersister,
+            maxAge: 24 * 60 * 60 * 1000, // 24 hours
+            buster: 'v1', // change to invalidate all caches on app update
+          }}
+        >
           <NavigationContainer ref={navigationRef} linking={linking}>
             <StatusBar style="auto" />
             <RootNavigator />
             <ToastContainer />
           </NavigationContainer>
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   )

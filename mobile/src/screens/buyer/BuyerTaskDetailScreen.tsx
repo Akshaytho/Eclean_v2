@@ -17,7 +17,7 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator, Modal, TextInput, Image,
+  Alert, ActivityIndicator, Modal, TextInput,
   KeyboardAvoidingView, Platform,
 } from 'react-native'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -37,6 +37,7 @@ import { BUYER_THEME as B } from '../../constants/buyerTheme'
 import { buyerTasksApi }  from '../../api/tasks.api'
 import { referencePointsApi } from '../../api/referencePoints.api'
 import { useSocketStore } from '../../stores/socketStore'
+import { CachedImage } from '../../components/ui/CachedImage'
 import { formatMoney }    from '../../utils/formatMoney'
 import { timeAgo }        from '../../utils/timeAgo'
 import type { BuyerStackParamList } from '../../navigation/types'
@@ -211,22 +212,22 @@ export function BuyerTaskDetailScreen() {
     rejectMutation.mutate(reason)
   }
 
-  if (isLoading || !task) {
-    return <View style={s.loading}><ActivityIndicator size="large" color={B.primary} /></View>
-  }
-
-  const canAct      = task.status === 'SUBMITTED' || task.status === 'VERIFIED'
-  const currentStep = STATUS_ORDER[task.status] ?? 0
-
-  // Photos grouped by type (memoized to avoid re-filtering on every render)
+  // Must be ABOVE early returns — React requires same hooks on every render
   const { beforePhotos, afterPhotos, proofPhotos } = useMemo(() => {
-    const media = task.media ?? []
+    const media = task?.media ?? []
     return {
       beforePhotos: media.filter((m: any) => m.type === 'BEFORE'),
       afterPhotos:  media.filter((m: any) => m.type === 'AFTER'),
       proofPhotos:  media.filter((m: any) => m.type === 'PROOF'),
     }
-  }, [task.media])
+  }, [task?.media])
+
+  const canAct      = task ? (task.status === 'SUBMITTED' || task.status === 'VERIFIED') : false
+  const currentStep = task ? (STATUS_ORDER[task.status] ?? 0) : 0
+
+  if (isLoading || !task) {
+    return <View style={s.loading}><ActivityIndicator size="large" color={B.primary} /></View>
+  }
 
   return (
     <View style={s.root}>
@@ -334,13 +335,13 @@ export function BuyerTaskDetailScreen() {
                   </View>
                   <View style={s.refPairImages}>
                     <TouchableOpacity onPress={() => setPhotoUrl(point.buyerImageUrl)} style={s.refPairImgWrap}>
-                      <Image source={{ uri: point.buyerImageUrl }} style={s.refPairImg} />
+                      <CachedImage source={{ uri: point.buyerImageUrl }} style={s.refPairImg} />
                       <Text style={s.refPairImgLabel}>Before</Text>
                     </TouchableOpacity>
                     <Text style={s.refPairArrow}>{'\u2192'}</Text>
                     {afterSub ? (
                       <TouchableOpacity onPress={() => setPhotoUrl(afterSub.imageUrl)} style={s.refPairImgWrap}>
-                        <Image source={{ uri: afterSub.imageUrl }} style={s.refPairImg} />
+                        <CachedImage source={{ uri: afterSub.imageUrl }} style={s.refPairImg} />
                         <Text style={s.refPairImgLabel}>After</Text>
                       </TouchableOpacity>
                     ) : (
@@ -381,7 +382,7 @@ export function BuyerTaskDetailScreen() {
                       onPress={() => setPhotoUrl(photo.url)}
                       activeOpacity={0.85}
                     >
-                      <Image source={{ uri: photo.url }} style={s.photoThumb} />
+                      <CachedImage source={{ uri: photo.url }} style={s.photoThumb} />
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -565,10 +566,10 @@ export function BuyerTaskDetailScreen() {
           activeOpacity={1}
         >
           {photoUrl && (
-            <Image
+            <CachedImage
               source={{ uri: photoUrl }}
               style={s.photoFull}
-              resizeMode="contain"
+              contentFit="contain"
             />
           )}
           <Text style={s.photoModalHint}>Tap to close</Text>

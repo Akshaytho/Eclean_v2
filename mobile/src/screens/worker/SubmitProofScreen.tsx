@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Image, ActivityIndicator, Alert, ScrollView, Modal,
+  ActivityIndicator, Alert, ScrollView, Modal,
 } from 'react-native'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -12,6 +12,7 @@ import * as Haptics from 'expo-haptics'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { WORKER_THEME as W } from '../../constants/workerTheme'
+import { CachedImage } from '../../components/ui/CachedImage'
 import { workerTasksApi } from '../../api/tasks.api'
 // Motion tracking is stopped before navigating here (in ReferencePointNavigator footer).
 // We check elapsed time instead — if worker spent time on site, motion data was captured.
@@ -121,12 +122,12 @@ export function SubmitProofScreen() {
               return (
                 <View key={point.id} style={styles.photoRow}>
                   <View style={styles.photoPreview}>
-                    <Image source={{ uri: point.buyerImageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    <CachedImage source={{ uri: point.buyerImageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
                   </View>
                   <View style={{ width: 8 }} />
                   <View style={styles.photoPreview}>
                     {sub ? (
-                      <Image source={{ uri: sub.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                      <CachedImage source={{ uri: sub.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
                     ) : (
                       <View style={styles.noPhoto}>
                         <ImageIcon size={20} color={W.text.muted} />
@@ -171,7 +172,7 @@ export function SubmitProofScreen() {
                 <View key={type} style={styles.photoRow}>
                   <View style={styles.photoPreview}>
                     {media ? (
-                      <Image source={{ uri: media.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                      <CachedImage source={{ uri: media.url }} style={StyleSheet.absoluteFill} contentFit="cover" />
                     ) : (
                       <View style={styles.noPhoto}>
                         <ImageIcon size={28} color={W.text.muted} />

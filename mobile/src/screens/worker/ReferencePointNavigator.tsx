@@ -9,7 +9,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
-  ScrollView, Image, Modal, ActivityIndicator, Linking, Platform,
+  ScrollView, Modal, ActivityIndicator, Linking, Platform,
 } from 'react-native'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -22,6 +22,7 @@ import * as Location from 'expo-location'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { WORKER_THEME as W } from '../../constants/workerTheme'
+import { CachedImage } from '../../components/ui/CachedImage'
 import { referencePointsApi } from '../../api/referencePoints.api'
 import { CaptureCamera } from '../../components/camera/CaptureCamera'
 import type { CaptureResult, PhotoType } from '../../components/camera/CaptureCamera'
@@ -241,10 +242,10 @@ export function ReferencePointNavigator() {
 
               <View style={s.pointRight}>
                 {isDone ? (
-                  <Image source={{ uri: point.afterSubmission?.imageUrl ?? point.buyerImageUrl }} style={s.pointThumb} />
+                  <CachedImage source={{ uri: point.afterSubmission?.imageUrl ?? point.buyerImageUrl }} style={s.pointThumb} />
                 ) : (
                   <View style={s.pointActions}>
-                    <Image source={{ uri: point.buyerImageUrl }} style={[s.pointThumb, s.pointThumbRef]} />
+                    <CachedImage source={{ uri: point.buyerImageUrl }} style={[s.pointThumb, s.pointThumbRef]} />
                     {point.buyerLat != null && point.buyerLng != null && (
                       <TouchableOpacity
                         style={s.navigateBtn}
