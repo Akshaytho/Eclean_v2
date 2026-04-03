@@ -22,9 +22,9 @@ export const workerTasksApi = {
   accept: (taskId: string) =>
     apiClient.post<{ task: Task }>(`/worker/tasks/${taskId}/accept`).then((r) => r.data.task),
 
-  // lat/lng optional — used for geofence check when task has a location
-  start: (taskId: string, coords?: { lat: number; lng: number }) =>
-    apiClient.post<{ task: Task }>(`/worker/tasks/${taskId}/start`, coords ?? {}).then((r) => r.data.task),
+  // lat/lng required for geofence check; envDNA for anti-spoofing verification
+  start: (taskId: string, data: { lat: number; lng: number; envDNA?: Record<string, unknown> | null }) =>
+    apiClient.post<{ task: Task }>(`/worker/tasks/${taskId}/start`, data).then((r) => r.data.task),
 
   submit: (taskId: string) =>
     apiClient.post<{ task: Task }>(`/worker/tasks/${taskId}/submit`).then((r) => r.data.task),

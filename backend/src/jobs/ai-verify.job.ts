@@ -72,7 +72,7 @@ export function createAiVerifyWorker(): Worker {
         }
       }
     },
-    { connection },
+    { connection, concurrency: 3 }, // PERF: process 3 AI verifications in parallel (default was 1)
   )
 
   worker.on('failed', (job, err) => {

@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt'
 import type { Role, User } from '@prisma/client'
 import { prisma } from '../../lib/prisma'
 import { redis } from '../../lib/redis'
+import { logger } from '../../lib/logger'
 import { env } from '../../config/env'
 import {
   signAccessToken,
@@ -90,6 +91,20 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
 }
 
 export async function login(input: LoginInput): Promise<AuthResult> {
+  // SECURITY: account-level lockout after 5 failed attempts (15-min cooldown)
+  // Wrapped in try/catch — Redis failure degrades gracefully (lockout disabled, login still works)
+  const lockoutKey = `login_lockout:${input.email.toLowerCase()}`
+  try {
+    const failCount = parseInt(await redis.get(lockoutKey) ?? '0', 10)
+    if (failCount >= 5) {
+      throw new UnauthorizedError('Too many failed login attempts. Please try again in 15 minutes.')
+    }
+  } catch (err) {
+    if (err instanceof UnauthorizedError) throw err
+    // Redis down — degrade gracefully, skip lockout check
+    logger.warn({ err }, 'Redis lockout check failed — degrading gracefully')
+  }
+
   const user = await prisma.user.findUnique({ where: { email: input.email } })
 
   // Always run bcrypt to prevent user-enumeration via timing differences
@@ -97,12 +112,21 @@ export async function login(input: LoginInput): Promise<AuthResult> {
   const isValid = await bcrypt.compare(input.password, hashToCheck)
 
   if (user === null || !isValid) {
+    // Increment failed attempts counter (expires after 15 minutes)
+    await redis.multi()
+      .incr(lockoutKey)
+      .expire(lockoutKey, 900) // 15 minutes
+      .exec()
+      .catch(() => {}) // Redis failure must not block the error response
     throw new UnauthorizedError('Invalid email or password')
   }
 
   if (!user.isActive) {
     throw new UnauthorizedError('Account has been deactivated')
   }
+
+  // Successful login — clear any failed attempt counter (after isActive check)
+  await redis.del(lockoutKey).catch(() => {})
 
   const { token: accessToken } = signAccessToken(user.id, user.role, user.email)
   const { token: refreshToken } = signRefreshToken(user.id, user.role, user.email)

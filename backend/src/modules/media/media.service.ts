@@ -1,4 +1,28 @@
 import { Readable } from 'stream'
+import crypto from 'crypto'
+
+// PERF: limit concurrent uploads to prevent OOM crashes
+// 10 concurrent 10MB uploads = 100MB RAM; without limit, 50+ = 500MB = OOM kill on Railway
+const MAX_CONCURRENT_UPLOADS = 10
+let activeUploads = 0
+const uploadQueue: Array<() => void> = []
+
+function acquireUploadSlot(): Promise<void> {
+  if (activeUploads < MAX_CONCURRENT_UPLOADS) {
+    activeUploads++
+    return Promise.resolve()
+  }
+  return new Promise((resolve) => uploadQueue.push(resolve))
+}
+
+function releaseUploadSlot(): void {
+  activeUploads--
+  const next = uploadQueue.shift()
+  if (next) {
+    activeUploads++
+    next()
+  }
+}
 import type { UploadApiResponse } from 'cloudinary'
 import { cloudinary, assertCloudinaryConfigured } from '../../lib/cloudinary'
 import { prisma } from '../../lib/prisma'
@@ -35,6 +59,16 @@ export async function uploadTaskMedia(params: {
     photoHash:   string | null
   }
 }) {
+  // PERF: backpressure — wait for an upload slot to prevent OOM from concurrent uploads
+  await acquireUploadSlot()
+  try {
+    return await _uploadTaskMediaImpl(params)
+  } finally {
+    releaseUploadSlot()
+  }
+}
+
+async function _uploadTaskMediaImpl(params: Parameters<typeof uploadTaskMedia>[0]) {
   const { userId, userRole, taskId, mediaType, file, mimeType, sizeBytes, idempotencyKey, deviceMeta } = params
 
   // Validate file type
@@ -68,6 +102,21 @@ export async function uploadTaskMedia(params: {
 
   // Note: Dedup logic removed — reference point system allows multiple photos per type.
   // Legacy TaskMedia still accepts uploads but no longer deletes previous of same type.
+
+  // SECURITY: server-side photo hash verification
+  // Recompute SHA-256 of the uploaded file and compare with client-claimed hash.
+  // Prevents attackers from uploading a different image than what was "captured".
+  const serverHash = crypto.createHash('sha256').update(file).digest('hex')
+  if (deviceMeta?.photoHash && !deviceMeta.photoHash.startsWith('fallback-')) {
+    if (serverHash !== deviceMeta.photoHash) {
+      logger.warn(
+        { taskId, mediaType, clientHash: deviceMeta.photoHash, serverHash },
+        'Photo hash mismatch — client-claimed hash does not match uploaded file',
+      )
+      // Flag but don't block — the mismatch is logged for fraud investigation
+      // A hard block would break legitimate cases where compression changes the hash
+    }
+  }
 
   // Guard — ensure Cloudinary is configured before attempting upload
   assertCloudinaryConfigured()
@@ -140,6 +189,8 @@ export async function uploadTaskMedia(params: {
       capturedAt:             deviceMeta?.capturedAt ? new Date(deviceMeta.capturedAt) : null,
       capturedDeviceId:       deviceMeta?.deviceId ?? null,
       photoHash:              deviceMeta?.photoHash ?? null,
+      serverPhotoHash:        serverHash,
+      photoHashMatch:         deviceMeta?.photoHash ? (serverHash === deviceMeta.photoHash) : null,
       // Fraud detection — uses best available GPS
       taskLat:                task.locationLat,
       taskLng:                task.locationLng,

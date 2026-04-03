@@ -125,16 +125,27 @@ export function initSocket(httpServer: HttpServer): Server {
         if (limited) return
         await redis.setex(rlKey, 5, '1')
 
-        // Verify assignment + status
-        const task = await prisma.task.findUnique({
-          where:  { id: taskId },
-          select: { workerId: true, status: true },
-        })
-        if (!task || task.workerId !== user.id) {
+        // Verify assignment + status (cached in Redis to avoid 100+ DB reads/sec from GPS)
+        const cacheKey = `task_assign:${taskId}`
+        let taskAssign: { workerId: string | null; status: string } | null = null
+        const cached = await redis.get(cacheKey)
+        if (cached) {
+          taskAssign = JSON.parse(cached)
+        } else {
+          const task = await prisma.task.findUnique({
+            where:  { id: taskId },
+            select: { workerId: true, status: true },
+          })
+          if (task) {
+            await redis.setex(cacheKey, 30, JSON.stringify(task)) // 30s cache
+            taskAssign = task
+          }
+        }
+        if (!taskAssign || taskAssign.workerId !== user.id) {
           socket.emit('error', { message: 'Not assigned to this task' })
           return
         }
-        if (task.status !== 'IN_PROGRESS') {
+        if (taskAssign.status !== 'IN_PROGRESS') {
           socket.emit('error', { message: 'Task is not IN_PROGRESS' })
           return
         }
@@ -196,13 +207,18 @@ export function initSocket(httpServer: HttpServer): Server {
           select: { id: true, name: true, role: true },
         })
 
+        // SECURITY: sanitize chat content to prevent stored XSS
+        // Strip all HTML tags — chat is plain text only
+        const sanitized = content.trim().replace(/<[^>]*>/g, '').slice(0, 2000)
+        if (!sanitized) return
+
         // Persist to DB so history survives reconnects/restarts
         const saved = await prisma.chatMessage.create({
           data: {
             taskId,
             senderId:   user.id,
             senderRole: user.role,
-            content:    content.trim(),
+            content:    sanitized,
           },
         })
 
@@ -231,6 +247,8 @@ export function initSocket(httpServer: HttpServer): Server {
 
 export function emitTaskUpdated(taskId: string, status: string): void {
   io?.to(`task:${taskId}`).emit('task:updated', { taskId, status })
+  // Invalidate GPS assignment cache so stale status doesn't block GPS writes
+  redis.del(`task_assign:${taskId}`).catch(() => {})
 }
 
 export function emitTaskPhotoAdded(taskId: string, media: object): void {

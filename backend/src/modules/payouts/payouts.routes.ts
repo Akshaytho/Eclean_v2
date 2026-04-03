@@ -150,21 +150,24 @@ export async function payoutsRoutes(fastify: FastifyInstance): Promise<void> {
       // ── Signature verification ─────────────────────────────────────────
       const signature = request.headers['x-razorpay-signature'] as string | undefined
 
-      if (env.RAZORPAY_WEBHOOK_SECRET) {
-        if (!signature) {
-          logger.warn('Razorpay webhook: missing X-Razorpay-Signature header')
-          return reply.status(400).send({ error: 'Missing signature' })
-        }
-      } else if (env.NODE_ENV === 'production') {
-        logger.error('Razorpay webhook: RAZORPAY_WEBHOOK_SECRET MUST be set in production — rejecting')
+      // SECURITY: always require webhook secret — never skip verification regardless of NODE_ENV
+      if (!env.RAZORPAY_WEBHOOK_SECRET) {
+        logger.error('Razorpay webhook: RAZORPAY_WEBHOOK_SECRET not set — rejecting')
         return reply.status(500).send({ error: 'Webhook secret not configured' })
-      } else {
-        logger.warn('Razorpay webhook: RAZORPAY_WEBHOOK_SECRET not set — skipping verification (dev only)')
       }
 
-      if (env.RAZORPAY_WEBHOOK_SECRET && signature) {
+      if (!signature) {
+        logger.warn('Razorpay webhook: missing X-Razorpay-Signature header')
+        return reply.status(400).send({ error: 'Missing signature' })
+      }
+
+      {
         // Use the actual raw HTTP body bytes for HMAC — JSON.stringify may differ from the original
-        const rawBody = (request as any).rawBody ?? JSON.stringify(body)
+        const rawBody = (request as any).rawBody
+        if (!rawBody) {
+          logger.error('Razorpay webhook: rawBody not available — rejecting (cannot verify signature)')
+          return reply.status(500).send({ error: 'Raw body not available for signature verification' })
+        }
         const expected = crypto
           .createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET)
           .update(rawBody)

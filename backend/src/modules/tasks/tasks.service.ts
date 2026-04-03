@@ -13,7 +13,7 @@ import { sendPush } from '../../lib/push'
 import { logTaskEvent } from '../../lib/event-log'
 import { payoutQueue, PAYOUT_QUEUE } from '../../jobs/payout.job'
 // selectVerificationPoints removed — hidden verification points dropped
-import { verifyPaymentSignature, refundPayment } from '../payments/payment.service'
+import { verifyPaymentSignature, refundPayment, fetchRazorpayOrder } from '../payments/payment.service'
 import { logger } from '../../lib/logger'
 import { env } from '../../config/env'
 import type {
@@ -38,7 +38,7 @@ const COOLDOWN_MINUTES       = process.env.NODE_ENV === 'test' ? 0 : 30    // re
 // ─── Serializable transaction retry helper ────────────────────────────────────
 // PostgreSQL SERIALIZABLE isolation can throw P2034 on concurrent row access.
 // We retry the whole operation up to MAX_RETRIES times with a small delay.
-const SERIALIZABLE_MAX_RETRIES = 3
+const SERIALIZABLE_MAX_RETRIES = 5
 const SERIALIZABLE_RETRY_DELAY_MS = 50
 
 async function withSerializableRetry<T>(fn: () => Promise<T>): Promise<T> {
@@ -51,8 +51,11 @@ async function withSerializableRetry<T>(fn: () => Promise<T>): Promise<T> {
         err.code === 'P2034' &&
         attempt < SERIALIZABLE_MAX_RETRIES
       ) {
-        logger.warn({ attempt, maxRetries: SERIALIZABLE_MAX_RETRIES }, 'Serializable conflict — retrying')
-        await new Promise((r) => setTimeout(r, SERIALIZABLE_RETRY_DELAY_MS * attempt))
+        // Exponential backoff with jitter to prevent thundering herd
+        const baseDelay = SERIALIZABLE_RETRY_DELAY_MS * Math.pow(2, attempt - 1)
+        const jitter = baseDelay * (0.5 + Math.random() * 0.5)
+        logger.warn({ attempt, maxRetries: SERIALIZABLE_MAX_RETRIES, delayMs: Math.round(jitter) }, 'Serializable conflict — retrying')
+        await new Promise((r) => setTimeout(r, jitter))
         continue
       }
       throw err
@@ -134,6 +137,16 @@ export async function createTask(buyerId: string, input: CreateTaskInput) {
     if (!valid) {
       throw new BadRequestError('Payment verification failed — invalid signature')
     }
+
+    // SECURITY: verify Razorpay order amount matches the task rate
+    // Without this check, a buyer could pay ₹1 but create a ₹180 task
+    const rzpOrder = await fetchRazorpayOrder(input.razorpayOrderId)
+    if (rzpOrder.amount !== rateCents) {
+      throw new BadRequestError(
+        `Payment amount mismatch: paid ${rzpOrder.amount} paise but task rate is ${rateCents} paise`,
+      )
+    }
+
     razorpayOrderId   = input.razorpayOrderId
     razorpayPaymentId = input.razorpayPaymentId
   }
@@ -218,6 +231,14 @@ export async function cancelTaskAsBuyer(
 ) {
   const task = await fetchTaskOrThrow(taskId)
   if (task.buyerId !== buyerId) throw new ForbiddenError('Not your task')
+
+  // User-friendly error when buyer tries to cancel an in-progress task
+  if (task.status === 'IN_PROGRESS') {
+    throw new BadRequestError(
+      'Cannot cancel a task while work is in progress. Please wait for the worker to submit, then you can reject if unsatisfied.',
+    )
+  }
+
   assertTransition(task.status, 'CANCELLED', 'BUYER')
 
   const result = await withSerializableRetry(() =>
@@ -255,27 +276,30 @@ export async function cancelTaskAsBuyer(
           })
         }
 
+        // Set refundedAt FLAG inside tx to prevent double-refund (atomic claim)
+        // Actual Razorpay API call happens AFTER tx commits to avoid holding locks
+        let needsRefund = false
+        if (fresh.razorpayPaymentId && !fresh.refundedAt) {
+          await tx.task.update({
+            where: { id: taskId },
+            data:  { refundedAt: new Date() },
+          })
+          needsRefund = true
+        }
+
         await recordEvent(tx, taskId, buyerId, 'BUYER', fresh.status, 'CANCELLED', input.reason)
-        return updated
+        return { ...updated, _needsRefund: needsRefund }
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     ),
   )
 
-  // ── Refund buyer if task had a Razorpay payment ──────────────────────────
-  // Guard: only refund if task actually has a payment AND isn't already refunded
-  if (task.razorpayPaymentId) {
+  // Refund OUTSIDE the transaction — avoids holding serializable locks during HTTP call
+  if ((result as any)._needsRefund && task.razorpayPaymentId) {
     try {
-      // Check if refund already exists (prevents double-refund on concurrent cancels)
-      const existingRefund = await prisma.task.findUnique({
-        where: { id: taskId },
-        select: { status: true, razorpayPaymentId: true },
-      })
-      if (existingRefund?.status === 'CANCELLED') {
-        await refundPayment(task.razorpayPaymentId, task.rateCents)
-      }
+      await refundPayment(task.razorpayPaymentId, task.rateCents)
     } catch (err) {
-      // Log but don't block — cancellation succeeded, refund can be retried manually
+      // Log but don't block — refundedAt is set so it won't retry, admin can refund manually
       logger.error({ taskId, paymentId: task.razorpayPaymentId, err }, 'Auto-refund failed on task cancel')
     }
   }
@@ -556,34 +580,30 @@ export async function listWorkerTasks(workerId: string, query: ListTasksQuery) {
 // ─── WORKER — accept (SERIALIZABLE to prevent double-accept) ─────────────────
 
 export async function acceptTask(workerId: string, taskId: string) {
-  const result = await withSerializableRetry(() =>
-    prisma.$transaction(
+  // PERF: check queue limit BEFORE the atomic claim to avoid unnecessary DB contention
+  const queuedCount = await prisma.task.count({
+    where: { workerId, status: { in: ['ACCEPTED', 'IN_PROGRESS'] } },
+  })
+  if (queuedCount >= MAX_QUEUED_TASKS) {
+    throw new ConflictError(`You can queue at most ${MAX_QUEUED_TASKS} tasks. Complete or cancel a task first.`)
+  }
+
+  // PERF: atomic optimistic claim — replaces SERIALIZABLE transaction
+  // 50 workers hitting this simultaneously: only 1 wins, others get count=0 instantly
+  // No retry storm, no connection pool exhaustion, no serialization failures
+  const claimed = await prisma.task.updateMany({
+    where: { id: taskId, status: 'OPEN' },
+    data:  { status: 'ACCEPTED', workerId },
+  })
+  if (claimed.count === 0) {
+    throw new ConflictError('Task is no longer available')
+  }
+
+  // Post-claim work in a regular (non-serializable) transaction
+  const result = await prisma.$transaction(
       async (tx) => {
         const task = await tx.task.findUnique({ where: { id: taskId } })
         if (!task) throw new NotFoundError('Task not found')
-        if (task.status !== 'OPEN') throw new ConflictError('Task is no longer available')
-
-        const profile = await tx.workerProfile.findUnique({ where: { userId: workerId } })
-        if (!profile) throw new NotFoundError('Worker profile not found')
-        // Sequential queue: max 5 ACCEPTED tasks, only 1 IN_PROGRESS at a time
-        const [queuedCount] = await Promise.all([
-          tx.task.count({
-            where: { workerId, status: { in: ['ACCEPTED', 'IN_PROGRESS'] } },
-          }),
-          tx.task.count({
-            where: { workerId, status: 'IN_PROGRESS' },
-          }),
-        ])
-        if (queuedCount >= MAX_QUEUED_TASKS)
-          throw new ConflictError(`You can queue at most ${MAX_QUEUED_TASKS} tasks. Complete or cancel a task first.`)
-
-        const updated = await tx.task.update({
-          where: { id: taskId },
-          data:  { status: 'ACCEPTED', workerId },
-        })
-
-        // activeTaskId is set on START (not accept) to allow queuing multiple ACCEPTED tasks
-        // The @unique constraint on activeTaskId protects against multiple IN_PROGRESS tasks
 
         await recordEvent(tx, taskId, workerId, 'WORKER', 'OPEN', 'ACCEPTED')
 
@@ -597,9 +617,8 @@ export async function acceptTask(workerId: string, taskId: string) {
           },
         })
 
-        return updated
+        return task
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     ),
   )
   emitTaskUpdated(taskId, 'ACCEPTED')
@@ -614,7 +633,7 @@ export async function acceptTask(workerId: string, taskId: string) {
 
 // ─── WORKER — start (work window + geofence enforcement) ─────────────────────
 
-export async function startTask(workerId: string, taskId: string, input?: StartTaskInput) {
+export async function startTask(workerId: string, taskId: string, input: StartTaskInput) {
   const task = await fetchTaskOrThrow(taskId)
   if (task.workerId !== workerId) throw new ForbiddenError('Not your task')
   assertTransition(task.status, 'IN_PROGRESS', 'WORKER')
@@ -697,6 +716,26 @@ export async function startTask(workerId: string, taskId: string, input?: StartT
           },
         })
 
+        // SECURITY: store worker's environmental DNA for anti-spoofing comparison
+        if (input.envDNA) {
+          await tx.workerEnvironmentCapture.create({
+            data: {
+              taskId,
+              workerId,
+              captureType:  'START',
+              magX:         input.envDNA.magX ?? null,
+              magY:         input.envDNA.magY ?? null,
+              magZ:         input.envDNA.magZ ?? null,
+              barometer:    input.envDNA.barometer ?? null,
+              ambientLight: input.envDNA.ambientLight ?? null,
+              cellType:     input.envDNA.cellType ?? null,
+              cellCarrier:  input.envDNA.cellCarrier ?? null,
+              wifiNetworks: input.envDNA.wifiNetworks ?? null,
+              capturedAt:   new Date(input.envDNA.capturedAt),
+            },
+          })
+        }
+
         return updated
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -742,6 +781,18 @@ export async function cancelTaskAsWorker(
             submittedAt:        null,
             completedAt:        null,
           },
+        })
+
+        // SECURITY: clean up worker's media and submissions to prevent piggyback attacks
+        // Without this, a colluding second worker could claim the first worker's photos
+        await tx.taskMedia.deleteMany({
+          where: { taskId, type: { in: ['BEFORE', 'AFTER', 'PROOF'] } },
+        })
+        await tx.workerPointSubmission.deleteMany({
+          where: { taskId, workerId },
+        })
+        await tx.taskLocationLog.deleteMany({
+          where: { taskId, workerId },
         })
 
         await tx.workerProfile.update({
@@ -820,6 +871,26 @@ export async function submitTask(workerId: string, taskId: string) {
         const timeSpentSecs = fresh.startedAt
           ? Math.floor((Date.now() - fresh.startedAt.getTime()) / 1000)
           : null
+
+        // SECURITY: enforce minimum time on-site to prevent instant-submit fraud
+        // Workers must spend a reasonable minimum time based on task difficulty
+        const MIN_TIME_SECS: Record<string, number> = {
+          LIGHT: 300,     // 5 minutes
+          MEDIUM: 600,    // 10 minutes
+          HEAVY: 900,     // 15 minutes
+          CRITICAL: 1200, // 20 minutes
+        }
+        const minRequired = MIN_TIME_SECS[fresh.dirtyLevel] ?? 300
+        if (timeSpentSecs === null) {
+          throw new BadRequestError('Task has no start time recorded — cannot verify time on site')
+        }
+        if (timeSpentSecs < minRequired) {
+          const minMinutes = Math.ceil(minRequired / 60)
+          throw new BadRequestError(
+            `Minimum time on-site for ${fresh.dirtyLevel} tasks is ${minMinutes} minutes. ` +
+            `You have only spent ${Math.floor(timeSpentSecs / 60)} minutes.`,
+          )
+        }
 
         const updated = await tx.task.update({
           where: { id: taskId },
@@ -992,6 +1063,16 @@ export async function rateTask(buyerId: string, taskId: string, input: RateTaskI
   if (task.buyerId !== buyerId) throw new ForbiddenError('Not your task')
   if (task.status !== 'APPROVED') throw new BadRequestError('Task must be approved before rating')
   if (!task.workerId) throw new BadRequestError('Task has no assigned worker')
+
+  // SECURITY: prevent duplicate ratings — a malicious buyer could tank a worker's score
+  if (task.ratedAt) throw new BadRequestError('Task has already been rated')
+
+  // Use conditional update to atomically claim the rating (prevents double-tap race)
+  const updated = await prisma.task.updateMany({
+    where: { id: taskId, ratedAt: null },
+    data:  { ratedAt: new Date(), buyerRating: input.rating },
+  })
+  if (updated.count === 0) throw new BadRequestError('Task has already been rated')
 
   // Atomic rating update — uses SQL to prevent read-modify-write race condition
   // Formula: newRating = ((currentRating * (completedTasks - 1)) + newRating) / completedTasks

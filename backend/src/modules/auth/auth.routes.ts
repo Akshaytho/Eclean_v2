@@ -61,7 +61,10 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   // Accepts refreshToken from httpOnly cookie OR request body (body takes priority for backwards compatibility)
   fastify.post(
     '/refresh',
-    { preHandler: [validate({ body: refreshSchema })] },
+    {
+      config: { rateLimit: { max: env.NODE_ENV === 'production' ? 30 : 10000, timeWindow: '1 minute' } },
+      preHandler: [validate({ body: refreshSchema })],
+    },
     async (request, reply) => {
       const body = request.body as { refreshToken?: string }
       const tokenFromCookie = request.cookies?.refreshToken
@@ -76,9 +79,15 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   )
 
   // POST /api/v1/auth/logout
+  // Note: no `authenticate` preHandler — user must be able to logout with an expired access token.
+  // The logout service validates the tokens it receives and only blacklists valid ones.
+  // Rate limited to prevent Redis blacklist flooding.
   fastify.post(
     '/logout',
-    { preHandler: [validate({ body: logoutSchema })] },
+    {
+      config: { rateLimit: { max: env.NODE_ENV === 'production' ? 10 : 10000, timeWindow: '1 minute' } },
+      preHandler: [validate({ body: logoutSchema })],
+    },
     async (request, reply) => {
       const body = request.body as { refreshToken?: string; accessToken?: string }
       const tokenFromCookie = request.cookies?.refreshToken

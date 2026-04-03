@@ -221,6 +221,9 @@ model Task {
   submittedAt        DateTime?
   completedAt        DateTime?
   cancelledAt        DateTime?
+  refundedAt         DateTime?   // SECURITY: tracks whether refund was issued, prevents double-refund
+  ratedAt            DateTime?   // SECURITY: tracks whether buyer rated, prevents rating spam
+  buyerRating        Int?        // 1-5 rating given by buyer (null = not yet rated)
   timeSpentSecs      Int?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
@@ -279,6 +282,9 @@ model TaskMedia {
   createdAt       DateTime  @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])          // PERF: every task view/submit queries media by taskId
+  @@index([taskId, type])    // PERF: submit checks specific media types
 }
 
 // ─── Reference Point System ──────────────────────────────────────────────────
@@ -444,6 +450,9 @@ model Payout {
   task   Task @relation(fields: [taskId], references: [id])
   worker User @relation("PayoutWorker", fields: [workerId], references: [id])
   buyer  User @relation("PayoutBuyer", fields: [buyerId], references: [id])
+
+  @@index([workerId, status])  // PERF: worker earnings aggregation
+  @@index([status])            // PERF: admin dashboard groupBy
 }
 
 model Notification {
@@ -479,6 +488,11 @@ model CitizenReport {
 
   reporter User  @relation(fields: [reporterId], references: [id])
   zone     Zone? @relation(fields: [zoneId], references: [id])
+
+  @@index([reporterId])
+  @@index([zoneId, createdAt])  // PERF: analytics zone snapshots
+  @@index([status])
+  @@index([linkedTaskId])
 }
 
 model TaskEvent {
@@ -510,6 +524,8 @@ model TaskLocationLog {
   worker User @relation("WorkerLocationLogs", fields: [workerId], references: [id])
 
   @@index([taskId])
+  @@index([taskId, workerId])     // PERF: worker cancel + task expiry cleanup
+  @@index([workerId, createdAt])  // PERF: analytics daily GPS aggregation
 }
 
 model ChatMessage {
@@ -524,6 +540,7 @@ model ChatMessage {
   sender User @relation("ChatSender", fields: [senderId], references: [id])
 
   @@index([taskId])
+  @@index([taskId, createdAt])  // PERF: chat history pagination
 }
 
 // ─── Analytics Models ────────────────────────────────────────────────────────
@@ -688,7 +705,9 @@ model AnalyticsPhotoMeta {
   capturedLng            Float?
   capturedAt             DateTime? // ISO timestamp from phone clock
   capturedDeviceId       String?   // Device.modelId from expo-device
-  photoHash              String?   // SHA-256 of raw photo bytes — tamper-proof evidence chain
+  photoHash              String?   // SHA-256 of raw photo bytes (client-claimed)
+  serverPhotoHash        String?   // SHA-256 recomputed server-side — ground truth
+  photoHashMatch         Boolean?  // true if client hash === server hash, null if no client hash sent
   // Fraud detection
   distanceFromTaskMeters Float?    // haversine(bestGPS, taskGPS) — null if either is missing
   isFlagged              Boolean   @default(false) // true if distance > 500m

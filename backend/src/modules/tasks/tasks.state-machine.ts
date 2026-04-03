@@ -12,7 +12,7 @@ const TRANSITIONS: Array<[TaskStatus, TaskStatus, Actor[]]> = [
   ['ACCEPTED',    'CANCELLED',   ['BUYER', 'WORKER']],
   ['IN_PROGRESS', 'SUBMITTED',   ['WORKER']],
   ['IN_PROGRESS', 'OPEN',        ['WORKER']],             // worker cancel → return to OPEN for other workers
-  ['IN_PROGRESS', 'CANCELLED',   ['BUYER', 'WORKER']],
+  ['IN_PROGRESS', 'CANCELLED',   ['WORKER']],          // SECURITY: buyer removed — can't cancel after work started (prevents free labor theft)
   ['SUBMITTED',   'APPROVED',    ['BUYER']],
   ['SUBMITTED',   'REJECTED',    ['BUYER']],           // buyer rejects work
   ['SUBMITTED',   'DISPUTED',    ['BUYER', 'WORKER']],

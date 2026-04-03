@@ -40,10 +40,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   })
 
   // ── Plugins ──────────────────────────────────────────────────────────────────
+  // SECURITY: always use explicit CORS origins — never allow all origins
+  // `origin: true` in dev allowed any website to make authenticated requests
   void app.register(cors, {
-    origin: env.NODE_ENV === 'production'
-      ? env.CORS_ORIGINS.split(',').map(o => o.trim())
-      : true,
+    origin: env.CORS_ORIGINS.split(',').map(o => o.trim()),
     credentials: true,
   })
   void app.register(helmet, { contentSecurityPolicy: false })
@@ -51,8 +51,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   void app.register(multipart, {
     limits: { fileSize: 10 * 1024 * 1024 },
   })
+  // PERF: global rate limit — prevents DoS on unprotected endpoints
+  // Uses JWT user ID for authenticated requests, falls back to IP
   void app.register(rateLimit, {
-    global: false,
+    global: true,
+    max: env.NODE_ENV === 'production' ? 100 : 10000,
+    timeWindow: '1 minute',
+    keyGenerator: (req) => (req as any).user?.id ?? req.ip,
   })
 
   // Allow empty body for application/json + capture raw body for webhook signature verification
@@ -91,14 +96,6 @@ export async function buildApp(): Promise<FastifyInstance> {
     env:       env.NODE_ENV,
   }))
 
-  // TEMP debug — remove before production
-  app.get('/debug/reverify', async (req, reply) => {
-    const { taskId } = req.query as { taskId: string }
-    if (!taskId) return reply.status(400).send({ error: 'taskId required' })
-    const { verifyTaskSubmission } = require('./modules/ai/ai.service')
-    const result = await verifyTaskSubmission(taskId)
-    return reply.send({ result })
-  })
 
   return app
 }
