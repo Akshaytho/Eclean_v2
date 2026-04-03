@@ -285,7 +285,7 @@ export const CaptureCamera = React.memo(function CaptureCamera({
             workerLat={workerLoc.lat}
             workerLng={workerLoc.lng}
             distanceMeters={distanceFromPoint ?? 0}
-            size={100}
+            size={120}
           />
           <Text style={s.findArrowHint}>Match the reference angle</Text>
         </View>
@@ -372,7 +372,7 @@ const s = StyleSheet.create({
   sbs_labelWrap:  { position: 'absolute', bottom: 6, left: 0, right: 0, alignItems: 'center' },
   sbs_label:      { color: '#fff', fontSize: 9, fontWeight: '700', letterSpacing: 1, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
   proximityWrap:  { position: 'absolute', top: SH * 0.49, left: 24, right: 24, alignItems: 'center', gap: 4, zIndex: 5 },
-  findArrowWrap:  { position: 'absolute', top: SH * 0.55, left: 0, right: 0, alignItems: 'center', zIndex: 5 },
+  findArrowWrap:  { position: 'absolute', top: SH * 0.52, left: 0, right: 0, alignItems: 'center', zIndex: 5 },
   findArrowHint:  { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '600', marginTop: 4 },
   proximityBar:   { width: '100%', height: 4, borderRadius: 2, overflow: 'hidden' },
   proximityFill:  { height: '100%', borderRadius: 2 },

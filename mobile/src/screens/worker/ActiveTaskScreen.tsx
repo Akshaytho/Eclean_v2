@@ -86,8 +86,9 @@ export function ActiveTaskScreen() {
   const [isOnline, setIsOnline]         = useState(true)
   const [cameraState, setCameraState]   = useState<{
     visible: boolean; pointId: string | null; pointIndex: number;
-    label: string | null; buyerImageUrl: string | null; distance: number | null
-  }>({ visible: false, pointId: null, pointIndex: 0, label: null, buyerImageUrl: null, distance: null })
+    label: string | null; buyerImageUrl: string | null; distance: number | null;
+    buyerLat: number | null; buyerLng: number | null
+  }>({ visible: false, pointId: null, pointIndex: 0, label: null, buyerImageUrl: null, distance: null, buyerLat: null, buyerLng: null })
 
   // ── Task query ────────────────────────────────────────────────────────────
   const { data: task, isLoading } = useQuery({
@@ -300,6 +301,7 @@ export function ActiveTaskScreen() {
     setCameraState({
       visible: true, pointId: point.id, pointIndex: point.pointIndex,
       label: point.label, buyerImageUrl: point.buyerImageUrl, distance: point.distanceFromWorker,
+      buyerLat: point.buyerLat ?? null, buyerLng: point.buyerLng ?? null,
     })
   }, [])
 
@@ -699,7 +701,7 @@ export function ActiveTaskScreen() {
                   subtitle={point.hasAfterSubmission && point.afterSubmission?.locationMatchScore != null
                     ? `GPS: ${point.afterSubmission.locationMatchScore}%`
                     : point.distanceFromWorker != null ? `${point.distanceFromWorker}m away` : undefined}
-                  onPress={!point.hasAfterSubmission ? () => openCameraForPoint(point) : undefined}
+                  onPress={() => openCameraForPoint(point)}
                 />
               ))}
               <StepItem
@@ -798,6 +800,8 @@ export function ActiveTaskScreen() {
           pointIndex={cameraState.pointIndex}
           totalPoints={totalCount}
           distanceFromPoint={cameraState.distance}
+          targetLat={cameraState.buyerLat}
+          targetLng={cameraState.buyerLng}
         />
       </Modal>
 
