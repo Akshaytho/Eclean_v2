@@ -7,23 +7,26 @@ import { Home, Search, ClipboardList, LayoutDashboard } from 'lucide-react-nativ
 import { WORKER_THEME as W } from '../constants/workerTheme'
 import type { WorkerTabParamList, WorkerStackParamList } from './types'
 
-// Tab screens — loaded eagerly
+// Tab screens
 import { WorkerHomeScreen }     from '../screens/worker/WorkerHomeScreen'
 import { FindWorkScreen }       from '../screens/worker/FindWorkScreen'
 import { MyTasksScreen }        from '../screens/worker/MyTasksScreen'
 import { WorkerDashboardScreen } from '../screens/worker/WorkerDashboardScreen'
 
-// Stack screens — lazy loaded
-const TaskDetailScreen   = lazy(() => import('../screens/worker/TaskDetailScreen').then(m => ({ default: m.TaskDetailScreen })))
-const ActiveTaskScreen   = lazy(() => import('../screens/worker/ActiveTaskScreen').then(m => ({ default: m.ActiveTaskScreen })))
-const SubmitProofScreen     = lazy(() => import('../screens/worker/SubmitProofScreen').then(m => ({ default: m.SubmitProofScreen })))
-const ReferencePointScreen = lazy(() => import('../screens/worker/ReferencePointNavigator').then(m => ({ default: m.ReferencePointNavigator })))
-const WalletScreen       = lazy(() => import('../screens/worker/WalletScreen').then(m => ({ default: m.WalletScreen })))
-const ChatScreen         = lazy(() => import('../screens/shared/ChatScreen').then(m => ({ default: m.ChatScreen })))
-const GalleryScreen      = lazy(() => import('../screens/shared/GalleryScreen').then(m => ({ default: m.GalleryScreen })))
+// Critical worker flow — eagerly imported (worker uses these on EVERY task)
+// Lazy loading added 6-18s delay on first open (2830 modules resolved on-demand)
+import { TaskDetailScreen }        from '../screens/worker/TaskDetailScreen'
+import { ActiveTaskScreen }        from '../screens/worker/ActiveTaskScreen'
+import { SubmitProofScreen }       from '../screens/worker/SubmitProofScreen'
+import { ReferencePointNavigator as ReferencePointScreen } from '../screens/worker/ReferencePointNavigator'
+import { WalletScreen }            from '../screens/worker/WalletScreen'
+import { PostSubmissionScreen }    from '../screens/worker/PostSubmissionScreen'
+import { ChatScreen }              from '../screens/shared/ChatScreen'
+
+// Rarely used — keep lazy
+const GalleryScreen       = lazy(() => import('../screens/shared/GalleryScreen').then(m => ({ default: m.GalleryScreen })))
 const NotificationsScreen = lazy(() => import('../screens/shared/NotificationsScreen').then(m => ({ default: m.NotificationsScreen })))
-const PostSubmissionScreen = lazy(() => import('../screens/worker/PostSubmissionScreen').then(m => ({ default: m.PostSubmissionScreen })))
-const ReportIssueScreen = lazy(() => import('../screens/worker/ReportIssueScreen').then(m => ({ default: m.ReportIssueScreen })))
+const ReportIssueScreen   = lazy(() => import('../screens/worker/ReportIssueScreen').then(m => ({ default: m.ReportIssueScreen })))
 
 function LazyFallback() {
   return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: W.background }}>
@@ -79,16 +82,16 @@ export function WorkerNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="WorkerTabs"    component={WorkerTabs} />
-      <Stack.Screen name="TaskDetail"    component={withSuspense(TaskDetailScreen)}    options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="ActiveTask"      component={withSuspense(ActiveTaskScreen)}      options={{ animation: 'slide_from_right', gestureEnabled: false }} />
-      <Stack.Screen name="ReferencePoints" component={withSuspense(ReferencePointScreen)} options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="SubmitProof"     component={withSuspense(SubmitProofScreen)}     options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Chat"          component={withSuspense(ChatScreen)}          options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Gallery"       component={withSuspense(GalleryScreen)}       options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="Wallet"        component={withSuspense(WalletScreen)}        options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="TaskDetail"      component={TaskDetailScreen}       options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="ActiveTask"      component={ActiveTaskScreen}       options={{ animation: 'slide_from_right', gestureEnabled: false }} />
+      <Stack.Screen name="ReferencePoints" component={ReferencePointScreen}   options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="SubmitProof"     component={SubmitProofScreen}      options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="Chat"            component={ChatScreen}             options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="Wallet"          component={WalletScreen}           options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="PostSubmission"  component={PostSubmissionScreen}   options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
+      <Stack.Screen name="Gallery"         component={withSuspense(GalleryScreen)}        options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="Notifications"   component={withSuspense(NotificationsScreen)}  options={{ animation: 'slide_from_right' }} />
-      <Stack.Screen name="PostSubmission"   component={withSuspense(PostSubmissionScreen)} options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
-      <Stack.Screen name="ReportIssue"      component={withSuspense(ReportIssueScreen)}    options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="ReportIssue"     component={withSuspense(ReportIssueScreen)}    options={{ animation: 'slide_from_right' }} />
     </Stack.Navigator>
   )
 }

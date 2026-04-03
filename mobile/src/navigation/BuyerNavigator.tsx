@@ -13,13 +13,15 @@ import { PostTaskScreen }          from '../screens/buyer/PostTaskScreen'
 import { BuyerTasksScreen }        from '../screens/buyer/BuyerTasksScreen'
 import { BuyerDashboardScreen }    from '../screens/buyer/BuyerDashboardScreen'
 
-// Stack screens — lazy loaded (only when navigated to)
-const LiveTrackScreen      = lazy(() => import('../screens/buyer/LiveTrackScreen').then(m => ({ default: m.LiveTrackScreen })))
-const RatingScreen         = lazy(() => import('../screens/buyer/RatingScreen').then(m => ({ default: m.RatingScreen })))
-const BuyerTaskDetailScreen = lazy(() => import('../screens/buyer/BuyerTaskDetailScreen').then(m => ({ default: m.BuyerTaskDetailScreen })))
-const NotificationsScreen  = lazy(() => import('../screens/shared/NotificationsScreen').then(m => ({ default: m.NotificationsScreen })))
-const ChatScreen           = lazy(() => import('../screens/shared/ChatScreen').then(m => ({ default: m.ChatScreen })))
-const GalleryScreen        = lazy(() => import('../screens/shared/GalleryScreen').then(m => ({ default: m.GalleryScreen })))
+// Critical buyer flow — eagerly imported (buyer uses these on every task review)
+import { BuyerTaskDetailScreen } from '../screens/buyer/BuyerTaskDetailScreen'
+import { LiveTrackScreen }       from '../screens/buyer/LiveTrackScreen'
+import { RatingScreen }          from '../screens/buyer/RatingScreen'
+import { ChatScreen }            from '../screens/shared/ChatScreen'
+
+// Rarely used — keep lazy
+const NotificationsScreen = lazy(() => import('../screens/shared/NotificationsScreen').then(m => ({ default: m.NotificationsScreen })))
+const GalleryScreen       = lazy(() => import('../screens/shared/GalleryScreen').then(m => ({ default: m.GalleryScreen })))
 
 function LazyFallback() {
   return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: B.background }}>
@@ -75,10 +77,10 @@ export function BuyerNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="BuyerTabs"        component={BuyerTabs} />
-      <Stack.Screen name="BuyerTaskDetail"  component={withSuspense(BuyerTaskDetailScreen)} />
-      <Stack.Screen name="LiveTrack"        component={withSuspense(LiveTrackScreen)} />
-      <Stack.Screen name="Rating"           component={withSuspense(RatingScreen)} />
-      <Stack.Screen name="Chat"             component={withSuspense(ChatScreen)} />
+      <Stack.Screen name="BuyerTaskDetail"  component={BuyerTaskDetailScreen} />
+      <Stack.Screen name="LiveTrack"        component={LiveTrackScreen} />
+      <Stack.Screen name="Rating"           component={RatingScreen} />
+      <Stack.Screen name="Chat"             component={ChatScreen} />
       <Stack.Screen name="Gallery"          component={withSuspense(GalleryScreen)} />
       <Stack.Screen name="Notifications"   component={withSuspense(NotificationsScreen)} options={{ animation: 'slide_from_right' }} />
     </Stack.Navigator>
