@@ -189,7 +189,7 @@ export function createPayoutWorker(): Worker {
         await notifyAdmins(`Payout ${payoutId} FAILED — Razorpay error: ${String(err)}`)
       }
     },
-    { connection },
+    { connection, concurrency: 5 }, // PERF: process 5 payouts in parallel — prevents hour-long backlog at 500 workers
   )
 
   worker.on('failed', (job, err) => {
