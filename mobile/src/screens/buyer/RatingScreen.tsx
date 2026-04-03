@@ -29,7 +29,7 @@ export function RatingScreen() {
     staleTime: 30_000,
   })
 
-  const canRate = task && (task.status === 'APPROVED' || task.status === 'COMPLETED') && !task.rating
+  const canRate = task && (task.status === 'APPROVED' || task.status === 'COMPLETED') && !task.buyerRating
 
   const mutation = useMutation({
     mutationFn: () => buyerTasksApi.rate(taskId, rating, comment.trim() || undefined),
@@ -50,7 +50,7 @@ export function RatingScreen() {
     return <View style={[s.root, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator size="large" color={B.primary} /></View>
   }
 
-  if (task?.rating) {
+  if (task?.buyerRating) {
     return (
       <View style={s.root}>
         <LinearGradient colors={B.gradient} style={[s.header, { paddingTop: (insets.top > 0 ? insets.top : 24) + 8 }]}>
@@ -64,7 +64,7 @@ export function RatingScreen() {
           <Text style={s.prompt}>You've already rated this task</Text>
           <View style={s.stars}>
             {[1, 2, 3, 4, 5].map(n => (
-              <Star key={n} size={48} color={n <= task.rating ? '#F59E0B' : B.text.muted} fill={n <= task.rating ? '#F59E0B' : 'none'} />
+              <Star key={n} size={48} color={n <= (task.buyerRating ?? 0) ? '#F59E0B' : B.text.muted} fill={n <= (task.buyerRating ?? 0) ? '#F59E0B' : 'none'} />
             ))}
           </View>
           <TouchableOpacity style={s.skipBtn} onPress={() => navigation.goBack()}>

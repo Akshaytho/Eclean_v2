@@ -158,8 +158,8 @@ export function ActiveTaskScreen() {
     mutationFn: async () => {
       // Capture environmental DNA (magnetometer, barometer, light, cell) for anti-spoofing
       const envDNA = await captureEnvDNA().catch(() => null)
-      return workerTasksApi.start(taskId, currentLocation
-        ? { lat: currentLocation.lat, lng: currentLocation.lng, envDNA } : undefined)
+      if (!currentLocation) throw new Error('Location required to start task')
+      return workerTasksApi.start(taskId, { lat: currentLocation.lat, lng: currentLocation.lng, envDNA: envDNA as Record<string, unknown> | null })
     },
     onSuccess: async () => {
       isStarting.current = false

@@ -529,7 +529,7 @@ export function BuyerTaskDetailScreen() {
               numberOfLines={4}
               placeholderTextColor={B.text.muted}
             />
-            <View style={s.modalActions}>
+            <View style={s.modalBtns}>
               <Button
                 label="Keep Task"
                 variant="ghost"

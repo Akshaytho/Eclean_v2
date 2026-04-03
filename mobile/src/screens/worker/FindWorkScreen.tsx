@@ -266,7 +266,7 @@ function TaskCard({ task, onPress }: { task: Task; onPress: () => void }) {
         <View style={[s.dirtyBadge, { backgroundColor: color }]}>
           <Text style={s.dirtyText}>{task.dirtyLevel}</Text>
         </View>
-        {task.totalReferencePoints > 0 && (
+        {(task.totalReferencePoints ?? 0) > 0 && (
           <Text style={s.taskPhotos}>{task.totalReferencePoints} photos</Text>
         )}
         {task.workWindowStart && (

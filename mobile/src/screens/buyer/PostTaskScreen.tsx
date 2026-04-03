@@ -495,7 +495,7 @@ export function PostTaskScreen() {
               {refPhotos.length > 0
                 ? <SummaryRow label="Reference Photos" value={`${refPhotos.length} points documented`} />
                 : refPhoto ? <SummaryRow label="Photo" value="Reference photo attached" /> : null}
-              <SummaryRow label="Work Window" value={`${form.workWindowStart ?? '07:00'} – ${form.workWindowEnd ?? '11:30'}`} />
+              <SummaryRow label="Work Window" value="07:00 – 11:30" />
               <SummaryRow label="Upload By"   value="05:00 PM" />
               <View style={s.divider} />
               <View style={s.priceRow}>
