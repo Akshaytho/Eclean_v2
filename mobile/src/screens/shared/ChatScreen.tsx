@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput,
-  TouchableOpacity, KeyboardAvoidingView, Platform,
+  TouchableOpacity, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
@@ -49,11 +49,13 @@ export function ChatScreen() {
 
   useEffect(() => {
     joinTask(taskId)
+    const MAX_MESSAGES = 500
     const handler = (msg: ChatMessage) => {
       setMessages(prev => {
         // Dedup: socket reconnect may re-deliver messages
         if (prev.some(m => m.id === msg.id)) return prev
-        return [...prev, msg]
+        const next = [...prev, msg]
+        return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next
       })
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100)
     }
@@ -64,11 +66,22 @@ export function ChatScreen() {
     }
   }, [taskId, socket])
 
+  const sendingRef = useRef(false)
   const send = () => {
     const content = text.trim()
-    if (!content) return
-    emit('chat:send', { taskId, content })
+    if (!content || sendingRef.current) return
+    sendingRef.current = true
+
+    if (socket?.connected) {
+      emit('chat:send', { taskId, content })
+    } else {
+      apiClient.post(`/worker/tasks/${taskId}/chat`, { content }).catch(() => {
+        Alert.alert('Message Not Sent', 'No connection. Please try again when online.')
+      })
+    }
+
     setText('')
+    setTimeout(() => { sendingRef.current = false }, 500)
   }
 
   const isMe = (msg: ChatMessage) => msg.from?.id === user?.id
@@ -115,6 +128,9 @@ export function ChatScreen() {
         keyExtractor={m => m.id}
         contentContainerStyle={s.list}
         onLayout={() => listRef.current?.scrollToEnd()}
+        removeClippedSubviews={true}
+        windowSize={10}
+        maxToRenderPerBatch={15}
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={s.emptyText}>No messages yet</Text>

@@ -40,8 +40,8 @@ export const mediaApi = {
     metadata?: PhotoMetadata,
     onProgress?: (pct: number) => void,
   ): Promise<TaskMedia> => {
-    // Skip compression — camera captures at quality 0.7, Cloudinary optimizes server-side
-    const compressedUri = uri
+    // Resize to 1200px max width for 3G upload speed (48MP Redmi = 5MB → ~400KB)
+    const compressedUri = await compressPhoto(uri)
 
     const formData = new FormData()
     formData.append('file', {

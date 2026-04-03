@@ -51,7 +51,7 @@ const queryClient = new QueryClient({
 })
 
 // Disk-persistent cache — app reopens with last-known data instantly (no blank screens on 3G)
-// Only persists successful queries, max 50 queries, expires after 24 hours
+// Using AsyncStorage now (works in Expo Go). Switch to MMKV after EAS build for 30x speed.
 const asyncStoragePersister = createAsyncStoragePersister({
   storage: AsyncStorage,
   key: 'eclean-query-cache',

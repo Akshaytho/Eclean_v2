@@ -93,10 +93,8 @@ export const referencePointsApi = {
     metadata?: PhotoMetadata,
     onProgress?: (pct: number) => void,
   ): Promise<WorkerPointSubmission> => {
-    // Skip compression — camera already captures at quality 0.7 and
-    // Cloudinary handles server-side optimization. Double compression
-    // was adding 1-2 seconds per upload on budget phones.
-    const compressedUri = uri
+    // Resize to 1200px max width for 3G upload speed (48MP Redmi = 5MB → ~400KB)
+    const compressedUri = await compressPhoto(uri)
     const formData = new FormData()
     formData.append('file', {
       uri: compressedUri,
