@@ -290,6 +290,21 @@ export function BuyerTaskDetailScreen() {
           </TouchableOpacity>
         )}
 
+        {/* ── AI Verifying Banner (shown while AI is processing) ── */}
+        {task.status === 'SUBMITTED' && task.aiScore == null && (
+          <View style={{ backgroundColor: '#FFF7ED', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#FED7AA', marginBottom: 16 }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#9A3412' }}>AI is verifying work...</Text>
+            <Text style={{ fontSize: 12, color: '#C2410C', marginTop: 4 }}>This usually takes 1-2 minutes. You can review and approve/reject once done.</Text>
+          </View>
+        )}
+
+        {/* ── Auto-release notice ── */}
+        {(task.status === 'SUBMITTED' || task.status === 'VERIFIED') && (
+          <View style={{ backgroundColor: '#F0F9FF', padding: 12, borderRadius: 10, marginBottom: 16 }}>
+            <Text style={{ fontSize: 12, color: '#1E40AF' }}>Payment auto-releases to worker within 72 hours if not reviewed.</Text>
+          </View>
+        )}
+
         {/* ── AI Score Card ── */}
         {task.aiScore != null && (
           <View style={[s.aiCard, { borderLeftColor: aiLabel(task.aiScore).color }]}>

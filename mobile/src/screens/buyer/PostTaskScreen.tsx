@@ -82,6 +82,7 @@ export function PostTaskScreen() {
   const [cameraOpen, setCameraOpen] = useState(false)
   const [refPhotos, setRefPhotos] = useState<ReferencePhoto[]>([])
   const [editingLabel, setEditingLabel] = useState<string | null>(null)
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null) // "Uploading 2/5 photos..."
   const { capture: captureEnvDNA } = useEnvironmentalDNA()
 
   const useMyLocation = async () => {
@@ -149,7 +150,9 @@ export function PostTaskScreen() {
 
       // Upload reference point photos in parallel (3 at a time for speed)
       let failedUploads = 0
+      let uploadedCount = 0
       const BATCH_SIZE = 3
+      if (refPhotos.length > 0) setUploadStatus(`Uploading 0/${refPhotos.length} photos...`)
       for (let i = 0; i < refPhotos.length; i += BATCH_SIZE) {
         const batch = refPhotos.slice(i, i + BATCH_SIZE)
         const results = await Promise.allSettled(
@@ -163,8 +166,11 @@ export function PostTaskScreen() {
             ),
           ),
         )
+        uploadedCount += results.filter(r => r.status === 'fulfilled').length
         failedUploads += results.filter(r => r.status === 'rejected').length
+        setUploadStatus(`Uploading ${uploadedCount}/${refPhotos.length} photos...`)
       }
+      setUploadStatus(null)
       // Legacy single reference photo (backward compat)
       if (refPhoto && refPhotos.length === 0) {
         try {
@@ -559,7 +565,10 @@ export function PostTaskScreen() {
           activeOpacity={0.85}
         >
           {paying || mutation.isPending
-            ? <ActivityIndicator color="#fff" />
+            ? <View style={{ alignItems: 'center' }}>
+                <ActivityIndicator color="#fff" />
+                {uploadStatus && <Text style={{ color: '#fff', fontSize: 11, marginTop: 4 }}>{uploadStatus}</Text>}
+              </View>
             : (
               <>
                 <Text style={s.nextBtnText}>

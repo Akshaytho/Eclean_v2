@@ -4,7 +4,7 @@
  * GPS + hash + timestamp captured silently behind the scenes.
  */
 
-import React, { useRef, useState, useCallback } from 'react'
+import React, { useRef, useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Dimensions, StatusBar, ActivityIndicator, Alert, Image,
@@ -82,6 +82,15 @@ export const CaptureCamera = React.memo(function CaptureCamera({
   const [saved,     setSaved]    = useState(false)
   const cameraRef = useRef<CameraView>(null)
   const insets    = useSafeAreaInsets()
+
+  // Release camera on unmount — prevents battery drain + resource leak on back button
+  useEffect(() => {
+    return () => {
+      // CameraView auto-releases when unmounted, but explicit null clears our ref
+      // to prevent stale closure access during async hash computation
+      cameraRef.current = null
+    }
+  }, [])
   const cfg       = TYPE_CONFIG[photoType]
 
   const onShutter = useCallback(async () => {
