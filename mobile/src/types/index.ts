@@ -101,6 +101,7 @@ export interface Task {
   ruleEngineScore?:      number | null
   ruleEngineBreakdown?:  string | null
   finalDecision?:        string | null
+  rejectionReason?:      string | null
   // Populated on detail endpoints
   media?:          TaskMedia[]
   worker?:         { id: string; name: string; email: string } | null
@@ -206,6 +207,7 @@ export interface WalletData {
   pendingCents:        number
   processingCents:     number
   availableCents:      number
+  paidOutCents:        number    // money already sent to bank (= availableCents, renamed by backend)
   totalEarnedCents:    number
   completedTasksCount: number
 }

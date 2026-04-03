@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
   FlatList, ActivityIndicator,
@@ -58,19 +58,26 @@ const STATUS_LABEL: Partial<Record<TaskStatus, string>> = {
   DISPUTED:    'Disputed',
 }
 
+const ItemSeparator = () => <View style={{ height: 10 }} />
+
 export function MyTasksScreen() {
   const navigation = useNavigation<Nav>()
   const [activeTab, setActiveTab] = useState<Tab>('active')
+  const [page, setPage] = useState(1)
+
+  // Reset page when tab changes
+  const handleTabChange = (tab: Tab) => { setActiveTab(tab); setPage(1) }
 
   // Fetch per-tab with server-side status filter — avoids fetching all 100+ tasks
   const statusFilter = TAB_STATUSES[activeTab].join(',')
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['worker', 'my-tasks', activeTab],
-    queryFn:  () => workerTasksApi.myTasks({ status: statusFilter, limit: 20 }),
+  const { data, isLoading, isFetching, refetch } = useQuery({
+    queryKey: ['worker', 'my-tasks', activeTab, page],
+    queryFn:  () => workerTasksApi.myTasks({ status: statusFilter, limit: 20, page }),
     staleTime: 15_000,
   })
 
   const tasks = data?.tasks ?? []
+  const hasMore = tasks.length === 20 // if we got a full page, there might be more
 
   return (
     <View style={styles.container}>
@@ -83,7 +90,7 @@ export function MyTasksScreen() {
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => setActiveTab(tab)}
+            onPress={() => handleTabChange(tab)}
           >
             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
               {TAB_LABELS[tab]}
@@ -101,8 +108,10 @@ export function MyTasksScreen() {
           keyExtractor={(t) => t.id}
           contentContainerStyle={styles.list}
           onRefresh={refetch}
-          refreshing={isLoading}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          refreshing={isFetching}
+          onEndReached={() => { if (hasMore && !isFetching) setPage(p => p + 1) }}
+          onEndReachedThreshold={0.5}
+          ItemSeparatorComponent={ItemSeparator}
           ListEmptyComponent={
             <View style={styles.empty}>
               {activeTab === 'active'

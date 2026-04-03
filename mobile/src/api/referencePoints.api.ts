@@ -47,6 +47,8 @@ export const referencePointsApi = {
     if (label) formData.append('label', label)
     if (metadata?.lat != null) formData.append('capturedLat', String(metadata.lat))
     if (metadata?.lng != null) formData.append('capturedLng', String(metadata.lng))
+    if (metadata?.timestamp) formData.append('capturedAt', metadata.timestamp)
+    if (metadata?.deviceId) formData.append('deviceId', metadata.deviceId)
     if (metadata?.photoHash) formData.append('photoHash', metadata.photoHash)
 
     const idempotencyKey = `${taskId}-ref-${pointIndex}-${metadata?.photoHash ?? Date.now()}`
@@ -99,6 +101,8 @@ export const referencePointsApi = {
     formData.append('mediaType', mediaType)
     if (metadata?.lat != null) formData.append('capturedLat', String(metadata.lat))
     if (metadata?.lng != null) formData.append('capturedLng', String(metadata.lng))
+    if (metadata?.timestamp) formData.append('capturedAt', metadata.timestamp)
+    if (metadata?.deviceId) formData.append('deviceId', metadata.deviceId)
     if (metadata?.photoHash) formData.append('photoHash', metadata.photoHash)
 
     const idempotencyKey = `${taskId}-${referencePointId}-${metadata?.photoHash ?? Date.now()}`

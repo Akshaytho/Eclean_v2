@@ -22,7 +22,7 @@ import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { RouteProp } from '@react-navigation/native'
 import { useQuery } from '@tanstack/react-query'
-import { CheckCircle, Clock, Search, ClipboardList, Info } from 'lucide-react-native'
+import { CheckCircle, Search, ClipboardList, Info } from 'lucide-react-native'
 
 import { ScreenWrapper } from '../../components/layout/ScreenWrapper'
 import { WORKER_THEME as W } from '../../constants/workerTheme'
@@ -54,10 +54,15 @@ export function PostSubmissionScreen() {
   useEffect(() => {
     const t1 = setTimeout(() => setStep(2), 800)
     const t2 = setTimeout(() => setStep(3), 1500)
-    // 10-minute timeout: if AI hasn't responded, show fallback
-    const timeout = setTimeout(() => { if (!aiDone) setAiTimedOut(true) }, 10 * 60 * 1000)
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(timeout) }
+    return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
+
+  // Separate timeout effect that re-runs when aiDone changes
+  useEffect(() => {
+    if (aiDone) return // AI finished, no timeout needed
+    const timeout = setTimeout(() => setAiTimedOut(true), 10 * 60 * 1000)
+    return () => clearTimeout(timeout)
+  }, [aiDone])
 
   // When AI finishes, advance to step 5
   useEffect(() => {
@@ -191,8 +196,10 @@ function ProgressStep({ done, loading, label, verified }: { done: boolean; loadi
     <View style={s.stepRow}>
       {done && verified ? (
         <CheckCircle size={20} color={W.primary} />
-      ) : done ? (
+      ) : done && verified === false ? (
         <Info size={20} color="#3B82F6" />
+      ) : done ? (
+        <CheckCircle size={20} color={W.status?.success ?? W.primary} />
       ) : loading ? (
         <ActivityIndicator size={16} color={W.primary} />
       ) : (

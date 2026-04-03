@@ -3,9 +3,10 @@ import {
   View, Text, StyleSheet,
   FlatList, ActivityIndicator, TouchableOpacity,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from '../../components/LinearGradientShim'
 import { useQuery } from '@tanstack/react-query'
-import { CheckCircle, Clock, XCircle, ArrowDownLeft } from 'lucide-react-native'
+import { CheckCircle, ArrowDownLeft } from 'lucide-react-native'
 
 import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { payoutsApi } from '../../api/payouts.api'
@@ -28,27 +29,33 @@ const STATUS_LABEL: Record<PayoutStatus, string> = {
   FAILED:     'Failed',
 }
 
+const ItemSeparator = () => <View style={{ height: 10 }} />
+
 export function WalletScreen() {
+  const insets = useSafeAreaInsets()
+  const [page, setPage] = React.useState(1)
+
   const { data: wallet, isLoading: walletLoading } = useQuery({
     queryKey: ['worker', 'wallet'],
     queryFn:  payoutsApi.getWallet,
     staleTime: 30_000,
   })
 
-  const { data: payoutsData, isLoading: payoutsLoading, refetch } = useQuery({
-    queryKey: ['worker', 'payouts', 1],
-    queryFn:  () => payoutsApi.getPayouts(1),
+  const { data: payoutsData, isLoading: payoutsLoading, isFetching: payoutsFetching, refetch } = useQuery({
+    queryKey: ['worker', 'payouts', page],
+    queryFn:  () => payoutsApi.getPayouts(page),
     staleTime: 30_000,
   })
 
   const payouts = payoutsData?.payouts ?? []
+  const hasMore = payouts.length === (payoutsData?.limit ?? 20)
 
   return (
     <View style={styles.container}>
       {/* ── Gradient Header ── */}
       <LinearGradient
         colors={W.gradient}
-        style={styles.header}
+        style={[styles.header, { paddingTop: insets.top + 12 }]}
       >
         <Text style={styles.headerLabel}>Total Earned</Text>
         {walletLoading ? (
@@ -100,8 +107,10 @@ export function WalletScreen() {
           keyExtractor={(p) => p.id}
           contentContainerStyle={styles.list}
           onRefresh={refetch}
-          refreshing={payoutsLoading}
-          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          refreshing={payoutsFetching}
+          onEndReached={() => { if (hasMore && !payoutsFetching) setPage(p => p + 1) }}
+          onEndReachedThreshold={0.5}
+          ItemSeparatorComponent={ItemSeparator}
           ListEmptyComponent={
             <View style={styles.empty}>
               <CheckCircle size={40} color={W.text.muted} />
@@ -148,7 +157,7 @@ function PayoutRow({ payout }: { payout: PayoutListItem }) {
 
 const styles = StyleSheet.create({
   container:     { flex: 1, backgroundColor: W.background },
-  header:        { paddingTop: 56, paddingBottom: 24, paddingHorizontal: 20 },
+  header:        { paddingBottom: 24, paddingHorizontal: 20 },
   headerLabel:   { fontSize: 13, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
   totalEarned:   { fontSize: 38, fontWeight: '800', color: '#fff', marginVertical: 4 },
   summaryRow:    { flexDirection: 'row', marginTop: 16, gap: 8 },

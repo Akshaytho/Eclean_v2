@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useRef, useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, ActivityIndicator, Image, Modal, Dimensions,
@@ -8,21 +8,27 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { RouteProp } from '@react-navigation/native'
-import { ArrowLeft, MapPin, Clock, DollarSign, Briefcase, AlertTriangle } from 'lucide-react-native'
+import { ArrowLeft, MapPin, Clock, Briefcase, AlertTriangle } from 'lucide-react-native'
 import * as Haptics from 'expo-haptics'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { COLORS } from '../../constants/colors'
 import { WORKER_THEME as W } from '../../constants/workerTheme'
-import { DIRTY_LEVELS } from '../../constants/taskCategories'
+// DIRTY_LEVELS removed — unused import
 import { workerTasksApi } from '../../api/tasks.api'
 import { referencePointsApi } from '../../api/referencePoints.api'
 import { formatMoney } from '../../utils/formatMoney'
+import { formatTimeShort } from '../../utils/formatTime'
 import { useSocketStore } from '../../stores/socketStore'
 import type { WorkerStackParamList } from '../../navigation/types'
 import type { DirtyLevel, TaskReferencePoint } from '../../types'
 
 type Nav   = NativeStackNavigationProp<WorkerStackParamList, 'TaskDetail'>
 type Route = RouteProp<WorkerStackParamList, 'TaskDetail'>
+
+const SCREEN_WIDTH = Dimensions.get('window').width
+const IMAGE_WIDTH = SCREEN_WIDTH - 32 // matches heroImage style
+const SNAP_INTERVAL = IMAGE_WIDTH + 32 // image width + left+right margin
 
 const DIRTY_COLOR: Record<DirtyLevel, string> = {
   LIGHT:    COLORS.dirty.light,
@@ -37,11 +43,19 @@ export function TaskDetailScreen() {
   const { taskId }    = route.params
   const queryClient   = useQueryClient()
   const { joinTask }  = useSocketStore()
+  const insets        = useSafeAreaInsets()
 
   const isAccepting = useRef(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [activeImageIndex, setActiveImageIndex] = useState(0)
+
+  const onGalleryScroll = useCallback((e: any) => {
+    const offsetX = e.nativeEvent.contentOffset.x
+    const index = Math.round(offsetX / SNAP_INTERVAL)
+    setActiveImageIndex(index)
+  }, [])
 
   const { data: task, isLoading, error } = useQuery({
     queryKey: ['worker', 'task', taskId],
@@ -50,7 +64,7 @@ export function TaskDetailScreen() {
 
   const acceptMutation = useMutation({
     mutationFn: () => workerTasksApi.accept(taskId),
-    onSuccess: (acceptedTask) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['worker', 'tasks'] })
       joinTask(taskId)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
@@ -107,7 +121,7 @@ export function TaskDetailScreen() {
   return (
     <View style={styles.container}>
       {/* ── Back header ── */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <ArrowLeft size={22} color={W.text.primary} />
         </TouchableOpacity>
@@ -121,8 +135,10 @@ export function TaskDetailScreen() {
           <View>
             <ScrollView
               horizontal
-              pagingEnabled
               showsHorizontalScrollIndicator={false}
+              snapToInterval={SNAP_INTERVAL}
+              decelerationRate="fast"
+              onMomentumScrollEnd={onGalleryScroll}
               style={styles.heroGallery}
             >
               {refPoints.map((p) => (
@@ -141,7 +157,7 @@ export function TaskDetailScreen() {
             </ScrollView>
             <View style={styles.heroDots}>
               {refPoints.map((_, i) => (
-                <View key={i} style={[styles.heroDot, i === 0 && styles.heroDotActive]} />
+                <View key={i} style={[styles.heroDot, i === activeImageIndex && styles.heroDotActive]} />
               ))}
             </View>
           </View>
@@ -218,7 +234,7 @@ export function TaskDetailScreen() {
             <DetailRow
               icon={<Clock size={16} color={W.text.secondary} />}
               label="Work Window"
-              value={`${task.workWindowStart} – ${task.workWindowEnd}`}
+              value={`${formatTimeShort(task.workWindowStart)} – ${formatTimeShort(task.workWindowEnd)}`}
             />
           )}
           {task.buyer && (
@@ -359,7 +375,7 @@ const styles = StyleSheet.create({
   topBar:         {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 56,
+    // paddingTop set dynamically via useSafeAreaInsets
     paddingBottom: 12,
     paddingHorizontal: 16,
     backgroundColor: W.surface,

@@ -31,10 +31,14 @@ export async function payoutsRoutes(fastify: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const workerId = request.user.id
 
-      const [payouts, profile] = await Promise.all([
-        prisma.payout.findMany({
-          where:  { workerId },
-          select: { status: true, workerAmountCents: true },
+      // PERF: Use groupBy instead of loading all payouts into memory.
+      // Previous approach: findMany → JS loop (500 workers × 500 payouts = 250K rows in memory)
+      // New approach: DB-side aggregation (returns 3-4 rows per worker max)
+      const [aggregated, profile] = await Promise.all([
+        prisma.payout.groupBy({
+          by:    ['status'],
+          where: { workerId },
+          _sum:  { workerAmountCents: true },
         }),
         prisma.workerProfile.findUnique({
           where:  { userId: workerId },
@@ -42,21 +46,13 @@ export async function payoutsRoutes(fastify: FastifyInstance): Promise<void> {
         }),
       ])
 
-      let pendingCents     = 0
-      let processingCents  = 0
-      let availableCents   = 0
-      let totalEarnedCents = 0  // lifetime COMPLETED only
+      const byStatus = (s: string) =>
+        aggregated.find(a => a.status === s)?._sum.workerAmountCents ?? 0
 
-      for (const p of payouts) {
-        if (p.status === 'PENDING') {
-          pendingCents    += p.workerAmountCents
-        } else if (p.status === 'PROCESSING') {
-          processingCents += p.workerAmountCents
-        } else if (p.status === 'COMPLETED') {
-          availableCents   += p.workerAmountCents
-          totalEarnedCents += p.workerAmountCents  // COMPLETED only
-        }
-      }
+      const pendingCents     = byStatus('PENDING')
+      const processingCents  = byStatus('PROCESSING')
+      const availableCents   = byStatus('COMPLETED')
+      const totalEarnedCents = availableCents  // COMPLETED only
 
       return reply.send({
         pendingCents,
@@ -139,8 +135,10 @@ export async function payoutsRoutes(fastify: FastifyInstance): Promise<void> {
 
   // ── POST /api/v1/webhooks/razorpay — PUBLIC, no auth middleware ───────────
   // Signature failure → 400. Internal processing failure → 200 (Razorpay must not retry).
+  // Rate limited to 30/min per IP to reduce DDoS surface (Razorpay sends < 10/min normally).
   fastify.post(
     '/webhooks/razorpay',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
     async (request: FastifyRequest, reply) => {
       const body = request.body as Record<string, unknown>
 

@@ -14,14 +14,14 @@
 import React, { useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, Dimensions, Switch,
+  RefreshControl, Switch,
 } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
   MapPin, Star, CheckCircle, ChevronRight,
-  ArrowRight, Search, TrendingUp, Bell,
+  ArrowRight, Search, TrendingUp,
 } from 'lucide-react-native'
 import { ScreenWrapper }    from '../../components/layout/ScreenWrapper'
 import { AppHeader }        from '../../components/layout/AppHeader'
@@ -29,7 +29,7 @@ import { Skeleton }         from '../../components/ui/Skeleton'
 import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { workerTasksApi }   from '../../api/tasks.api'
 import { authApi }          from '../../api/auth.api'
-import { apiClient }        from '../../api/client'
+import { payoutsApi }        from '../../api/payouts.api'
 import { useAuthStore }     from '../../stores/authStore'
 import { formatMoney }      from '../../utils/formatMoney'
 import type { WorkerStackParamList } from '../../navigation/types'
@@ -65,7 +65,7 @@ export function WorkerHomeScreen() {
   // Wallet loaded lazily (not blocking mount)
   const walletQuery = useQuery({
     queryKey: ['wallet'],
-    queryFn: () => apiClient.get('/worker/wallet').then(r => r.data),
+    queryFn: payoutsApi.getWallet,
     staleTime: 60_000,
   })
 
@@ -90,12 +90,14 @@ export function WorkerHomeScreen() {
     walletQuery.refetch()
   }
 
-  const isLoading = meQuery.isLoading
+  // TODO: Online/Offline toggle is local-only. Needs backend PATCH /worker/availability
+  // endpoint to sync with server. Until then, this is cosmetic only.
+  // See GAPS.md F8 for tracking.
   const [isOnline, setIsOnline] = useState(true)
 
   return (
     <ScreenWrapper backgroundColor={W.background}>
-      <AppHeader title="eClean" theme="worker" onNotificationPress={() => navigation.navigate('Notifications' as any)} />
+      <AppHeader title="eClean" theme="worker" onNotificationPress={() => navigation.navigate('Notifications')} />
 
       {/* Online/Offline toggle */}
       <View style={s.statusToggle}>
@@ -128,7 +130,7 @@ export function WorkerHomeScreen() {
         <View style={s.earningsCard}>
           <View style={s.earningsTop}>
             <Text style={s.earningsLabel}>Total Earned</Text>
-            <TouchableOpacity onPress={() => (navigation as any).navigate('Wallet')} style={s.earningsLink}>
+            <TouchableOpacity onPress={() => navigation.navigate('Wallet')} style={s.earningsLink}>
               <Text style={s.earningsLinkText}>Wallet</Text>
               <ChevronRight size={14} color={W.primary} />
             </TouchableOpacity>
@@ -196,7 +198,7 @@ export function WorkerHomeScreen() {
         {!activeTask && !activeQuery.isLoading && (
           <TouchableOpacity
             style={s.findWorkCard}
-            onPress={() => (navigation as any).navigate('FindWork')}
+            onPress={() => navigation.navigate('WorkerTabs', { screen: 'FindWork' })}
             activeOpacity={0.85}
           >
             <Search size={24} color={W.primary} />

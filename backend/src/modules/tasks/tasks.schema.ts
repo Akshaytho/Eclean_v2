@@ -99,6 +99,11 @@ export const rateTaskSchema = z.object({
   tags:    z.array(z.string().max(50)).max(10).optional(),
 })
 
+// ─── Worker availability toggle ─────────────────────────────────────────────────
+export const availabilitySchema = z.object({
+  isAvailable: z.boolean(),
+})
+
 // ─── Inferred types ────────────────────────────────────────────────────────────
 export type CreateTaskInput     = z.infer<typeof createTaskSchema>
 export type ReasonInput         = z.infer<typeof reasonSchema>

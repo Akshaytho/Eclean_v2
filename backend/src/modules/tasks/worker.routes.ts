@@ -9,6 +9,7 @@ import {
   listTasksQuerySchema,
   openTasksQuerySchema,
   taskIdParamSchema,
+  availabilitySchema,
 } from './tasks.schema'
 import * as ctrl from './tasks.controller'
 
@@ -91,7 +92,7 @@ export async function workerRoutes(fastify: FastifyInstance): Promise<void> {
   // PATCH /api/v1/worker/availability — toggle online/busy status
   fastify.patch(
     '/availability',
-    { preHandler: auth },
+    { preHandler: [...auth, validate({ body: availabilitySchema })] },
     ctrl.updateAvailability,
   )
 

@@ -1,5 +1,6 @@
 // Central navigation type definitions for the entire app.
 // Import these in screens/navigators for type-safe navigation.
+import type { NavigatorScreenParams } from '@react-navigation/native'
 
 export type AuthStackParamList = {
   Splash:          undefined
@@ -19,7 +20,7 @@ export type WorkerTabParamList = {
 }
 
 export type WorkerStackParamList = {
-  WorkerTabs:       undefined
+  WorkerTabs:       NavigatorScreenParams<WorkerTabParamList> | undefined
   TaskDetail:       { taskId: string }
   ActiveTask:       { taskId: string }
   ReferencePoints:  { taskId: string }

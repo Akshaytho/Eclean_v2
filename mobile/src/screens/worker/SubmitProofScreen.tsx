@@ -13,7 +13,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { workerTasksApi } from '../../api/tasks.api'
-import { isMotionTrackingActive } from '../../services/motionTracker'
+// Motion tracking is stopped before navigating here (in ReferencePointNavigator footer).
+// We check elapsed time instead — if worker spent time on site, motion data was captured.
 import { mediaApi } from '../../api/media.api'
 import { referencePointsApi } from '../../api/referencePoints.api'
 import { useActiveTaskStore } from '../../stores/activeTaskStore'
@@ -51,7 +52,7 @@ export function SubmitProofScreen() {
   // Reference points progress (new flow)
   const hasRefPoints = (task?.totalReferencePoints ?? 0) > 0
   const { data: refProgress } = useQuery<SubmissionProgress>({
-    queryKey: ['submission-progress', taskId],
+    queryKey: ['submission-progress', taskId, 'review'],
     queryFn:  () => referencePointsApi.progress(taskId),
     enabled:  hasRefPoints,
   })
@@ -228,8 +229,8 @@ export function SubmitProofScreen() {
           <CheckRow
             icon={<CheckCircle size={16} color={W.primary} />}
             label="Motion tracking"
-            value={isMotionTrackingActive() ? 'Active' : 'Inactive'}
-            ok={isMotionTrackingActive()}
+            value={elapsedSecs > 60 ? 'Captured' : 'No data'}
+            ok={elapsedSecs > 60}
           />
           {task && (
             <CheckRow

@@ -18,6 +18,7 @@ const mockWallet: WalletData = {
   pendingCents:           0,
   processingCents:        0,
   availableCents:         6000,
+  paidOutCents:           6000,
   totalEarnedCents:       6000,
   completedTasksCount:    1,
 }

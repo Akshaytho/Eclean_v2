@@ -45,11 +45,7 @@ export const workerTasksApi = {
   getChatHistory: (taskId: string, cursor?: string) =>
     apiClient.get(`/worker/tasks/${taskId}/chat`, { params: { cursor, limit: 50 } }).then((r) => r.data),
 
-  getWallet: () =>
-    apiClient.get('/worker/wallet').then((r) => r.data),
-
-  getPayouts: (page = 1) =>
-    apiClient.get('/worker/payouts', { params: { page } }).then((r) => r.data),
+  // Wallet + payouts are in payouts.api.ts — single source of truth
 }
 
 // ─── Buyer ────────────────────────────────────────────────────────────────────

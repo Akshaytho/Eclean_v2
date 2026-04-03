@@ -30,7 +30,7 @@ import type { SubmissionProgress } from '../../types'
 import { useActiveTaskStore } from '../../stores/activeTaskStore'
 import { formatElapsed } from '../../utils/formatTime'
 import { useEnvironmentalDNA } from '../../hooks/useEnvironmentalDNA'
-import { startMotionTracking, stopMotionTracking, isMotionTrackingActive } from '../../services/motionTracker'
+import { stopMotionTracking } from '../../services/motionTracker'
 import { apiClient } from '../../api/client'
 
 type Nav   = NativeStackNavigationProp<WorkerStackParamList, 'ReferencePoints'>
@@ -65,7 +65,9 @@ export function ReferencePointNavigator() {
     buyerImageUrl: string | null
     isVerification: boolean
     distance: number | null
-  }>({ visible: false, pointId: null, pointIndex: 0, label: null, buyerImageUrl: null, isVerification: false, distance: null })
+    targetLat: number | null
+    targetLng: number | null
+  }>({ visible: false, pointId: null, pointIndex: 0, label: null, buyerImageUrl: null, isVerification: false, distance: null, targetLat: null, targetLng: null })
 
   // Silent layers: capture EnvDNA (motion tracking already started in ActiveTaskScreen)
   useEffect(() => {
@@ -94,14 +96,17 @@ export function ReferencePointNavigator() {
   }, [])
 
   // Fetch progress (with GPS for verification reveal)
+  // GPS removed from queryKey to prevent refetch on every GPS update (every 10s).
+  // The 15s refetchInterval ensures fresh data; GPS is passed as a param only.
   const { data: progress, isLoading } = useQuery<SubmissionProgress>({
-    queryKey: ['submission-progress', taskId, workerLoc?.lat, workerLoc?.lng],
+    queryKey: ['submission-progress', taskId],
     queryFn:  () => referencePointsApi.progress(taskId, workerLoc?.lat, workerLoc?.lng),
     refetchInterval: 15_000,
   })
 
   // Refs to avoid stale closure in onCapture callback
   const activePointRef = useRef<{ pointId: string; isVerification: boolean }>({ pointId: '', isVerification: false })
+  const navigateBtnPressed = useRef(false)
 
   const openCamera = useCallback((point: SubmissionProgress['points'][number]) => {
     activePointRef.current = { pointId: point.id, isVerification: point.isVerificationPoint }
@@ -113,6 +118,8 @@ export function ReferencePointNavigator() {
       buyerImageUrl: point.buyerImageUrl,
       isVerification: point.isVerificationPoint,
       distance: point.distanceFromWorker,
+      targetLat: point.buyerLat ?? null,
+      targetLng: point.buyerLng ?? null,
     })
   }, [])
 
@@ -189,8 +196,13 @@ export function ReferencePointNavigator() {
             <TouchableOpacity
               key={point.id}
               style={[s.pointCard, isDone && s.pointCardDone]}
-              onPress={() => !isDone && openCamera(point)}
-              activeOpacity={isDone ? 1 : 0.85}
+              onPress={() => {
+                // Don't open camera if the navigate button was tapped (handled by navigateBtnPressed ref)
+                if (navigateBtnPressed.current) { navigateBtnPressed.current = false; return }
+                // Allow retaking even if done — worker may want a better photo
+                openCamera(point)
+              }}
+              activeOpacity={0.85}
             >
               <View style={s.pointLeft}>
                 {isDone ? (
@@ -236,8 +248,8 @@ export function ReferencePointNavigator() {
                     {point.buyerLat != null && point.buyerLng != null && (
                       <TouchableOpacity
                         style={s.navigateBtn}
-                        onPress={(e) => {
-                          e.stopPropagation?.()
+                        onPress={() => {
+                          navigateBtnPressed.current = true
                           openMapsToPoint(point.buyerLat!, point.buyerLng!, point.label ?? `Point ${point.pointIndex}`)
                         }}
                         activeOpacity={0.7}
@@ -301,6 +313,8 @@ export function ReferencePointNavigator() {
           pointIndex={cameraState.pointIndex}
           totalPoints={progress.totalPoints}
           distanceFromPoint={cameraState.distance}
+          targetLat={cameraState.targetLat}
+          targetLng={cameraState.targetLng}
         />
       </Modal>
     </View>

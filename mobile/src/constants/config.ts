@@ -15,6 +15,14 @@ export const GEOFENCE_RADIUS_KM = 2
 export const GPS_INTERVAL_MS = 30_000    // 30 seconds (was 15s — halved for battery savings on budget phones)
 export const GPS_DISTANCE_M  = 10        // or every 10 meters
 
+// Default map region (Hyderabad) — used when GPS is unavailable
+export const DEFAULT_MAP_REGION = {
+  latitude: 17.385,
+  longitude: 78.4867,
+  latitudeDelta: 0.05,
+  longitudeDelta: 0.05,
+}
+
 export const CHAT_PAGE_SIZE  = 50
 export const TASK_PAGE_SIZE  = 20
 

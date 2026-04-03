@@ -602,6 +602,20 @@ export async function acceptTask(workerId: string, taskId: string) {
   // Post-claim work in a regular (non-serializable) transaction
   const result = await prisma.$transaction(
       async (tx) => {
+        // Re-check queue limit inside tx to prevent TOCTOU race
+        // (multiple workers could pass the pre-check simultaneously)
+        const queuedNow = await tx.task.count({
+          where: { workerId, status: { in: ['ACCEPTED', 'IN_PROGRESS'] } },
+        })
+        if (queuedNow > MAX_QUEUED_TASKS) {
+          // Undo the claim — another concurrent accept pushed us over the limit
+          await tx.task.update({
+            where: { id: taskId },
+            data:  { status: 'OPEN', workerId: null },
+          })
+          throw new ConflictError(`You can queue at most ${MAX_QUEUED_TASKS} tasks. Complete or cancel a task first.`)
+        }
+
         const task = await tx.task.findUnique({ where: { id: taskId } })
         if (!task) throw new NotFoundError('Task not found')
 
@@ -941,37 +955,48 @@ export async function retryTask(workerId: string, taskId: string) {
   if (task.workerId !== workerId) throw new ForbiddenError('Not your task')
   assertTransition(task.status, 'IN_PROGRESS', 'WORKER')
 
-  const result = await prisma.$transaction(async (tx) => {
-    const updated = await tx.task.update({
-      where: { id: taskId },
-      data:  {
-        status:       'IN_PROGRESS',
-        startedAt:    new Date(), // reset timer for retry
-        aiScore:      null,
-        aiReasoning:  null,
-      },
-    })
+  // Use SERIALIZABLE to prevent double-retry race condition
+  const result = await withSerializableRetry(() =>
+    prisma.$transaction(async (tx) => {
+      // Re-read inside tx to prevent TOCTOU race
+      const fresh = await tx.task.findUnique({ where: { id: taskId } })
+      if (!fresh || fresh.status !== 'REJECTED') {
+        throw new ConflictError('Task is no longer in REJECTED state')
+      }
 
-    // Re-assign worker's activeTaskId (was cleared on rejection)
-    await tx.workerProfile.update({
-      where: { userId: workerId },
-      data:  { activeTaskId: taskId },
-    })
+      const updated = await tx.task.update({
+        where: { id: taskId },
+        data:  {
+          status:       'IN_PROGRESS',
+          startedAt:    new Date(), // reset timer for retry
+          aiScore:      null,
+          aiReasoning:  null,
+        },
+      })
 
-    await recordEvent(tx, taskId, workerId, 'WORKER', 'REJECTED', 'IN_PROGRESS')
+      // Re-assign worker's activeTaskId (was cleared on rejection)
+      await tx.workerProfile.update({
+        where: { userId: workerId },
+        data:  { activeTaskId: taskId },
+      })
 
-    await tx.notification.create({
-      data: {
-        userId: task.buyerId,
-        type:   'TASK_STARTED',
-        title:  'Worker Retrying',
-        body:   `Worker has accepted your feedback and is retrying "${task.title}".`,
-        data:   { taskId },
-      },
-    })
+      await recordEvent(tx, taskId, workerId, 'WORKER', 'REJECTED', 'IN_PROGRESS')
 
-    return updated
-  })
+      await tx.notification.create({
+        data: {
+          userId: task.buyerId,
+          type:   'TASK_STARTED',
+          title:  'Worker Retrying',
+          body:   `Worker has accepted your feedback and is retrying "${task.title}".`,
+          data:   { taskId },
+        },
+      })
+
+      return updated
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    ),
+  )
   emitTaskUpdated(taskId, 'IN_PROGRESS')
   logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'REJECTED', to: 'IN_PROGRESS', action: 'retry' })
 

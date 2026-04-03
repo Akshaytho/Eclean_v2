@@ -19,6 +19,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { X, RotateCcw, Zap, ZapOff, Shield } from 'lucide-react-native'
 import { saveToGallery, GalleryPhoto } from '../../services/galleryService'
 import { PhotoPreview } from './PhotoPreview'
+import { FindMyArrow } from '../maps/FindMyArrow'
+import { useLocationStore } from '../../stores/locationStore'
 
 const { width: SW, height: SH } = Dimensions.get('window')
 
@@ -49,6 +51,8 @@ interface CaptureCameraProps {
   pointIndex?:     number | null   // which point (1-10)
   totalPoints?:    number | null   // total reference points in task
   distanceFromPoint?: number | null // meters from buyer's GPS for this point
+  targetLat?: number | null         // buyer reference point GPS for FindMyArrow
+  targetLng?: number | null
 }
 
 const TYPE_CONFIG: Record<PhotoType, { label: string; color: string; hint: string }> = {
@@ -63,8 +67,12 @@ const TYPE_CONFIG: Record<PhotoType, { label: string; color: string; hint: strin
 export const CaptureCamera = React.memo(function CaptureCamera({
   taskId, photoType, onCapture, onClose,
   referenceImage, referenceLabel, pointIndex, totalPoints, distanceFromPoint,
+  targetLat, targetLng,
 }: CaptureCameraProps) {
   const isSideBySide = !!referenceImage
+  const showArrow = isSideBySide && targetLat != null && targetLng != null
+  // Only subscribe to GPS updates when arrow is needed — avoids re-renders flickering the camera
+  const workerLoc = useLocationStore((s) => showArrow ? s.currentLocation : null)
   const [permission, requestPermission] = useCameraPermissions()
   const [facing,    setFacing]   = useState<CameraType>('back')
   const [flash,     setFlash]    = useState(false)
@@ -268,17 +276,25 @@ export const CaptureCamera = React.memo(function CaptureCamera({
         </View>
       )}
 
+      {/* FindMyArrow — direction compass in the empty space (side-by-side mode) */}
+      {showArrow && workerLoc && (
+        <View style={s.findArrowWrap}>
+          <FindMyArrow
+            targetLat={targetLat}
+            targetLng={targetLng}
+            workerLat={workerLoc.lat}
+            workerLng={workerLoc.lng}
+            distanceMeters={distanceFromPoint ?? 0}
+            size={100}
+          />
+          <Text style={s.findArrowHint}>Match the reference angle</Text>
+        </View>
+      )}
+
       {/* Hint (non-side-by-side only) */}
       {!isSideBySide && (
         <View style={s.hintWrap}>
           <Text style={s.hintText}>{cfg.hint}</Text>
-        </View>
-      )}
-
-      {/* Side-by-side hint */}
-      {isSideBySide && (
-        <View style={s.hintWrap}>
-          <Text style={s.hintText}>Match the reference angle</Text>
         </View>
       )}
 
@@ -356,6 +372,8 @@ const s = StyleSheet.create({
   sbs_labelWrap:  { position: 'absolute', bottom: 6, left: 0, right: 0, alignItems: 'center' },
   sbs_label:      { color: '#fff', fontSize: 9, fontWeight: '700', letterSpacing: 1, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
   proximityWrap:  { position: 'absolute', top: SH * 0.49, left: 24, right: 24, alignItems: 'center', gap: 4, zIndex: 5 },
+  findArrowWrap:  { position: 'absolute', top: SH * 0.55, left: 0, right: 0, alignItems: 'center', zIndex: 5 },
+  findArrowHint:  { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '600', marginTop: 4 },
   proximityBar:   { width: '100%', height: 4, borderRadius: 2, overflow: 'hidden' },
   proximityFill:  { height: '100%', borderRadius: 2 },
   proximityText:  { fontSize: 12, fontWeight: '600' },

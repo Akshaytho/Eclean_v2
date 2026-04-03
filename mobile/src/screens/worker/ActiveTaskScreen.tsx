@@ -15,7 +15,8 @@ import {
   Alert, Image, ActivityIndicator, ScrollView,
   TextInput, Modal, Linking, Platform,
 } from 'react-native'
-import MapView, { Marker, Polyline, Circle } from 'react-native-maps'
+// TODO: Replace with MapContainer wrapper when built (Sprint 4)
+import MapView, { Marker } from 'react-native-maps'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -34,11 +35,13 @@ import { referencePointsApi } from '../../api/referencePoints.api'
 import { useBackgroundLocation } from '../../hooks/useBackgroundLocation'
 import { useEnvironmentalDNA } from '../../hooks/useEnvironmentalDNA'
 import { useActiveTaskStore } from '../../stores/activeTaskStore'
+import { useLocationStore } from '../../stores/locationStore'
 import { useSocketStore } from '../../stores/socketStore'
 import { startMotionTracking, isMotionTrackingActive } from '../../services/motionTracker'
 import { formatMoney } from '../../utils/formatMoney'
 import { formatElapsed } from '../../utils/formatTime'
 import { haversineKm } from '../../utils/distance'
+import { DEFAULT_MAP_REGION } from '../../constants/config'
 import { CaptureCamera } from '../../components/camera/CaptureCamera'
 import { FindMyArrow } from '../../components/maps/FindMyArrow'
 import type { CaptureResult } from '../../components/camera/CaptureCamera'
@@ -66,7 +69,7 @@ export function ActiveTaskScreen() {
   const { taskId } = route.params
   const qc         = useQueryClient()
   const { joinTask, leaveTask, connected } = useSocketStore()
-  const { setActiveTask, gpsTrail, elapsedSecs, setElapsedSecs } = useActiveTaskStore()
+  const { setActiveTask, elapsedSecs, setElapsedSecs } = useActiveTaskStore()
   const { currentLocation, requestPermissions, startTracking, stopTracking } = useBackgroundLocation()
   const { capture: captureEnvDNA } = useEnvironmentalDNA()
 
@@ -95,8 +98,10 @@ export function ActiveTaskScreen() {
   })
 
   // ── Submission progress (for IN_PROGRESS reference point flow) ────────────
+  // GPS removed from queryKey to prevent refetch on every GPS update.
+  // The 15s refetchInterval ensures fresh data; GPS is passed as a param only.
   const { data: progress } = useQuery<SubmissionProgress>({
-    queryKey: ['submission-progress', taskId, currentLocation?.lat, currentLocation?.lng],
+    queryKey: ['submission-progress', taskId],
     queryFn:  () => referencePointsApi.progress(taskId, currentLocation?.lat, currentLocation?.lng),
     enabled:  task?.status === 'IN_PROGRESS' && (task?.totalReferencePoints ?? 0) > 0,
     refetchInterval: 15_000,
@@ -116,7 +121,15 @@ export function ActiveTaskScreen() {
     return () => leaveTask(taskId)
   }, [taskId])
 
-  useEffect(() => { if (task) setActiveTask(task) }, [task])
+  useEffect(() => {
+    if (!task) return
+    // Clear active task on terminal states so store doesn't hold stale reference
+    if (['SUBMITTED', 'APPROVED', 'COMPLETED', 'CANCELLED'].includes(task.status)) {
+      setActiveTask(null)
+    } else {
+      setActiveTask(task)
+    }
+  }, [task])
 
   // ── Timer from server startedAt ───────────────────────────────────────────
   useEffect(() => {
@@ -128,11 +141,14 @@ export function ActiveTaskScreen() {
     return () => clearInterval(id)
   }, [task?.startedAt])
 
-  // ── Start tracking + motion when IN_PROGRESS ─────────────────────────────
+  // ── Start tracking + motion when IN_PROGRESS, stop on terminal states ────
   useEffect(() => {
     if (task?.status === 'IN_PROGRESS') {
       startTracking(taskId)
       if (!isMotionTrackingActive()) startMotionTracking()
+    } else if (task?.status && task.status !== 'ACCEPTED') {
+      // Terminal state (SUBMITTED, APPROVED, COMPLETED, REJECTED, etc.) — stop tracking
+      stopTracking()
     }
   }, [task?.status])
 
@@ -166,7 +182,7 @@ export function ActiveTaskScreen() {
       await stopTracking()
       setActiveTask(null)
       qc.invalidateQueries({ queryKey: ['worker', 'tasks'] })
-      navigation.navigate('WorkerTabs', { screen: 'MyTasks' } as never)
+      navigation.navigate('WorkerTabs', { screen: 'MyTasks' })
     },
     onError: (err: any) => {
       isCancelling.current = false
@@ -208,19 +224,63 @@ export function ActiveTaskScreen() {
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleStart = async () => {
     if (isStarting.current) return
-    if (!currentLocation) { Alert.alert('GPS', 'Waiting for GPS signal...'); return }
-    if (hasLocation && !isNearTask) {
-      if (gpsRetryCount.current < 3) {
-        setGpsRetrying(true)
-        gpsRetryCount.current++
-        try { await requestPermissions(); await new Promise(r => setTimeout(r, 5000)) } catch {}
-        setGpsRetrying(false)
+
+    // Always get a fresh GPS fix on Start tap — don't rely on stale cached location
+    let workerLat: number | null = currentLocation?.lat ?? null
+    let workerLng: number | null = currentLocation?.lng ?? null
+
+    if (!workerLat || !workerLng) {
+      try {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+        workerLat = loc.coords.latitude
+        workerLng = loc.coords.longitude
+        useLocationStore.getState().setLocation({
+          lat: workerLat, lng: workerLng,
+          accuracy: loc.coords.accuracy ?? undefined, timestamp: Date.now(),
+        })
+      } catch (err) {
+        console.warn('[ActiveTask] GPS fetch failed on start:', err)
+        Alert.alert('GPS Required', 'Could not get your location. Please check GPS is enabled and try again.')
         return
       }
-      Alert.alert('Too Far', `You're ${distanceKm ? `${distanceKm.toFixed(1)} km` : '?'} away. Get within ${GEOFENCE_RADIUS_KM} km to start.`)
-      gpsRetryCount.current = 0
-      return
     }
+
+    // Check distance with fresh coords
+    if (hasLocation && workerLat && workerLng) {
+      const freshDist = haversineKm(workerLat, workerLng, task!.locationLat!, task!.locationLng!)
+      if (freshDist > GEOFENCE_RADIUS_KM) {
+        // Too far — retry with high accuracy GPS
+        if (gpsRetryCount.current < 3) {
+          setGpsRetrying(true)
+          gpsRetryCount.current++
+          try {
+            const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+            const retryDist = haversineKm(loc.coords.latitude, loc.coords.longitude, task!.locationLat!, task!.locationLng!)
+            useLocationStore.getState().setLocation({
+              lat: loc.coords.latitude, lng: loc.coords.longitude,
+              accuracy: loc.coords.accuracy ?? undefined, timestamp: Date.now(),
+            })
+            if (retryDist <= GEOFENCE_RADIUS_KM) {
+              // Fresh GPS shows we're close enough — proceed
+              setGpsRetrying(false)
+              gpsRetryCount.current = 0
+              isStarting.current = true
+              startMutation.mutate()
+              return
+            }
+          } catch (err) {
+            console.warn('[ActiveTask] GPS retry failed:', err)
+          }
+          setGpsRetrying(false)
+          return
+        }
+        Alert.alert('Too Far', `You're ${freshDist.toFixed(1)} km away. Get within ${GEOFENCE_RADIUS_KM} km to start.`)
+        gpsRetryCount.current = 0
+        return
+      }
+    }
+
+    // All checks passed — start the task
     gpsRetryCount.current = 0
     setGpsRetrying(false)
     isStarting.current = true
@@ -330,7 +390,7 @@ export function ActiveTaskScreen() {
             <TouchableOpacity
               style={s.footerBtn}
               onPress={() => {
-                navigation.navigate('WorkerTabs', { screen: 'MyTasks' } as never)
+                navigation.navigate('WorkerTabs', { screen: 'MyTasks' })
               }}
             >
               <Text style={[s.footerBtnText, { textAlign: 'center' }]}>Back to My Tasks</Text>
@@ -394,7 +454,7 @@ export function ActiveTaskScreen() {
           <Text style={{ fontSize: 14, color: W.text.muted, textAlign: 'center', lineHeight: 22 }}>
             Your dispute has been submitted. Our team will review and resolve it within 48 hours.
           </Text>
-          <TouchableOpacity style={s.footerBtn} onPress={() => navigation.navigate('WorkerTabs', { screen: 'MyTasks' } as never)}>
+          <TouchableOpacity style={s.footerBtn} onPress={() => navigation.navigate('WorkerTabs', { screen: 'MyTasks' })}>
             <Text style={[s.footerBtnText, { color: W.primary }]}>Back to My Tasks</Text>
           </TouchableOpacity>
         </View>
@@ -421,7 +481,7 @@ export function ActiveTaskScreen() {
           <Text style={{ fontSize: 14, color: W.text.muted, textAlign: 'center', lineHeight: 22 }}>
             Your work is being reviewed. You'll be notified when the buyer responds or payment is auto-released.
           </Text>
-          <TouchableOpacity style={s.footerBtn} onPress={() => navigation.navigate('PostSubmission', { taskId } as never)}>
+          <TouchableOpacity style={s.footerBtn} onPress={() => navigation.navigate('PostSubmission', { taskId })}>
             <Text style={[s.footerBtnText, { color: W.primary }]}>View Submission Status</Text>
           </TouchableOpacity>
         </View>
@@ -449,7 +509,7 @@ export function ActiveTaskScreen() {
           <Text style={{ fontSize: 14, color: W.text.muted, textAlign: 'center', lineHeight: 22 }}>
             Payment has been released to your account. Great work!
           </Text>
-          <TouchableOpacity style={s.footerBtn} onPress={() => navigation.navigate('WorkerTabs', { screen: 'MyTasks' } as never)}>
+          <TouchableOpacity style={s.footerBtn} onPress={() => navigation.navigate('WorkerTabs', { screen: 'MyTasks' })}>
             <Text style={[s.footerBtnText, { color: W.primary }]}>Back to My Tasks</Text>
           </TouchableOpacity>
         </View>
@@ -465,7 +525,7 @@ export function ActiveTaskScreen() {
       ? { latitude: currentLocation.lat, longitude: currentLocation.lng, latitudeDelta: 0.01, longitudeDelta: 0.01 }
       : task.locationLat
         ? { latitude: task.locationLat, longitude: task.locationLng!, latitudeDelta: 0.01, longitudeDelta: 0.01 }
-        : { latitude: 17.385, longitude: 78.4867, latitudeDelta: 0.05, longitudeDelta: 0.05 }
+        : DEFAULT_MAP_REGION
 
     return (
       <View style={s.root}>
@@ -476,6 +536,15 @@ export function ActiveTaskScreen() {
               <Marker coordinate={{ latitude: task.locationLat, longitude: task.locationLng! }} pinColor={W.primary} title="Task Location" />
             )}
           </MapView>
+
+          {/* Back button overlay on map */}
+          <TouchableOpacity
+            style={s.mapBackBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.85}
+          >
+            <Text style={s.backText}>{'<'}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Bottom card */}
@@ -525,9 +594,9 @@ export function ActiveTaskScreen() {
             </View>
           )}
 
-          {/* Start Work */}
+          {/* Start Work — never hard-block, backend does the real geofence check */}
           <TouchableOpacity
-            style={[s.startBtn, (!isNearTask && hasLocation) && s.btnDisabled]}
+            style={s.startBtn}
             onPress={handleStart}
             activeOpacity={0.85}
             disabled={startMutation.isPending}
@@ -535,12 +604,15 @@ export function ActiveTaskScreen() {
             {startMutation.isPending ? <ActivityIndicator color="#fff" /> : (
               <>
                 <Play size={18} color="#fff" />
-                <Text style={s.startBtnText}>
-                  {hasLocation && !isNearTask ? 'Get closer to start' : 'START WORK'}
-                </Text>
+                <Text style={s.startBtnText}>START WORK</Text>
               </>
             )}
           </TouchableOpacity>
+          {hasLocation && !isNearTask && distanceKm !== null && (
+            <Text style={s.gpsHint}>
+              GPS shows {distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)} km`} away — tap Start to retry GPS
+            </Text>
+          )}
 
           {/* Footer: Report + Cancel */}
           <View style={s.footerActions}>
@@ -812,6 +884,7 @@ const s = StyleSheet.create({
 
   // ── ACCEPTED state ──
   mapContainer:  { flex: 0.55 },
+  mapBackBtn:    { position: 'absolute', top: 50, left: 16, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.9)', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
   acceptedCard:  { flex: 0.45, backgroundColor: W.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, marginTop: -16, gap: 12 },
   cardRow:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle:     { fontSize: 18, fontWeight: '700', color: W.text.primary, flex: 1, marginRight: 8 },
@@ -826,6 +899,7 @@ const s = StyleSheet.create({
   navigateBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
   retryBar:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8 },
   retryText:     { fontSize: 13, color: W.primary, fontWeight: '600' },
+  gpsHint:       { fontSize: 12, color: W.text.muted, textAlign: 'center', marginTop: 4 },
   startBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: W.primary, borderRadius: 12, paddingVertical: 16 },
   startBtnText:  { fontSize: 15, fontWeight: '700', color: '#fff' },
   btnDisabled:   { backgroundColor: W.border },

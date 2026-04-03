@@ -100,10 +100,13 @@ export async function submitTask(req: FastifyRequest, reply: FastifyReply): Prom
   const { taskId } = req.params as TaskIdParam
   const task = await svc.submitTask(req.user.id, taskId)
 
-  // Rule engine: instant confidence scoring (sync, ~5ms)
-  // finalDecision stays MANUAL_REVIEW until AI verifier also approves
-  // AUTO_PASS only when BOTH rule engine >= 85 AND AI score >= 0.75
-  computeConfidenceForTask(taskId).then(async (result) => {
+  // Reply immediately so worker doesn't wait for scoring
+  void reply.send({ task })
+
+  // Rule engine: instant confidence scoring (~5ms) — MUST complete before AI job
+  // to avoid race condition where both write finalDecision simultaneously
+  try {
+    const result = await computeConfidenceForTask(taskId)
     await prisma.task.update({
       where: { id: taskId },
       data: {
@@ -113,17 +116,16 @@ export async function submitTask(req: FastifyRequest, reply: FastifyReply): Prom
       },
     })
     logger.info({ taskId, score: result.normalizedScore, decision: result.decision }, 'Rule engine scored task — awaiting AI confirmation')
-  }).catch((err) => {
-    logger.error({ taskId, err }, 'Rule engine scoring failed')
-  })
+  } catch (err) {
+    logger.error({ taskId, err }, 'Rule engine scoring failed — AI job will still run')
+  }
 
-  // AI verification: async job (~10-15s)
+  // AI verification: async job (~10-15s) — enqueued AFTER rule engine completes
   await aiVerifyQueue.add(
     'verify',
     { taskId },
     { jobId: `verify-${taskId}-${Date.now()}`, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
   )
-  void reply.send({ task })
 }
 
 export async function retryTask(req: FastifyRequest, reply: FastifyReply): Promise<void> {

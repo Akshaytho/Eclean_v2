@@ -1,7 +1,7 @@
 import React from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
@@ -56,7 +56,10 @@ export function WorkerDashboardScreen() {
   const avatarColor = colors[colorIdx]
 
   const handleLogout = () => {
-    logout()
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Logout', style: 'destructive', onPress: () => logout() },
+    ])
   }
 
   const loading = meQuery.isLoading || walletQuery.isLoading
@@ -66,7 +69,7 @@ export function WorkerDashboardScreen() {
       <AppHeader
         title="Dashboard"
         theme="worker"
-        onNotificationPress={() => navigation.navigate('Notifications' as any)}
+        onNotificationPress={() => navigation.navigate('Notifications')}
       />
 
       <ScrollView
@@ -75,7 +78,7 @@ export function WorkerDashboardScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={false}
+            refreshing={meQuery.isFetching || walletQuery.isFetching}
             onRefresh={() => { meQuery.refetch(); walletQuery.refetch() }}
             tintColor={W.primary}
           />
@@ -132,7 +135,7 @@ export function WorkerDashboardScreen() {
         <View style={s.actionsRow}>
           <TouchableOpacity
             style={s.actionCard}
-            onPress={() => navigation.navigate('WorkerTabs', { screen: 'FindWork' } as any)}
+            onPress={() => navigation.navigate('WorkerTabs', { screen: 'FindWork' })}
             activeOpacity={0.85}
           >
             <View style={[s.actionIcon, { backgroundColor: W.primaryTint }]}>
@@ -142,7 +145,7 @@ export function WorkerDashboardScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={s.actionCard}
-            onPress={() => navigation.navigate('WorkerTabs', { screen: 'MyTasks' } as any)}
+            onPress={() => navigation.navigate('WorkerTabs', { screen: 'MyTasks' })}
             activeOpacity={0.85}
           >
             <View style={[s.actionIcon, { backgroundColor: W.secondaryLight }]}>
@@ -155,9 +158,9 @@ export function WorkerDashboardScreen() {
         {/* Menu */}
         <Text style={s.sectionTitle}>Account</Text>
         <View style={s.menuCard}>
-          <MenuItem icon={<User size={18} color={W.text.secondary} />} label="Edit Profile" onPress={() => {}} />
-          <MenuItem icon={<Settings size={18} color={W.text.secondary} />} label="Settings" onPress={() => {}} />
-          <MenuItem icon={<HelpCircle size={18} color={W.text.secondary} />} label="Help & Support" onPress={() => {}} />
+          <MenuItem icon={<User size={18} color={W.text.secondary} />} label="Edit Profile" onPress={() => Alert.alert('Coming Soon', 'Profile editing will be available in a future update.')} />
+          <MenuItem icon={<Settings size={18} color={W.text.secondary} />} label="Settings" onPress={() => Alert.alert('Coming Soon', 'Settings will be available in a future update.')} />
+          <MenuItem icon={<HelpCircle size={18} color={W.text.secondary} />} label="Help & Support" onPress={() => Alert.alert('Coming Soon', 'Help & Support will be available in a future update.')} />
           <MenuItem icon={<LogOut size={18} color={W.status.error} />} label="Logout" onPress={handleLogout} danger />
         </View>
 

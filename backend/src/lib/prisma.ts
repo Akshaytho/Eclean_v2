@@ -3,13 +3,16 @@ import { PrismaClient } from '@prisma/client'
 // Singleton pattern — prevents multiple connections in development hot-reload
 const globalForPrisma = global as unknown as { prisma?: PrismaClient }
 
-// PERF: default pool is 5 connections — far too low for production.
-// 50 concurrent serializable transactions + GPS writes + API queries exhaust it instantly.
-// Railway PostgreSQL supports 25+ connections; set pool to 20 with 10s timeout.
+// PERF: Pool sizing for 500 concurrent workers:
+// - Serializable txs (start, submit, cancel): hold connections 50-200ms each
+// - GPS writes via socket: cached in Redis (30s TTL), ~1 DB write per 5s per worker
+// - Read queries (open tasks, my tasks, wallet): fast with indexes
+// Railway PostgreSQL supports ~100 connections via proxy; pool = 30 handles burst load.
+// pool_timeout=15 gives more room for serializable retry queuing.
 const dbUrl = process.env.DATABASE_URL ?? ''
 const pooledUrl = dbUrl.includes('connection_limit')
   ? dbUrl
-  : `${dbUrl}${dbUrl.includes('?') ? '&' : '?'}connection_limit=20&pool_timeout=10`
+  : `${dbUrl}${dbUrl.includes('?') ? '&' : '?'}connection_limit=30&pool_timeout=15`
 
 export const prisma =
   globalForPrisma.prisma ??

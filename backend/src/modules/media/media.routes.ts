@@ -87,23 +87,35 @@ export async function mediaRoutes(fastify: FastifyInstance): Promise<void> {
         )
       }
 
-      const media = await uploadTaskMedia({
-        userId:    request.user.id,
-        userRole:  request.user.role,
-        taskId,
-        mediaType: parsed.data.mediaType,
-        file:      fileBuffer,
-        mimeType,
-        sizeBytes,
-        idempotencyKey: idempotencyKey ?? null,
-        deviceMeta: {
-          capturedLat,
+      let media
+      try {
+        media = await uploadTaskMedia({
+          userId:    request.user.id,
+          userRole:  request.user.role,
+          taskId,
+          mediaType: parsed.data.mediaType,
+          file:      fileBuffer,
+          mimeType,
+          sizeBytes,
+          idempotencyKey: idempotencyKey ?? null,
+          deviceMeta: {
+            capturedLat,
           capturedLng,
           capturedAt,
           deviceId,
           photoHash,
         },
       })
+      } catch (err: any) {
+        // PERF: Catch unique constraint violation from race condition on idempotency key.
+        // Two identical requests can pass the findUnique check simultaneously,
+        // both upload to Cloudinary, and the second create fails here.
+        if (err?.code === 'P2002' && idempotencyKey) {
+          const existing = await prisma.taskMedia.findUnique({ where: { idempotencyKey } })
+          if (existing) return reply.status(200).send({ media: existing, duplicate: true })
+        }
+        throw err
+      }
 
       emitTaskPhotoAdded(taskId, media)
 

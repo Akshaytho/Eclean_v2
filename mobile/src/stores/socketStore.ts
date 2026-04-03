@@ -105,7 +105,18 @@ export const useSocketStore = create<SocketState>((set, get) => ({
   },
 }))
 
-// Helper for components to emit GPS (primary transport for worker location)
+// Helper for components to emit GPS (primary transport for worker location).
+// Falls back to HTTP POST when socket is disconnected to prevent GPS trail gaps.
 export function emitGPS(taskId: string, lat: number, lng: number, accuracy?: number): void {
-  useSocketStore.getState().emit('worker:gps', { taskId, lat, lng, accuracy })
+  const { socket, connected } = useSocketStore.getState()
+  if (socket && connected) {
+    socket.emit('worker:gps', { taskId, lat, lng, accuracy })
+  } else {
+    // HTTP fallback — import inline to avoid circular dependency
+    import('../api/tasks.api').then(({ workerTasksApi }) => {
+      workerTasksApi.logLocation(taskId, lat, lng, accuracy).catch(() => {
+        console.warn('[GPS] HTTP fallback failed — GPS point lost')
+      })
+    }).catch(() => {})
+  }
 }

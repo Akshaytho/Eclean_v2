@@ -12,7 +12,8 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   ActivityIndicator, Platform,
 } from 'react-native'
-import MapView, { Marker, Circle, Callout } from 'react-native-maps'
+// TODO: Replace with MapContainer wrapper when built (Sprint 4)
+import MapView, { Marker, Circle } from 'react-native-maps'
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
@@ -25,6 +26,8 @@ import { WORKER_THEME as W } from '../../constants/workerTheme'
 import { DIRTY_LEVELS } from '../../constants/taskCategories'
 import { workerTasksApi } from '../../api/tasks.api'
 import { formatMoney } from '../../utils/formatMoney'
+import { formatTimeShort } from '../../utils/formatTime'
+import { DEFAULT_MAP_REGION } from '../../constants/config'
 import { useLocationStore } from '../../stores/locationStore'
 import { Skeleton } from '../../components/ui/Skeleton'
 import type { Task, DirtyLevel } from '../../types'
@@ -51,18 +54,24 @@ export function FindWorkScreen() {
   const [radiusKm, setRadiusKm]          = useState(5)
 
   // Get location on mount
+  const [locationDenied, setLocationDenied] = useState(false)
   useEffect(() => {
     ;(async () => {
-      const { granted } = await Location.requestForegroundPermissionsAsync()
-      if (!granted) return
-      setPermission(granted, false)
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-      const { latitude: lat, longitude: lng, accuracy } = loc.coords
-      setLocation({ lat, lng, accuracy: accuracy ?? undefined, timestamp: Date.now() })
-      mapRef.current?.animateToRegion({
-        latitude: lat, longitude: lng,
-        latitudeDelta: 0.04, longitudeDelta: 0.04,
-      })
+      try {
+        const { granted } = await Location.requestForegroundPermissionsAsync()
+        if (!granted) { setLocationDenied(true); return }
+        setPermission(granted, false)
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+        const { latitude: lat, longitude: lng, accuracy } = loc.coords
+        setLocation({ lat, lng, accuracy: accuracy ?? undefined, timestamp: Date.now() })
+        mapRef.current?.animateToRegion({
+          latitude: lat, longitude: lng,
+          latitudeDelta: 0.04, longitudeDelta: 0.04,
+        })
+      } catch (err) {
+        console.warn('[FindWork] Location request failed:', err)
+        setLocationDenied(true)
+      }
     })()
   }, [])
 
@@ -88,12 +97,9 @@ export function FindWorkScreen() {
     navigation.navigate('TaskDetail', { taskId })
   }, [navigation])
 
-  const defaultRegion = {
-    latitude:       currentLocation?.lat ?? 17.385,
-    longitude:      currentLocation?.lng ?? 78.4867,
-    latitudeDelta:  0.04,
-    longitudeDelta: 0.04,
-  }
+  const defaultRegion = currentLocation
+    ? { latitude: currentLocation.lat, longitude: currentLocation.lng, latitudeDelta: 0.04, longitudeDelta: 0.04 }
+    : DEFAULT_MAP_REGION
 
   return (
     <View style={s.container}>
@@ -164,7 +170,15 @@ export function FindWorkScreen() {
           </TouchableOpacity>
         </View>
 
-        {isLoading ? (
+        {locationDenied ? (
+          <View style={s.empty}>
+            <MapPin size={40} color={W.text.muted} />
+            <Text style={s.emptyTitle}>Location access needed</Text>
+            <Text style={s.emptySubtext}>
+              Enable location permissions in your phone settings to find nearby tasks.
+            </Text>
+          </View>
+        ) : isLoading ? (
           <View style={s.skeletonList}>
             {[1, 2, 3].map(i => <Skeleton key={i} width="100%" height={80} borderRadius={12} />)}
           </View>
@@ -256,7 +270,7 @@ function TaskCard({ task, onPress }: { task: Task; onPress: () => void }) {
           <Text style={s.taskPhotos}>{task.totalReferencePoints} photos</Text>
         )}
         {task.workWindowStart && (
-          <Text style={s.taskWindow}>{task.workWindowStart} - {task.workWindowEnd}</Text>
+          <Text style={s.taskWindow}>{formatTimeShort(task.workWindowStart)} - {formatTimeShort(task.workWindowEnd)}</Text>
         )}
       </View>
     </TouchableOpacity>
