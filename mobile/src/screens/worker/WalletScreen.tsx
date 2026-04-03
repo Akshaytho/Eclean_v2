@@ -35,7 +35,7 @@ export function WalletScreen() {
   const insets = useSafeAreaInsets()
   const [page, setPage] = React.useState(1)
 
-  const { data: wallet, isLoading: walletLoading } = useQuery({
+  const { data: wallet, isLoading: walletLoading, isError: walletError } = useQuery({
     queryKey: ['worker', 'wallet'],
     queryFn:  payoutsApi.getWallet,
     staleTime: 30_000,
@@ -60,6 +60,8 @@ export function WalletScreen() {
         <Text style={styles.headerLabel}>Total Earned</Text>
         {walletLoading ? (
           <ActivityIndicator color="#fff" style={{ marginVertical: 8 }} />
+        ) : walletError ? (
+          <Text style={styles.totalEarned}>--</Text>
         ) : (
           <Text style={styles.totalEarned}>
             {formatMoney(wallet?.totalEarnedCents ?? 0, 'INR')}

@@ -39,7 +39,7 @@ export function PostSubmissionScreen() {
   const { taskId } = route.params
 
   // Poll task for AI verification result
-  const { data: task } = useQuery({
+  const { data: task, refetch, isFetching } = useQuery({
     queryKey: ['worker', 'task', taskId],
     queryFn:  () => workerTasksApi.getTask(taskId),
     refetchInterval: 20_000, // Poll every 20s — gentler on battery and data

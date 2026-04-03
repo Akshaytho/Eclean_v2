@@ -76,7 +76,7 @@ export function FindWorkScreen() {
   }, [])
 
   // Query open tasks
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['worker', 'tasks', 'open', currentLocation?.lat, currentLocation?.lng, radiusKm],
     queryFn: () =>
       workerTasksApi.getOpen({
@@ -177,6 +177,14 @@ export function FindWorkScreen() {
             <Text style={s.emptySubtext}>
               Enable location permissions in your phone settings to find nearby tasks.
             </Text>
+          </View>
+        ) : isError ? (
+          <View style={s.empty}>
+            <Text style={s.emptyTitle}>Could not load tasks</Text>
+            <Text style={s.emptySubtext}>Check your internet connection and try again.</Text>
+            <TouchableOpacity style={s.expandBtn} onPress={() => refetch()} activeOpacity={0.85}>
+              <Text style={s.expandBtnText}>Retry</Text>
+            </TouchableOpacity>
           </View>
         ) : isLoading ? (
           <View style={s.skeletonList}>

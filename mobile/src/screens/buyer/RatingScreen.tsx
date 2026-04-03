@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -21,6 +21,7 @@ export function RatingScreen() {
   const insets     = useSafeAreaInsets()
   const [rating,   setRating]  = useState(0)
   const [comment,  setComment] = useState('')
+  const isSubmitting = useRef(false)
 
   // Fetch task to validate status before allowing rating
   const { data: task, isLoading: taskLoading } = useQuery({
@@ -32,7 +33,11 @@ export function RatingScreen() {
   const canRate = task && (task.status === 'APPROVED' || task.status === 'COMPLETED') && !task.buyerRating
 
   const mutation = useMutation({
-    mutationFn: () => buyerTasksApi.rate(taskId, rating, comment.trim() || undefined),
+    mutationFn: () => {
+      if (isSubmitting.current) throw new Error('Already submitting')
+      isSubmitting.current = true
+      return buyerTasksApi.rate(taskId, rating, comment.trim() || undefined)
+    },
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ['buyer-task', taskId] })
       Alert.alert('Thanks for your feedback!', '', [
@@ -40,6 +45,7 @@ export function RatingScreen() {
       ])
     },
     onError: (err: any) => {
+      isSubmitting.current = false
       Alert.alert('Error', err?.response?.data?.error?.message ?? 'Could not submit rating')
     },
   })
