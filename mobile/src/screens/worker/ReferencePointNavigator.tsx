@@ -101,7 +101,7 @@ export function ReferencePointNavigator() {
   const { data: progress, isLoading } = useQuery<SubmissionProgress>({
     queryKey: ['submission-progress', taskId],
     queryFn:  () => referencePointsApi.progress(taskId, workerLoc?.lat, workerLoc?.lng),
-    refetchInterval: 15_000,
+    refetchInterval: 20_000,
   })
 
   // Refs to avoid stale closure in onCapture callback

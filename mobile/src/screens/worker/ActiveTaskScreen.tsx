@@ -95,17 +95,17 @@ export function ActiveTaskScreen() {
     queryKey: ['worker', 'task', taskId],
     queryFn:  () => workerTasksApi.getTask(taskId),
     staleTime: 5_000,
-    refetchInterval: 10_000,
+    refetchInterval: 15_000,
   })
 
   // ── Submission progress (for IN_PROGRESS reference point flow) ────────────
   // GPS removed from queryKey to prevent refetch on every GPS update.
-  // The 15s refetchInterval ensures fresh data; GPS is passed as a param only.
+  // The 25s refetchInterval ensures fresh data; offset from task query to avoid collision.
   const { data: progress } = useQuery<SubmissionProgress>({
     queryKey: ['submission-progress', taskId],
     queryFn:  () => referencePointsApi.progress(taskId, currentLocation?.lat, currentLocation?.lng),
     enabled:  task?.status === 'IN_PROGRESS' && (task?.totalReferencePoints ?? 0) > 0,
-    refetchInterval: 15_000,
+    refetchInterval: 25_000,
   })
 
   // ── Network status ────────────────────────────────────────────────────────

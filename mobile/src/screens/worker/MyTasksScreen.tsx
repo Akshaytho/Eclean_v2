@@ -111,6 +111,9 @@ export function MyTasksScreen() {
           refreshing={isFetching}
           onEndReached={() => { if (hasMore && !isFetching) setPage(p => p + 1) }}
           onEndReachedThreshold={0.5}
+          windowSize={10}
+          maxToRenderPerBatch={10}
+          removeClippedSubviews={true}
           ItemSeparatorComponent={ItemSeparator}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -144,7 +147,7 @@ export function MyTasksScreen() {
   )
 }
 
-function TaskRow({
+const TaskRow = React.memo(function TaskRow({
   task, onPress, onContinue,
 }: { task: Task; onPress: () => void; onContinue?: () => void }) {
   const statusColor = STATUS_COLOR[task.status] ?? W.text.muted
@@ -172,7 +175,7 @@ function TaskRow({
       </View>
     </TouchableOpacity>
   )
-}
+})
 
 const styles = StyleSheet.create({
   container:      { flex: 1, backgroundColor: W.background },

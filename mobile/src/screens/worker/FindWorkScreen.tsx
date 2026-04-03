@@ -243,7 +243,7 @@ const pp = StyleSheet.create({
 
 // ── Task Card ───────────────────────────────────────────────────────────────
 
-function TaskCard({ task, onPress }: { task: Task; onPress: () => void }) {
+const TaskCard = React.memo(function TaskCard({ task, onPress }: { task: Task; onPress: () => void }) {
   const color = DIRTY_COLOR[task.dirtyLevel]
 
   return (
@@ -275,7 +275,7 @@ function TaskCard({ task, onPress }: { task: Task; onPress: () => void }) {
       </View>
     </TouchableOpacity>
   )
-}
+})
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 

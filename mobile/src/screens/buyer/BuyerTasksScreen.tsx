@@ -4,7 +4,7 @@
  * Status groups: Active(OPEN/ACCEPTED/IN_PROGRESS), Review(SUBMITTED/VERIFIED), Done(APPROVED/COMPLETED/REJECTED/CANCELLED)
  * Search: client-side filter on task.title (no backend search endpoint)
  */
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl, TextInput,
@@ -42,10 +42,12 @@ export function BuyerTasksScreen() {
     staleTime: 15_000,
   })
 
-  // Client-side search filter
-  const tasks = (query.data?.tasks ?? []).filter(t =>
-    search.trim() === '' || t.title.toLowerCase().includes(search.toLowerCase())
-  )
+  // Client-side search filter (memoized to avoid re-filtering on every render)
+  const tasks = useMemo(() => {
+    const all = query.data?.tasks ?? []
+    const q = search.trim().toLowerCase()
+    return q === '' ? all : all.filter(t => t.title.toLowerCase().includes(q))
+  }, [query.data?.tasks, search])
 
   return (
     <View style={{ flex: 1, backgroundColor: B.background }}>
@@ -85,6 +87,9 @@ export function BuyerTasksScreen() {
           <FlatList
             data={tasks}
             keyExtractor={t => t.id}
+            windowSize={10}
+            maxToRenderPerBatch={10}
+            removeClippedSubviews={true}
             contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 80 }}
             refreshControl={
               <RefreshControl

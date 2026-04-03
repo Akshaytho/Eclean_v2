@@ -14,7 +14,7 @@
  *   - worker field is now included from backend (fixed above)
  *   - aiScore is 0-100 integer, aiReasoning is text string
  */
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState, useMemo } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, Modal, TextInput, Image,
@@ -91,7 +91,11 @@ export function BuyerTaskDetailScreen() {
     queryKey:    ['buyer-task', taskId],
     queryFn:     () => buyerTasksApi.getTask(taskId),
     staleTime:   10_000,
-    refetchInterval: 30_000, // auto-refresh every 30s for active tasks
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      if (status === 'IN_PROGRESS' || status === 'SUBMITTED') return 30_000
+      return false // terminal states don't need polling
+    },
   })
 
   // ── Fetch reference points (if any) ────────────────────────────────────
@@ -214,10 +218,15 @@ export function BuyerTaskDetailScreen() {
   const canAct      = task.status === 'SUBMITTED' || task.status === 'VERIFIED'
   const currentStep = STATUS_ORDER[task.status] ?? 0
 
-  // Photos grouped by type
-  const beforePhotos = (task.media ?? []).filter((m: any) => m.type === 'BEFORE')
-  const afterPhotos  = (task.media ?? []).filter((m: any) => m.type === 'AFTER')
-  const proofPhotos  = (task.media ?? []).filter((m: any) => m.type === 'PROOF')
+  // Photos grouped by type (memoized to avoid re-filtering on every render)
+  const { beforePhotos, afterPhotos, proofPhotos } = useMemo(() => {
+    const media = task.media ?? []
+    return {
+      beforePhotos: media.filter((m: any) => m.type === 'BEFORE'),
+      afterPhotos:  media.filter((m: any) => m.type === 'AFTER'),
+      proofPhotos:  media.filter((m: any) => m.type === 'PROOF'),
+    }
+  }, [task.media])
 
   return (
     <View style={s.root}>

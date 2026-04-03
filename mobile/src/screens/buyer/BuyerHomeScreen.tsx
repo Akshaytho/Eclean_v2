@@ -78,7 +78,7 @@ export function BuyerHomeScreen() {
     const nr = tasks.filter(t => t.status === 'SUBMITTED' || t.status === 'VERIFIED')
     const op = tasks.filter(t => t.status === 'OPEN')
     const done = allTasks.filter(t => t.status === 'APPROVED' || t.status === 'COMPLETED')
-    return { inProgress: ip.slice(0, 5), needsReview: nr.slice(0, 5), openTasks: op.slice(0, 5), completed: done, recentDone: done.slice(0, 3) }
+    return { inProgress: ip.slice(0, 5), needsReview: nr.slice(0, 5), openTasks: op.slice(0, 5), completed: done.slice(0, 5), recentDone: done.slice(0, 3) }
   }, [tasks, allTasks])
 
   const firstName = user?.name?.split(' ')[0] ?? 'there'
@@ -353,7 +353,7 @@ function StatCard({ num, label, tint, color }: {
   )
 }
 
-function LiveCard({ task, onPress, onChat, onTrack }: {
+const LiveCard = React.memo(function LiveCard({ task, onPress, onChat, onTrack }: {
   task: Task; onPress: () => void; onChat: () => void; onTrack: () => void
 }) {
   const elapsed = task.startedAt
@@ -405,7 +405,7 @@ function LiveCard({ task, onPress, onChat, onTrack }: {
       </View>
     </TouchableOpacity>
   )
-}
+})
 
 function OpenCard({ task, onPress }: { task: Task; onPress: () => void }) {
   return (

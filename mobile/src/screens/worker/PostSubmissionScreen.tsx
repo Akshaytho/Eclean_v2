@@ -42,7 +42,7 @@ export function PostSubmissionScreen() {
   const { data: task } = useQuery({
     queryKey: ['worker', 'task', taskId],
     queryFn:  () => workerTasksApi.getTask(taskId),
-    refetchInterval: 10_000, // Poll every 10s — gentler on battery and data
+    refetchInterval: 20_000, // Poll every 20s — gentler on battery and data
   })
 
   const aiDone = task?.aiScore != null

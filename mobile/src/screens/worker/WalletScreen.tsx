@@ -110,6 +110,9 @@ export function WalletScreen() {
           refreshing={payoutsFetching}
           onEndReached={() => { if (hasMore && !payoutsFetching) setPage(p => p + 1) }}
           onEndReachedThreshold={0.5}
+          windowSize={5}
+          maxToRenderPerBatch={5}
+          removeClippedSubviews={true}
           ItemSeparatorComponent={ItemSeparator}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -134,7 +137,7 @@ function SummaryCard({ label, amount, color }: { label: string; amount: number; 
   )
 }
 
-function PayoutRow({ payout }: { payout: PayoutListItem }) {
+const PayoutRow = React.memo(function PayoutRow({ payout }: { payout: PayoutListItem }) {
   const color = STATUS_COLOR[payout.status]
   const label = STATUS_LABEL[payout.status]
 
@@ -153,7 +156,7 @@ function PayoutRow({ payout }: { payout: PayoutListItem }) {
       </View>
     </View>
   )
-}
+})
 
 const styles = StyleSheet.create({
   container:     { flex: 1, backgroundColor: W.background },
