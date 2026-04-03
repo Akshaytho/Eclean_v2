@@ -1,6 +1,6 @@
 // eClean socket store
 // One persistent socket connection per authenticated session.
-// Reconnects automatically — reconnectionAttempts: Infinity (not 5 like old app).
+// Reconnects automatically — reconnectionAttempts: 20 (not 5 like old app).
 // GPS events go through this socket (worker:gps), NOT HTTP POST.
 
 import { create } from 'zustand'
@@ -66,7 +66,7 @@ export const useSocketStore = create<SocketState>((set, get) => ({
         if (accessToken) {
           socket.auth = { token: accessToken }
         }
-      } catch {}
+      } catch { /* graceful: token refresh failure during reconnect is non-fatal */ }
     })
 
     const appStateSub = AppState.addEventListener('change', (state) => {

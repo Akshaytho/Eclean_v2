@@ -56,7 +56,7 @@ export function useBackgroundLocation() {
         watchRef.current = await Location.watchPositionAsync(
           {
             accuracy:          Location.Accuracy.High,
-            timeInterval:      5_000,
+            timeInterval:      10_000,
             distanceInterval:  5,
           },
           (loc) => {

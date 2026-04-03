@@ -35,7 +35,7 @@ export function WalletScreen() {
   const insets = useSafeAreaInsets()
   const [page, setPage] = React.useState(1)
 
-  const { data: wallet, isLoading: walletLoading } = useQuery({
+  const { data: wallet, isLoading: walletLoading, isError: walletError } = useQuery({
     queryKey: ['worker', 'wallet'],
     queryFn:  payoutsApi.getWallet,
     staleTime: 30_000,
@@ -60,6 +60,8 @@ export function WalletScreen() {
         <Text style={styles.headerLabel}>Total Earned</Text>
         {walletLoading ? (
           <ActivityIndicator color="#fff" style={{ marginVertical: 8 }} />
+        ) : walletError ? (
+          <Text style={styles.totalEarned}>--</Text>
         ) : (
           <Text style={styles.totalEarned}>
             {formatMoney(wallet?.totalEarnedCents ?? 0, 'INR')}
@@ -110,6 +112,9 @@ export function WalletScreen() {
           refreshing={payoutsFetching}
           onEndReached={() => { if (hasMore && !payoutsFetching) setPage(p => p + 1) }}
           onEndReachedThreshold={0.5}
+          windowSize={5}
+          maxToRenderPerBatch={5}
+          removeClippedSubviews={true}
           ItemSeparatorComponent={ItemSeparator}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -134,7 +139,7 @@ function SummaryCard({ label, amount, color }: { label: string; amount: number; 
   )
 }
 
-function PayoutRow({ payout }: { payout: PayoutListItem }) {
+const PayoutRow = React.memo(function PayoutRow({ payout }: { payout: PayoutListItem }) {
   const color = STATUS_COLOR[payout.status]
   const label = STATUS_LABEL[payout.status]
 
@@ -153,7 +158,7 @@ function PayoutRow({ payout }: { payout: PayoutListItem }) {
       </View>
     </View>
   )
-}
+})
 
 const styles = StyleSheet.create({
   container:     { flex: 1, backgroundColor: W.background },

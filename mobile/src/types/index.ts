@@ -102,6 +102,7 @@ export interface Task {
   ruleEngineBreakdown?:  string | null
   finalDecision?:        string | null
   rejectionReason?:      string | null
+  buyerRating?:          number | null
   // Populated on detail endpoints
   media?:          TaskMedia[]
   worker?:         { id: string; name: string; email: string } | null

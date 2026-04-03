@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -21,6 +21,7 @@ export function RatingScreen() {
   const insets     = useSafeAreaInsets()
   const [rating,   setRating]  = useState(0)
   const [comment,  setComment] = useState('')
+  const isSubmitting = useRef(false)
 
   // Fetch task to validate status before allowing rating
   const { data: task, isLoading: taskLoading } = useQuery({
@@ -29,10 +30,14 @@ export function RatingScreen() {
     staleTime: 30_000,
   })
 
-  const canRate = task && (task.status === 'APPROVED' || task.status === 'COMPLETED') && !task.rating
+  const canRate = task && (task.status === 'APPROVED' || task.status === 'COMPLETED') && !task.buyerRating
 
   const mutation = useMutation({
-    mutationFn: () => buyerTasksApi.rate(taskId, rating, comment.trim() || undefined),
+    mutationFn: () => {
+      if (isSubmitting.current) throw new Error('Already submitting')
+      isSubmitting.current = true
+      return buyerTasksApi.rate(taskId, rating, comment.trim() || undefined)
+    },
     onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ['buyer-task', taskId] })
       Alert.alert('Thanks for your feedback!', '', [
@@ -40,6 +45,7 @@ export function RatingScreen() {
       ])
     },
     onError: (err: any) => {
+      isSubmitting.current = false
       Alert.alert('Error', err?.response?.data?.error?.message ?? 'Could not submit rating')
     },
   })
@@ -50,7 +56,7 @@ export function RatingScreen() {
     return <View style={[s.root, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator size="large" color={B.primary} /></View>
   }
 
-  if (task?.rating) {
+  if (task?.buyerRating) {
     return (
       <View style={s.root}>
         <LinearGradient colors={B.gradient} style={[s.header, { paddingTop: (insets.top > 0 ? insets.top : 24) + 8 }]}>
@@ -64,7 +70,7 @@ export function RatingScreen() {
           <Text style={s.prompt}>You've already rated this task</Text>
           <View style={s.stars}>
             {[1, 2, 3, 4, 5].map(n => (
-              <Star key={n} size={48} color={n <= task.rating ? '#F59E0B' : B.text.muted} fill={n <= task.rating ? '#F59E0B' : 'none'} />
+              <Star key={n} size={48} color={n <= (task.buyerRating ?? 0) ? '#F59E0B' : B.text.muted} fill={n <= (task.buyerRating ?? 0) ? '#F59E0B' : 'none'} />
             ))}
           </View>
           <TouchableOpacity style={s.skipBtn} onPress={() => navigation.goBack()}>

@@ -86,7 +86,7 @@ export async function acceptTask(req: FastifyRequest, reply: FastifyReply): Prom
 
 export async function startTask(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const { taskId } = req.params as TaskIdParam
-  const task = await svc.startTask(req.user.id, taskId, req.body as StartTaskInput | undefined)
+  const task = await svc.startTask(req.user.id, taskId, req.body as StartTaskInput)
   void reply.send({ task })
 }
 

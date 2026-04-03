@@ -76,7 +76,7 @@ export function FindWorkScreen() {
   }, [])
 
   // Query open tasks
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['worker', 'tasks', 'open', currentLocation?.lat, currentLocation?.lng, radiusKm],
     queryFn: () =>
       workerTasksApi.getOpen({
@@ -178,6 +178,14 @@ export function FindWorkScreen() {
               Enable location permissions in your phone settings to find nearby tasks.
             </Text>
           </View>
+        ) : isError ? (
+          <View style={s.empty}>
+            <Text style={s.emptyTitle}>Could not load tasks</Text>
+            <Text style={s.emptySubtext}>Check your internet connection and try again.</Text>
+            <TouchableOpacity style={s.expandBtn} onPress={() => refetch()} activeOpacity={0.85}>
+              <Text style={s.expandBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         ) : isLoading ? (
           <View style={s.skeletonList}>
             {[1, 2, 3].map(i => <Skeleton key={i} width="100%" height={80} borderRadius={12} />)}
@@ -243,7 +251,7 @@ const pp = StyleSheet.create({
 
 // ── Task Card ───────────────────────────────────────────────────────────────
 
-function TaskCard({ task, onPress }: { task: Task; onPress: () => void }) {
+const TaskCard = React.memo(function TaskCard({ task, onPress }: { task: Task; onPress: () => void }) {
   const color = DIRTY_COLOR[task.dirtyLevel]
 
   return (
@@ -266,7 +274,7 @@ function TaskCard({ task, onPress }: { task: Task; onPress: () => void }) {
         <View style={[s.dirtyBadge, { backgroundColor: color }]}>
           <Text style={s.dirtyText}>{task.dirtyLevel}</Text>
         </View>
-        {task.totalReferencePoints > 0 && (
+        {(task.totalReferencePoints ?? 0) > 0 && (
           <Text style={s.taskPhotos}>{task.totalReferencePoints} photos</Text>
         )}
         {task.workWindowStart && (
@@ -275,7 +283,7 @@ function TaskCard({ task, onPress }: { task: Task; onPress: () => void }) {
       </View>
     </TouchableOpacity>
   )
-}
+})
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 

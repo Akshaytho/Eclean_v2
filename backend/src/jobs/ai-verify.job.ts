@@ -72,7 +72,7 @@ export function createAiVerifyWorker(): Worker {
         }
       }
     },
-    { connection, concurrency: 5 }, // PERF: process 5 AI verifications in parallel (was 3 — at 500 workers, 3 creates 8+ min backlog)
+    { connection, concurrency: 10 }, // PERF: 10 parallel AI calls — at 500 workers, 5 creates 8+ min backlog; 10 keeps it under 2 min
   )
 
   worker.on('failed', (job, err) => {

@@ -7,7 +7,7 @@
  *
  * Shows: full-screen map, GPS trail, worker info overlay, time on site counter
  */
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useMemo } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert } from 'react-native'
 import MapView, { Marker, Polyline, Circle } from 'react-native-maps'
 import { useQuery } from '@tanstack/react-query'
@@ -47,7 +47,7 @@ export function LiveTrackScreen() {
     const handleLocation = (data: { lat: number; lng: number; accuracy?: number; timestamp?: number }) => {
       const coord: GPSCoord = { ...data, timestamp: data.timestamp ?? Date.now() }
       setLast(coord)
-      setTrail(prev => [...prev.slice(-200), coord])
+      setTrail(prev => [...prev.slice(-300), coord])
     }
 
     // Listen for task status changes (e.g. IN_PROGRESS → SUBMITTED)
@@ -145,12 +145,7 @@ export function LiveTrackScreen() {
 
         {/* GPS trail polyline */}
         {trail.length > 1 && (
-          <Polyline
-            coordinates={trail.map(p => ({ latitude: p.lat, longitude: p.lng }))}
-            strokeColor={B.primary}
-            strokeWidth={3}
-            lineDashPattern={[1]}
-          />
+          <MemoizedPolyline trail={trail} />
         )}
       </MapView>
 
@@ -199,6 +194,22 @@ export function LiveTrackScreen() {
         )}
       </View>
     </View>
+  )
+}
+
+// Memoized polyline to avoid recomputing coordinates array on every render
+function MemoizedPolyline({ trail }: { trail: GPSCoord[] }) {
+  const coordinates = useMemo(
+    () => trail.map(p => ({ latitude: p.lat, longitude: p.lng })),
+    [trail],
+  )
+  return (
+    <Polyline
+      coordinates={coordinates}
+      strokeColor={B.primary}
+      strokeWidth={3}
+      lineDashPattern={[1]}
+    />
   )
 }
 

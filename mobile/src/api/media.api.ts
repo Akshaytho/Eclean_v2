@@ -38,6 +38,7 @@ export const mediaApi = {
     uri: string,
     mediaType: MediaType,
     metadata?: PhotoMetadata,
+    onProgress?: (pct: number) => void,
   ): Promise<TaskMedia> => {
     // Skip compression — camera captures at quality 0.7, Cloudinary optimizes server-side
     const compressedUri = uri
@@ -72,6 +73,9 @@ export const mediaApi = {
           'Idempotency-Key': idempotencyKey,
         },
         timeout: 30_000,
+        onUploadProgress: onProgress
+          ? (e) => { if (e.total) onProgress(Math.round((e.loaded / e.total) * 100)) }
+          : undefined,
       },
     )
     return res.data.media

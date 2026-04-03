@@ -35,6 +35,7 @@ export const referencePointsApi = {
     uri: string,
     label?: string,
     metadata?: PhotoMetadata,
+    onProgress?: (pct: number) => void,
   ): Promise<TaskReferencePoint> => {
     const compressedUri = await compressPhoto(uri)
     const formData = new FormData()
@@ -62,6 +63,9 @@ export const referencePointsApi = {
           'Idempotency-Key': idempotencyKey,
         },
         timeout: 30_000,
+        onUploadProgress: onProgress
+          ? (e) => { if (e.total) onProgress(Math.round((e.loaded / e.total) * 100)) }
+          : undefined,
       },
     )
     return res.data.referencePoint
@@ -87,6 +91,7 @@ export const referencePointsApi = {
     mediaType: 'AFTER' | 'VERIFICATION',
     uri: string,
     metadata?: PhotoMetadata,
+    onProgress?: (pct: number) => void,
   ): Promise<WorkerPointSubmission> => {
     // Skip compression — camera already captures at quality 0.7 and
     // Cloudinary handles server-side optimization. Double compression
@@ -116,6 +121,9 @@ export const referencePointsApi = {
           'Idempotency-Key': idempotencyKey,
         },
         timeout: 30_000,
+        onUploadProgress: onProgress
+          ? (e) => { if (e.total) onProgress(Math.round((e.loaded / e.total) * 100)) }
+          : undefined,
       },
     )
     return res.data.submission

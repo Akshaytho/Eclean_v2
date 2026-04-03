@@ -215,7 +215,7 @@ export async function listBuyerTasks(buyerId: string, query: ListTasksQuery) {
 export async function getBuyerTask(buyerId: string, taskId: string) {
   const task = await prisma.task.findUnique({
     where:   { id: taskId },
-    include: { media: true, locationLogs: true, events: true, payout: true, worker: { select: { id: true, name: true, email: true } } },
+    include: { media: true, locationLogs: { take: 100, orderBy: { createdAt: 'desc' } }, events: true, payout: true, worker: { select: { id: true, name: true, email: true } } },
   })
   if (!task) throw new NotFoundError('Task not found')
   if (task.buyerId !== buyerId) throw new ForbiddenError('Not your task')
@@ -550,7 +550,7 @@ export async function getOpenTasks(query: OpenTasksQuery) {
 export async function getWorkerTask(workerId: string, taskId: string) {
   const task = await prisma.task.findUnique({
     where:   { id: taskId },
-    include: { media: true, locationLogs: true, events: true, buyer: { select: { id: true, name: true } } },
+    include: { media: true, locationLogs: { take: 100, orderBy: { createdAt: 'desc' } }, events: true, buyer: { select: { id: true, name: true } } },
   })
   if (!task) throw new NotFoundError('Task not found')
   // Worker can view open tasks or their own tasks
@@ -633,7 +633,6 @@ export async function acceptTask(workerId: string, taskId: string) {
 
         return task
       },
-    ),
   )
   emitTaskUpdated(taskId, 'ACCEPTED')
   logTaskEvent(taskId, 'status_changed', workerId, 'WORKER', { from: 'OPEN', to: 'ACCEPTED' })

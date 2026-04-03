@@ -117,6 +117,29 @@ apiClient.interceptors.response.use(
   },
 )
 
+// ─── Retry on 5xx with exponential backoff ───────────────────────────────────
+
+const MAX_RETRIES = 3
+const RETRY_STATUS_CODES = new Set([500, 502, 503, 504])
+
+apiClient.interceptors.response.use(undefined, async (error) => {
+  const config = error.config as AxiosRequestConfig & { _retryCount?: number }
+  if (!config || !error.response) return Promise.reject(error)
+
+  const status = error.response.status
+  if (!RETRY_STATUS_CODES.has(status)) return Promise.reject(error)
+
+  config._retryCount = (config._retryCount ?? 0) + 1
+  if (config._retryCount > MAX_RETRIES) return Promise.reject(error)
+
+  // Exponential backoff: 1s, 2s, 4s + jitter
+  const delay = Math.min(1000 * Math.pow(2, config._retryCount - 1), 8000)
+  const jitter = Math.random() * 500
+  await new Promise(resolve => setTimeout(resolve, delay + jitter))
+
+  return apiClient(config)
+})
+
 // ─── Offline check ────────────────────────────────────────────────────────────
 
 export async function isOnline(): Promise<boolean> {

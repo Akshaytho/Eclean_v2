@@ -8,6 +8,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { COLORS } from '../../constants/colors'
+import { OfflineBanner } from '../ui/OfflineBanner'
 
 interface ScreenWrapperProps {
   children:        React.ReactNode
@@ -29,6 +30,7 @@ export function ScreenWrapper({
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor }, style]}>
       <StatusBar style={statusBarStyle} />
+      <OfflineBanner />
       {scroll ? (
         <ScrollView
           contentContainerStyle={[styles.scroll, contentStyle]}
