@@ -114,7 +114,7 @@ model User {
   name             String
   role             Role
   isActive         Boolean @default(true)
-  isEmailVerified  Boolean @default(false)
+  isEmailVerified  Boolean @default(true)   // auto-verify until mobile verification UI is built
   emailVerifyToken String? @unique
   deviceToken      String?
   createdAt        DateTime @default(now())
