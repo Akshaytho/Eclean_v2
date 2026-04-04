@@ -278,7 +278,8 @@ export function ReferencePointNavigator() {
               // Send motion summary + final EnvDNA before navigating (fire-and-forget)
               try {
                 const motionSummary = stopMotionTracking()
-                await apiClient.post(`/tasks/${taskId}/motion-summary`, motionSummary).catch(() => {})
+                await apiClient.post(`/tasks/${taskId}/motion-summary`, motionSummary)
+                  .catch((err) => console.warn('[Motion] Upload failed:', err?.message))
                 const finalEnvDNA = await captureEnvDNA()
                 await apiClient.post(`/tasks/${taskId}/environment`, {
                   captureType: 'WORKER_SUBMIT', ...finalEnvDNA,

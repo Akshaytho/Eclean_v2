@@ -37,7 +37,8 @@ import { useEnvironmentalDNA } from '../../hooks/useEnvironmentalDNA'
 import { useActiveTaskStore } from '../../stores/activeTaskStore'
 import { useLocationStore } from '../../stores/locationStore'
 import { useSocketStore } from '../../stores/socketStore'
-import { startMotionTracking, isMotionTrackingActive } from '../../services/motionTracker'
+import { startMotionTracking, stopMotionTracking, isMotionTrackingActive } from '../../services/motionTracker'
+import { apiClient } from '../../api/client'
 import { formatMoney } from '../../utils/formatMoney'
 import { formatElapsed } from '../../utils/formatTime'
 import { haversineKm } from '../../utils/distance'
@@ -754,7 +755,19 @@ export function ActiveTaskScreen() {
         {progress?.canSubmit && (
           <TouchableOpacity
             style={s.submitBtn}
-            onPress={() => navigation.navigate('SubmitProof', { taskId })}
+            onPress={async () => {
+              // Send motion summary + final EnvDNA before navigating (fire-and-forget)
+              try {
+                const motionSummary = stopMotionTracking()
+                await apiClient.post(`/tasks/${taskId}/motion-summary`, motionSummary)
+                  .catch((err) => console.warn('[Motion] Upload failed:', err?.message))
+                const finalEnvDNA = await captureEnvDNA()
+                await apiClient.post(`/tasks/${taskId}/environment`, {
+                  captureType: 'WORKER_SUBMIT', ...finalEnvDNA,
+                }).catch((err) => console.warn('[EnvDNA] Upload failed:', err?.message))
+              } catch { /* non-blocking — don't block submit flow */ }
+              navigation.navigate('SubmitProof', { taskId })
+            }}
             activeOpacity={0.85}
           >
             <CheckCircle size={20} color="#fff" />
