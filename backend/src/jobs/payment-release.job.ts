@@ -72,9 +72,10 @@ export function createPaymentReleaseWorker(): Worker {
         if (timeout === undefined) continue
         if (hoursSinceSubmit < timeout) continue
 
-        // SECURITY: don't auto-release MANUAL_REVIEW tasks with low AI scores
-        // These are likely fraudulent — escalate to admin/supervisor instead
-        if (task.finalDecision === 'MANUAL_REVIEW' && (task.aiScore === null || task.aiScore < 0.50)) {
+        // SECURITY: don't auto-release MANUAL_REVIEW tasks with low or fallback AI scores
+        // aiScore === 0.5 is the fallback score when AI fails — never auto-release on fallback
+        // These are likely fraudulent or unverified — escalate to admin/supervisor instead
+        if (task.finalDecision === 'MANUAL_REVIEW' && (task.aiScore === null || task.aiScore <= 0.50)) {
           logger.warn(
             { taskId: task.id, aiScore: task.aiScore, hoursSinceSubmit: Math.round(hoursSinceSubmit) },
             'MANUAL_REVIEW task with low AI score — skipping auto-release, needs admin review',

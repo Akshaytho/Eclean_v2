@@ -14,6 +14,7 @@ import { prisma } from '../../lib/prisma'
 import { logger } from '../../lib/logger'
 import { OpenAIProvider } from './openai.provider'
 import type { AIVerificationProvider, VerificationImage, VerificationMetadata, VerificationResult } from './verification.interface'
+import { checkPhotoSimilarity } from '../verification/photo-similarity'
 
 // ─── Provider Selection (swap here to change AI provider) ────────────────────
 
@@ -56,6 +57,39 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
     return reviewResult
   }
 
+  // ─── PRE-AI GATE 1: Motion Activity Check (₹0, instant) ─────────────────
+  // If worker sat still the entire time, skip AI call and save ₹1.5
+  const motionSummary = await prisma.taskMotionSummary.findUnique({ where: { taskId } })
+  if (motionSummary && motionSummary.durationSecs > 600) { // only gate if >10 min of data
+    if (motionSummary.cleaningPct < 0.05 && motionSummary.standingPct > 0.80) {
+      logger.warn({ taskId, cleaningPct: motionSummary.cleaningPct, standingPct: motionSummary.standingPct },
+        'Motion gate: worker was stationary >80% with <5% cleaning — skipping AI')
+      const motionReject: AiVerificationResult = {
+        score: 0.15, label: 'POOR',
+        reasoning: `Motion data shows ${Math.round(motionSummary.standingPct * 100)}% stationary, only ${Math.round(motionSummary.cleaningPct * 100)}% cleaning activity. Worker appears to have not performed physical work.`,
+        workEvident: false, suspiciousActivity: true, recommendation: 'REJECT',
+      }
+      await prisma.task.update({
+        where: { id: taskId },
+        data: { aiScore: motionReject.score, aiReasoning: motionReject.reasoning, aiModelVersion: 'motion-gate', finalDecision: 'MANUAL_REVIEW' },
+      })
+      return motionReject
+    }
+    if (motionSummary.vehiclePct > 0.50) {
+      logger.warn({ taskId, vehiclePct: motionSummary.vehiclePct }, 'Motion gate: worker was in vehicle >50% — skipping AI')
+      const vehicleReject: AiVerificationResult = {
+        score: 0.10, label: 'POOR',
+        reasoning: `Motion data shows ${Math.round(motionSummary.vehiclePct * 100)}% vehicle movement. Worker appears to have been driving, not cleaning.`,
+        workEvident: false, suspiciousActivity: true, recommendation: 'REJECT',
+      }
+      await prisma.task.update({
+        where: { id: taskId },
+        data: { aiScore: vehicleReject.score, aiReasoning: vehicleReject.reasoning, aiModelVersion: 'motion-gate', finalDecision: 'REJECT' },
+      })
+      return vehicleReject
+    }
+  }
+
   // Load task with all related data
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -63,11 +97,44 @@ export async function verifyTaskSubmission(taskId: string): Promise<AiVerificati
   })
   if (!task) throw new Error(`Task ${taskId} not found`)
 
+  // ─── PRE-AI GATE 2: Photo Similarity Check (₹0, ~50ms) ─────────────────
+  // If before/after photos are visually identical, worker didn't clean
+  if (task.referencePoints.length > 0 && task.workerSubmissions.length > 0) {
+    const pairs = task.referencePoints
+      .map((rp) => {
+        const sub = task.workerSubmissions.find(
+          (s) => s.referencePointId === rp.id && (s.mediaType === 'AFTER' || s.mediaType === 'VERIFICATION'),
+        )
+        return sub ? { beforeUrl: rp.buyerImageUrl, afterUrl: sub.imageUrl, pointIndex: rp.pointIndex } : null
+      })
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+
+    if (pairs.length > 0) {
+      const similarity = await checkPhotoSimilarity(pairs)
+      if (similarity.shouldReject) {
+        logger.warn({ taskId, avgSimilarity: similarity.avgSimilarity, suspiciousPairs: similarity.suspiciousPairs },
+          'Photo similarity gate: before/after images too similar — skipping AI')
+        const photoReject: AiVerificationResult = {
+          score: 0.10, label: 'POOR',
+          reasoning: `Before/after photos are ${similarity.avgSimilarity}% visually similar (${similarity.suspiciousPairs}/${similarity.totalPairs} pairs suspicious). Images appear nearly identical — no visible cleaning work detected.`,
+          workEvident: false, suspiciousActivity: true, recommendation: 'REJECT',
+        }
+        await prisma.task.update({
+          where: { id: taskId },
+          data: {
+            aiScore: photoReject.score, aiReasoning: photoReject.reasoning,
+            aiModelVersion: 'photo-similarity-gate', finalDecision: 'MANUAL_REVIEW',
+          },
+        })
+        return photoReject
+      }
+    }
+  }
+
   // Build images: send ALL pairs for maximum accuracy (₹5/task budget allows it)
   const images = buildImages(task)
 
   // Build metadata context
-  const motionSummary = await prisma.taskMotionSummary.findUnique({ where: { taskId } })
   const envCaptures = await prisma.workerEnvironmentCapture.findMany({ where: { taskId }, orderBy: { matchScore: 'desc' }, take: 1 })
   let zoneDirtyScore: number | null = null
   if (task.zoneId) {

@@ -50,7 +50,7 @@ export class OpenAIProvider implements AIVerificationProvider {
 
     const response = await this.client.chat.completions.create({
       model: MODEL,
-      max_completion_tokens: 1024,  // newer models use this instead of max_tokens
+      max_completion_tokens: 4096,  // GPT-5 reasoning uses ~1000 tokens internally; 1024 left 0 for output
       messages: [{
         role: 'user',
         content: [

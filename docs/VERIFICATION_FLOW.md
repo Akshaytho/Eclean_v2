@@ -263,6 +263,89 @@ Worker opens Find Work screen
 
 ---
 
+## PHASE 2.5: PRE-VERIFICATION FILTERS (before spending money on AI)
+
+> Added: April 4, 2026 — these filters run BEFORE the AI call to save ₹1.5
+> on obvious fakes. Both are backend-only, no mobile changes needed.
+
+### Filter 1: Motion Activity Gate (₹0, instant)
+
+```
+[Check TaskMotionSummary — already sent by mobile on submit]
+    |
+    +-- durationSecs > 600 (10+ min of data)?
+    |     |
+    |     YES: Check activity breakdown
+    |     |
+    |     +-- cleaningPct < 5% AND standingPct > 80%?
+    |     |     → REJECT: "Worker was stationary, no cleaning detected"
+    |     |     → Skip rule engine + AI (save ₹1.5)
+    |     |     → finalDecision = MANUAL_REVIEW
+    |     |
+    |     +-- vehiclePct > 50%?
+    |     |     → REJECT: "Worker was driving, not cleaning"
+    |     |     → Skip AI → finalDecision = REJECT
+    |     |
+    |     +-- Otherwise: PASS → continue to next filter
+    |
+    +-- NO (< 10 min data or no data): PASS → continue
+         (don't penalize short tasks or missing sensor data)
+```
+
+**Why 10 min minimum?** Short tasks (< 10 min) have too few motion windows
+for reliable classification. Budget phone accelerometers are noisy — we need
+enough samples to be confident.
+
+**Why not hard-reject on no motion data?** Some budget phones fail to deliver
+accelerometer events (expo-sensors known issue on Redmi Go / Samsung A03).
+Penalizing missing data punishes honest workers with cheap phones.
+
+### Filter 2: Photo Similarity Gate (₹0, ~50ms)
+
+```
+[Download before/after images from Cloudinary at 64px grayscale]
+    |
+    +-- Compute perceptual hash (pHash) for each image
+    |     - 8x8 grayscale → mean threshold → 64-bit hash
+    |     - NOT SHA-256 (that catches exact duplicates, already in rule engine)
+    |     - pHash catches VISUAL similarity — same scene, slightly different angle
+    |
+    +-- Hamming distance between before/after hashes per pair
+    |     - Distance < 10 = images are >85% visually identical
+    |
+    +-- Majority of pairs suspicious (≥ 50%)?
+          |
+          YES → REJECT: "Before/after photos are X% identical"
+          |     Skip AI (save ₹1.5)
+          |     finalDecision = MANUAL_REVIEW
+          |
+          NO → PASS → continue to rule engine + AI
+```
+
+**What this catches:** Worker goes to spot, takes "before" photo, sits for
+30 minutes doing nothing, takes "after" photo. Photos are nearly identical
+because nothing was cleaned. Caught deterministically for ₹0.
+
+**What this does NOT catch (AI still needed):**
+- Worker takes completely different photos (table vs floor) — caught by AI
+- Worker wets the floor (looks different but no real cleaning) — caught by AI
+- Worker takes photos from very different angles — pHash won't match anyway
+
+### Cost Savings
+
+```
+Before:  Every submission → AI call → ₹1.5
+After:   Submission → Motion gate (₹0) → Photo hash (₹0) → only legit ones hit AI
+
+Fake "sat and did nothing" submissions: ₹0 (caught by motion + photo hash)
+Fake "random unrelated photos" submissions: ₹1.5 (need AI to detect)
+Real submissions: ₹1.5 (AI confirms quality)
+
+At 50% fake submission rate: AI costs cut in half
+```
+
+---
+
 ## PHASE 3: VERIFICATION (System — Automatic)
 
 ### Flow
@@ -276,6 +359,11 @@ Worker taps "Submit Work"
     |-- Sets status: IN_PROGRESS → SUBMITTED
     |-- Records submittedAt, timeSpentSecs
     |-- Stops background GPS tracking
+    |
+    +---> [PRE-AI FILTERS — Synchronous, ~100ms]
+    |         |-- Motion gate: stationary check (see Phase 2.5)
+    |         |-- Photo similarity: pHash comparison (see Phase 2.5)
+    |         |-- If either rejects → skip rule engine + AI
     |
     +---> [RULE ENGINE — Synchronous, ~5ms]
     |         |
@@ -632,9 +720,10 @@ gpsGaps:            0 (continuous tracking)
 |                                  | AI: photos don't match category   |
 |                                  | Decision: REJECT                  |
 +----------------------------------+------------------------------------+
-| At location, didn't clean,       | AI: no visible improvement         |
-| took before/after of same dirt   | Motion: 0% cleaning (bonus only)  |
-|                                  | Decision: MANUAL_REVIEW           |
+| At location, didn't clean,       | Photo Hash: >85% identical → REJECT|
+| took before/after of same dirt   | Motion Gate: >80% sitting → REJECT|
+|                                  | AI: no visible improvement (backup)|
+|                                  | Decision: REJECT (₹0 AI cost)    |
 +----------------------------------+------------------------------------+
 | Cleaned, but at wrong spot       | GPS proximity: low scores          |
 | (cleaned home, claimed road)     | AI: indoor vs outdoor mismatch    |
