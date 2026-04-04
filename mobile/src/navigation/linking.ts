@@ -19,6 +19,18 @@ export const linking: LinkingOptions<any> = {
           ForgotPassword: 'reset-password',
         },
       },
+      WorkerStack: {
+        screens: {
+          ActiveTask: 'task/:taskId',
+          TaskDetail: 'task-detail/:taskId',
+        },
+      },
+      BuyerStack: {
+        screens: {
+          BuyerTaskDetail: 'buyer-task/:taskId',
+          LiveTrack: 'live/:taskId',
+        },
+      },
     },
   },
 }

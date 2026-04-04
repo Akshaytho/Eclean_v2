@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
@@ -29,6 +30,7 @@ import type { FastifyInstance } from 'fastify'
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
+    genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
     logger: env.NODE_ENV === 'test'
       ? false
       : env.NODE_ENV !== 'production'
@@ -39,6 +41,11 @@ export async function buildApp(): Promise<FastifyInstance> {
             },
           }
         : true,
+  })
+
+  // Return the request ID in every response so clients can reference it
+  app.addHook('onSend', async (request, reply) => {
+    void reply.header('x-request-id', request.id)
   })
 
   // ── Plugins ──────────────────────────────────────────────────────────────────

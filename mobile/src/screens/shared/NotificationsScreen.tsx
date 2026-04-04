@@ -95,9 +95,18 @@ export function NotificationsScreen() {
                   if (!n.isRead) markOneMutation.mutate(n.id)
                   // Navigate to relevant screen based on notification data and user role
                   const taskId = n.data?.taskId as string | undefined
-                  if (taskId) {
-                    const screen = role === 'WORKER' ? 'ActiveTask' : 'BuyerTaskDetail'
-                    try { (navigation as any).navigate(screen, { taskId }) } catch {}
+                  try {
+                    if (role === 'WORKER' && taskId) {
+                      (navigation as any).navigate('ActiveTask', { taskId })
+                    } else if (role === 'BUYER' && taskId) {
+                      (navigation as any).navigate('BuyerTaskDetail', { taskId })
+                    } else if (role === 'SUPERVISOR') {
+                      (navigation as any).navigate('SupervisorHome')
+                    } else if (role === 'CITIZEN') {
+                      (navigation as any).navigate('CitizenHome')
+                    }
+                  } catch (err) {
+                    console.warn('[Notifications] nav failed', err)
                   }
                 }}
                 activeOpacity={0.8}
