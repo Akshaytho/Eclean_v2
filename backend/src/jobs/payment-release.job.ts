@@ -221,6 +221,22 @@ export function createPaymentReleaseWorker(): Worker {
         }
       }
 
+      // Check for stuck PROCESSING payouts (Razorpay webhook never fired)
+      const stuckPayouts = await prisma.payout.findMany({
+        where: {
+          status: 'PROCESSING',
+          createdAt: { lt: new Date(now - 24 * 3600000) }, // older than 24 hours
+        },
+        select: { id: true, taskId: true, workerId: true },
+      })
+      for (const payout of stuckPayouts) {
+        await prisma.payout.update({
+          where: { id: payout.id },
+          data: { status: 'FAILED' },
+        }).catch((err) => logger.error({ payoutId: payout.id, err }, 'Failed to mark stuck payout as FAILED'))
+        logger.warn({ payoutId: payout.id, taskId: payout.taskId }, 'Payout stuck in PROCESSING >24h — marked FAILED for admin review')
+      }
+
       if (disputedTasks.length > 0) {
         logger.info({ disputesResolved: disputedTasks.length }, 'Dispute auto-resolution complete')
       }

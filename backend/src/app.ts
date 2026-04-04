@@ -23,6 +23,8 @@ import { dataExportRoutes } from './intelligence/data-export/export.routes'
 import { referencePointRoutes } from './modules/reference-points/reference-points.routes'
 import { environmentRoutes } from './modules/environment/environment.routes'
 import { citizenVerifyRoutes } from './modules/citizen-verify/citizen-verify.routes'
+import { aiVerifyQueue } from './jobs/ai-verify.job'
+import { paymentReleaseQueue } from './jobs/payment-release.job'
 import type { FastifyInstance } from 'fastify'
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -90,11 +92,18 @@ export async function buildApp(): Promise<FastifyInstance> {
   void app.register(analyticsRoutes,     { prefix: '/api/v1/analytics' }) // analytics + behavior events
   void app.register(dataExportRoutes,    { prefix: '/api/v1/data' })      // B2B data export (API key auth)
 
-  app.get('/health', async () => ({
-    status:    'ok',
-    timestamp: new Date().toISOString(),
-    env:       env.NODE_ENV,
-  }))
+  app.get('/health', async () => {
+    const [aiQueueCount, paymentQueueCount] = await Promise.all([
+      aiVerifyQueue.getWaitingCount(),
+      paymentReleaseQueue.getWaitingCount(),
+    ])
+    return {
+      status:    'ok',
+      timestamp: new Date().toISOString(),
+      env:       env.NODE_ENV,
+      queues: { ai_verify: aiQueueCount, payment_release: paymentQueueCount },
+    }
+  })
 
 
   return app

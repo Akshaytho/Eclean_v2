@@ -31,6 +31,8 @@ import { useSocketStore }  from './src/stores/socketStore'
 import { getTokens }       from './src/stores/authStore'
 import { authApi }         from './src/api/auth.api'
 import { ToastContainer }  from './src/components/ui/Toast'
+import { OfflineBanner }   from './src/components/ui/OfflineBanner'
+import { usePushNotifications } from './src/hooks/usePushNotifications'
 import { linking }         from './src/navigation/linking'
 
 // Keep splash visible until bootstrap completes
@@ -103,6 +105,7 @@ export default function App() {
   const { setUser, setLoading, logout } = useAuthStore()
   const { connect } = useSocketStore()
   const [appReady, setAppReady] = useState(false)
+  usePushNotifications()
 
   useEffect(() => {
     async function bootstrap() {
@@ -150,6 +153,7 @@ export default function App() {
           <NavigationContainer ref={navigationRef} linking={linking}>
             <StatusBar style="auto" />
             <RootNavigator />
+            <OfflineBanner />
             <ToastContainer />
           </NavigationContainer>
         </PersistQueryClientProvider>

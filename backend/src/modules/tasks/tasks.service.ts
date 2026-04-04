@@ -248,6 +248,7 @@ export async function cancelTaskAsBuyer(
         const fresh = await tx.task.findUnique({ where: { id: taskId } })
         if (!fresh) throw new NotFoundError('Task not found')
         if (fresh.status === 'CANCELLED') throw new ConflictError('Task is already cancelled')
+        if (fresh.status === 'APPROVED') throw new ConflictError('Task has already been approved and payment released')
         assertTransition(fresh.status, 'CANCELLED', 'BUYER')
 
         const updated = await tx.task.update({

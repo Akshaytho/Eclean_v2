@@ -56,8 +56,8 @@ export function createAiVerifyWorker(): Worker {
         await prisma.task.update({
           where: { id: taskId },
           data:  { aiScore: null, aiReasoning: null },
-        }).catch(() => {
-          // Ignore DB error here — task update is best-effort
+        }).catch((err) => {
+          logger.error({ taskId, err }, 'Failed to clear AI scores after verification failure')
         })
 
         const task = await prisma.task.findUnique({ where: { id: taskId } }).catch(() => null)

@@ -269,6 +269,7 @@ model Task {
   @@index([buyerId, status])       // buyer task list queries
   @@index([workerId, status])      // worker my-tasks queries
   @@index([status, updatedAt])     // PERF: task expiry job queries ACCEPTED + updatedAt
+  @@index([status, finalDecision])  // payment-release job query optimization
 }
 
 model TaskMedia {

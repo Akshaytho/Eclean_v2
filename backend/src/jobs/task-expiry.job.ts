@@ -82,7 +82,7 @@ export function createTaskExpiryWorker(): Worker {
             await prisma.workerProfile.update({
               where: { userId: task.workerId },
               data: { activeTaskId: null },
-            }).catch(() => {})
+            }).catch((err) => { logger.warn({ err }, 'Task expiry cleanup failed') })
 
             // Notify worker (DB + push + socket)
             await notifyUser({
@@ -97,7 +97,7 @@ export function createTaskExpiryWorker(): Worker {
             await prisma.workerProfile.update({
               where: { userId: task.workerId },
               data: { trustScore: { decrement: 2 } },
-            }).catch(() => {})
+            }).catch((err) => { logger.warn({ err }, 'Task expiry cleanup failed') })
           }
 
           emitTaskUpdated(task.id, 'OPEN')
@@ -116,7 +116,7 @@ export function createTaskExpiryWorker(): Worker {
   taskExpiryQueue.add('check-expiry', {}, {
     repeat: { every: 30 * 60 * 1000 }, // 30 minutes
     jobId: 'task-expiry-repeatable',
-  }).catch(() => {})
+  }).catch((err) => { logger.warn({ err }, 'Task expiry cleanup failed') })
 
   return worker
 }

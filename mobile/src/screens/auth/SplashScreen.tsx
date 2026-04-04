@@ -29,13 +29,14 @@ export function SplashScreen({ navigation }: Props) {
 
   useEffect(() => {
     // Logo pop in
-    Animated.parallel([
+    const logoAnim = Animated.parallel([
       Animated.spring(logoScale, { toValue: 1, friction: 6, tension: 50, useNativeDriver: true }),
       Animated.timing(logoOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-    ]).start()
+    ])
+    logoAnim.start()
 
-    // Text slide up
-    setTimeout(() => {
+    // Text slide up (delayed)
+    const textTimer = setTimeout(() => {
       Animated.parallel([
         Animated.timing(textOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
         Animated.spring(textTranslate, { toValue: 0, friction: 8, useNativeDriver: true }),
@@ -43,12 +44,19 @@ export function SplashScreen({ navigation }: Props) {
     }, 300)
 
     // Shimmer pulse
-    Animated.loop(
+    const shimmerAnim = Animated.loop(
       Animated.sequence([
         Animated.timing(shimmerOpacity, { toValue: 1, duration: 1000, useNativeDriver: true }),
         Animated.timing(shimmerOpacity, { toValue: 0.3, duration: 1000, useNativeDriver: true }),
       ])
-    ).start()
+    )
+    shimmerAnim.start()
+
+    return () => {
+      clearTimeout(textTimer)
+      logoAnim.stop()
+      shimmerAnim.stop()
+    }
   }, [])
 
   useEffect(() => {

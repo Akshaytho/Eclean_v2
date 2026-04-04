@@ -81,6 +81,7 @@ export const CaptureCamera = React.memo(function CaptureCamera({
   const [preview,   setPreview]  = useState<{ uri: string; metadata: CaptureMetadata } | null>(null)
   const [saved,     setSaved]    = useState(false)
   const cameraRef = useRef<CameraView>(null)
+  const isCapturingRef = useRef(false)
   const insets    = useSafeAreaInsets()
 
   // Release camera on unmount — prevents battery drain + resource leak on back button
@@ -94,7 +95,8 @@ export const CaptureCamera = React.memo(function CaptureCamera({
   const cfg       = TYPE_CONFIG[photoType]
 
   const onShutter = useCallback(async () => {
-    if (!cameraRef.current || capturing) return
+    if (!cameraRef.current || isCapturingRef.current) return
+    isCapturingRef.current = true
     setCapturing(true)
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
 
@@ -105,19 +107,8 @@ export const CaptureCamera = React.memo(function CaptureCamera({
       ])
       if (!photo) throw new Error('Camera failed')
 
-      // Hash actual file bytes for real tamper detection
-      let photoHash: string
-      try {
-        const fileBytes = await FileSystem.readAsStringAsync(photo.uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        })
-        photoHash = await Crypto.digestStringAsync(
-          Crypto.CryptoDigestAlgorithm.SHA256,
-          fileBytes,
-        )
-      } catch {
-        photoHash = `fallback-${Date.now()}-${photo.width}x${photo.height}`
-      }
+      // Use a quick fallback hash immediately — real SHA-256 is computed in onConfirm
+      const photoHash = `pending-${Date.now()}-${photo.width}x${photo.height}`
 
       const metadata: CaptureMetadata = {
         lat:       locResult?.coords.latitude  ?? null,
@@ -133,12 +124,29 @@ export const CaptureCamera = React.memo(function CaptureCamera({
     } catch (err: any) {
       setCapturing(false)
       Alert.alert('Capture failed', err?.message ?? 'Could not take photo.')
+    } finally {
+      isCapturingRef.current = false
     }
-  }, [capturing, taskId])
+  }, [taskId])
 
   const onConfirm = useCallback(async (uri: string, metadata: CaptureMetadata) => {
     setSaving(true)
     try {
+      // Compute real SHA-256 hash now (OK to block briefly — user expects confirm delay)
+      let realHash = metadata.photoHash
+      try {
+        const fileBytes = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        })
+        realHash = await Crypto.digestStringAsync(
+          Crypto.CryptoDigestAlgorithm.SHA256,
+          fileBytes,
+        )
+      } catch {
+        // Keep the pending hash as fallback
+      }
+      const finalMetadata = { ...metadata, photoHash: realHash }
+
       // Fast path: create gallery photo object without expensive compression + thumbnail
       // The upload API handles compression. Gallery save is deferred.
       const quickPhoto: GalleryPhoto = {
@@ -148,7 +156,7 @@ export const CaptureCamera = React.memo(function CaptureCamera({
         fullUri: uri,
         thumbUri: uri, // Use original as thumb temporarily
         uploadedUri: null,
-        metadata,
+        metadata: finalMetadata,
         capturedAt: new Date().toISOString(),
         uploaded: false,
       }
@@ -163,7 +171,7 @@ export const CaptureCamera = React.memo(function CaptureCamera({
       onCapture({ photo: quickPhoto, uploaded: false })
 
       // Deferred: save to gallery in background (non-blocking)
-      saveToGallery(uri, taskId, photoType, metadata).catch(() => {})
+      saveToGallery(uri, taskId, photoType, finalMetadata).catch(() => {})
     } catch (err: any) {
       setSaving(false)
       Alert.alert('Save failed', err?.message ?? 'Could not save photo.')

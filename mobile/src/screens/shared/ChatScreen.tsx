@@ -131,6 +131,7 @@ export function ChatScreen() {
         removeClippedSubviews={true}
         windowSize={10}
         maxToRenderPerBatch={15}
+        getItemLayout={(_, index) => ({ length: 60, offset: 60 * index, index })}
         ListEmptyComponent={
           <View style={s.empty}>
             <Text style={s.emptyText}>No messages yet</Text>
