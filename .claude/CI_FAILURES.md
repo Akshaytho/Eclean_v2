@@ -450,3 +450,10 @@ home screen content.
 - **Commit:** `f149b31`
 - **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23796705777
 - **Status:** Unresolved
+
+## ❌ FAILURE: 2026-04-04 06:13 UTC
+- **Workflow:** Build Debug APK
+- **Branch:** image_capture_workflow
+- **Commit:** `abc0452`
+- **Run:** https://github.com/Akshaytho/Eclean_v2/actions/runs/23972909722
+- **Status:** Unresolved
