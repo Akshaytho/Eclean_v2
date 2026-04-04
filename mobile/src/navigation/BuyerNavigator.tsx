@@ -47,6 +47,7 @@ function BuyerTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        freezeOnBlur: true, // PERF: prevent off-screen tabs from re-rendering
         tabBarActiveTintColor:   B.tab.active,
         tabBarInactiveTintColor: B.tab.inactive,
         tabBarStyle: {
@@ -75,14 +76,14 @@ function BuyerTabs() {
 
 export function BuyerNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
       <Stack.Screen name="BuyerTabs"        component={BuyerTabs} />
-      <Stack.Screen name="BuyerTaskDetail"  component={BuyerTaskDetailScreen} />
-      <Stack.Screen name="LiveTrack"        component={LiveTrackScreen} />
-      <Stack.Screen name="Rating"           component={RatingScreen} />
-      <Stack.Screen name="Chat"             component={ChatScreen} />
-      <Stack.Screen name="Gallery"          component={withSuspense(GalleryScreen)} />
-      <Stack.Screen name="Notifications"   component={withSuspense(NotificationsScreen)} options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="BuyerTaskDetail"  component={BuyerTaskDetailScreen}  options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="LiveTrack"        component={LiveTrackScreen}        options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="Rating"           component={RatingScreen}           options={{ animation: 'fade_from_bottom' }} />
+      <Stack.Screen name="Chat"             component={ChatScreen}             options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="Gallery"          component={withSuspense(GalleryScreen)}        options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="Notifications"    component={withSuspense(NotificationsScreen)}  options={{ animation: 'slide_from_right' }} />
     </Stack.Navigator>
   )
 }

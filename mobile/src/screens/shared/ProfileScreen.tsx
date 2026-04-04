@@ -39,7 +39,7 @@ export function ProfileScreen() {
   const { disconnect }     = useSocketStore()
   const [loggingOut, setLoggingOut] = useState(false)
 
-  const { data: profile, isLoading } = useQuery({
+  const { data: profile, isLoading, isError, refetch } = useQuery({
     queryKey:  ['me'],
     queryFn:   authApi.me,
     staleTime: 60_000,
@@ -133,7 +133,7 @@ export function ProfileScreen() {
         </View>
 
         {/* Worker rating bar */}
-        {role === 'WORKER' && !isLoading && wp && wp.rating > 0 && (
+        {role === 'WORKER' && !isLoading && wp?.rating != null && wp.rating > 0 && (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Performance</Text>
             <View style={s.card}>
@@ -172,7 +172,7 @@ export function ProfileScreen() {
 function buildStats(role: string, wp: any, bp: any, profile: any) {
   if (role === 'WORKER') return [
     { label: 'Completed',  value: String(wp?.completedTasks ?? 0), icon: <CheckCircle size={18} color="#2E8B57" />, color: '#2E8B57' },
-    { label: 'Rating',     value: wp?.rating > 0 ? `${wp.rating.toFixed(1)}★` : '—', icon: <Star size={18} color="#F59E0B" />, color: '#F59E0B' },
+    { label: 'Rating',     value: wp?.rating != null && wp.rating > 0 ? `${wp.rating.toFixed(1)}★` : '—', icon: <Star size={18} color="#F59E0B" />, color: '#F59E0B' },
   ]
   if (role === 'BUYER') return [
     { label: 'Tasks Posted', value: String(bp?.totalTasksPosted ?? 0), icon: <ClipboardList size={18} color="#F43F5E" />, color: '#F43F5E' },

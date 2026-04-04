@@ -14,5 +14,15 @@ export const taskIdParamSchema = z.object({
   taskId: z.string().min(1),
 })
 
+// SECURITY: validate device-captured metadata fields (prevents garbage coordinates, overlong strings)
+export const deviceMetaSchema = z.object({
+  capturedLat: z.number().min(-90).max(90).nullable(),
+  capturedLng: z.number().min(-180).max(180).nullable(),
+  capturedAt:  z.string().max(50).nullable(),      // ISO timestamp
+  deviceId:    z.string().max(100).nullable(),
+  photoHash:   z.string().max(128).nullable(),      // SHA-256 hex = 64 chars
+})
+export type DeviceMeta = z.infer<typeof deviceMetaSchema>
+
 export type UploadMediaField = z.infer<typeof uploadMediaFieldSchema>
 export type MediaTaskIdParam = z.infer<typeof taskIdParamSchema>

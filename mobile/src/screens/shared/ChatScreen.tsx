@@ -16,8 +16,9 @@ import { apiClient }       from '../../api/client'
 export function ChatScreen() {
   const navigation = useNavigation()
   const route      = useRoute()
-  const params     = route.params as { taskId: string; title: string }
-  const { taskId, title } = params
+  const params     = (route.params ?? {}) as { taskId?: string; title?: string }
+  const taskId = params.taskId ?? ''
+  const title  = params.title ?? 'Chat'
 
   const { user }                          = useAuthStore()
   const { socket, emit, joinTask, leaveTask } = useSocketStore()
@@ -69,19 +70,22 @@ export function ChatScreen() {
   const sendingRef = useRef(false)
   const send = () => {
     const content = text.trim()
-    if (!content || sendingRef.current) return
+    if (!content || !taskId || sendingRef.current) return
     sendingRef.current = true
+    setText('')
 
     if (socket?.connected) {
       emit('chat:send', { taskId, content })
+      // Reset after server-side rate limit window (1 msg/sec)
+      setTimeout(() => { sendingRef.current = false }, 1_000)
     } else {
-      apiClient.post(`/worker/tasks/${taskId}/chat`, { content }).catch(() => {
+      const route = user?.role === 'BUYER'
+        ? `/buyer/tasks/${taskId}/chat`
+        : `/worker/tasks/${taskId}/chat`
+      apiClient.post(route, { content }).catch(() => {
         Alert.alert('Message Not Sent', 'No connection. Please try again when online.')
-      })
+      }).finally(() => { sendingRef.current = false })
     }
-
-    setText('')
-    setTimeout(() => { sendingRef.current = false }, 500)
   }
 
   const isMe = (msg: ChatMessage) => msg.from?.id === user?.id

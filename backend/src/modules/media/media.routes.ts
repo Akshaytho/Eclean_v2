@@ -9,6 +9,7 @@ import { emitTaskPhotoAdded } from '../../realtime/socket'
 import {
   uploadMediaFieldSchema,
   taskIdParamSchema,
+  deviceMetaSchema,
   TASK_MEDIA_TYPES,
   MAX_FILE_SIZE_BYTES,
 } from './media.schema'
@@ -69,6 +70,13 @@ export async function mediaRoutes(fastify: FastifyInstance): Promise<void> {
 
       if (!fileBuffer) throw new BadRequestError('No file provided')
       if (!mediaType)  throw new BadRequestError('mediaType field is required')
+
+      // SECURITY: validate device metadata with Zod (bounds-check coordinates, cap string lengths)
+      const metaParsed = deviceMetaSchema.safeParse({ capturedLat, capturedLng, capturedAt, deviceId, photoHash })
+      if (!metaParsed.success) {
+        throw new BadRequestError('Invalid device metadata: ' + metaParsed.error.issues[0]?.message)
+      }
+      ;({ capturedLat, capturedLng, capturedAt, deviceId, photoHash } = metaParsed.data)
 
       // Idempotency: if client sends same key twice, return existing record
       const idempotencyKey = request.headers['idempotency-key'] as string | undefined

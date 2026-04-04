@@ -226,6 +226,12 @@ async function handlePayoutProcessed(body: Record<string, unknown>): Promise<voi
     return
   }
 
+  // SECURITY: idempotency guard — skip if already processed (prevents double-payout on webhook replay)
+  if (payout.status === 'COMPLETED') {
+    logger.info({ payoutId: payout.id, razorpayPayoutId }, 'payout.processed: already COMPLETED — skipping (idempotent)')
+    return
+  }
+
   await prisma.payout.update({
     where: { id: payout.id },
     data:  { status: 'COMPLETED', paidAt: new Date() },
@@ -264,6 +270,12 @@ async function handlePayoutFailed(body: Record<string, unknown>): Promise<void> 
 
   if (!payout) {
     logger.warn({ razorpayPayoutId }, 'payout.failed: payout not found in DB')
+    return
+  }
+
+  // SECURITY: idempotency guard — skip if already terminal state
+  if (payout.status === 'COMPLETED' || payout.status === 'FAILED') {
+    logger.info({ payoutId: payout.id, razorpayPayoutId, status: payout.status }, 'payout.failed: already terminal — skipping (idempotent)')
     return
   }
 

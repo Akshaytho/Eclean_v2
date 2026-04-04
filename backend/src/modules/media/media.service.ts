@@ -1,6 +1,20 @@
 import { Readable } from 'stream'
 import crypto from 'crypto'
 
+// SECURITY: validate image magic bytes without external deps (zero overhead, no npm install)
+// JPEG: FF D8 FF | PNG: 89 50 4E 47 | WEBP: 52 49 46 46 ...57 45 42 50
+function isValidImageMagicBytes(buf: Buffer): boolean {
+  if (buf.length < 12) return false
+  // JPEG
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return true
+  // PNG
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return true
+  // WEBP (RIFF....WEBP)
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return true
+  return false
+}
+
 // PERF: limit concurrent uploads to prevent OOM crashes
 // 10 concurrent 10MB uploads = 100MB RAM; without limit, 50+ = 500MB = OOM kill on Railway
 const MAX_CONCURRENT_UPLOADS = 10
@@ -71,9 +85,14 @@ export async function uploadTaskMedia(params: {
 async function _uploadTaskMediaImpl(params: Parameters<typeof uploadTaskMedia>[0]) {
   const { userId, userRole, taskId, mediaType, file, mimeType, sizeBytes, idempotencyKey, deviceMeta } = params
 
-  // Validate file type
+  // Validate file type — check client-reported MIME
   if (!(ALLOWED_MIME_TYPES as readonly string[]).includes(mimeType)) {
     throw new BadRequestError('Only JPEG, PNG, and WEBP images are allowed')
+  }
+
+  // SECURITY: validate actual file content via magic bytes (client can spoof MIME type)
+  if (!isValidImageMagicBytes(file)) {
+    throw new BadRequestError('File content does not match a valid image format (JPEG, PNG, or WEBP)')
   }
 
   // Validate file size
@@ -113,8 +132,11 @@ async function _uploadTaskMediaImpl(params: Parameters<typeof uploadTaskMedia>[0
         { taskId, mediaType, clientHash: deviceMeta.photoHash, serverHash },
         'Photo hash mismatch — client-claimed hash does not match uploaded file',
       )
-      // Flag but don't block — the mismatch is logged for fraud investigation
-      // A hard block would break legitimate cases where compression changes the hash
+      // SECURITY: reject when enforcement is enabled (feature flag)
+      // Deploy with flag off, update mobile to hash post-compression, then enable
+      if (process.env.ENFORCE_PHOTO_HASH === 'true') {
+        throw new BadRequestError('Photo integrity check failed — the uploaded file does not match the captured photo')
+      }
     }
   }
 

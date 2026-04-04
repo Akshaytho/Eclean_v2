@@ -33,7 +33,7 @@ export function CitizenHomeScreen() {
   const navigation = useNavigation<any>()
   const insets     = useSafeAreaInsets()
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['citizen-reports'],
     queryFn:  citizenApi.listReports,
     staleTime: 30_000,
@@ -61,7 +61,7 @@ export function CitizenHomeScreen() {
             <View style={s.metaItem}>
               <MapPin size={12} color={COLORS.neutral[400]} />
               <Text style={s.metaText} numberOfLines={1}>
-                {item.locationAddress ?? `${item.locationLat?.toFixed(4)}, ${item.locationLng?.toFixed(4)}`}
+                {item.locationAddress ?? (item.locationLat != null && item.locationLng != null ? `${item.locationLat.toFixed(4)}, ${item.locationLng.toFixed(4)}` : 'No location')}
               </Text>
             </View>
             <View style={s.metaItem}>
@@ -93,6 +93,15 @@ export function CitizenHomeScreen() {
 
       {isLoading ? (
         <View style={s.center}><ActivityIndicator color={COLORS.brand.primary} size="large" /></View>
+      ) : isError ? (
+        <View style={s.center}>
+          <Text style={{ fontSize: 15, color: COLORS.neutral[500], textAlign: 'center', marginBottom: 12 }}>
+            Could not load reports
+          </Text>
+          <TouchableOpacity onPress={() => refetch()} style={{ backgroundColor: COLORS.brand.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 }}>
+            <Text style={{ color: '#fff', fontWeight: '600' }}>Retry</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
           data={reports}

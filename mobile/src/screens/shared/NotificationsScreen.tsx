@@ -57,7 +57,7 @@ export function NotificationsScreen() {
         </TouchableOpacity>
         <Text style={s.title}>Notifications</Text>
         {unread > 0 && (
-          <TouchableOpacity onPress={() => markAllMutation.mutate()} style={s.markAllBtn}>
+          <TouchableOpacity onPress={() => markAllMutation.mutate()} disabled={markAllMutation.isPending} style={[s.markAllBtn, markAllMutation.isPending && { opacity: 0.5 }]}>
             <CheckCheck size={16} color={COLORS.brand.primary} />
             <Text style={s.markAllText}>Mark all read</Text>
           </TouchableOpacity>

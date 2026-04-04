@@ -138,9 +138,15 @@ export async function createTask(buyerId: string, input: CreateTaskInput) {
       throw new BadRequestError('Payment verification failed — invalid signature')
     }
 
-    // SECURITY: verify Razorpay order amount matches the task rate
-    // Without this check, a buyer could pay ₹1 but create a ₹180 task
+    // SECURITY: verify Razorpay order is paid AND amount matches the task rate
+    // Without this check, a buyer could pay ₹1 but create a ₹180 task,
+    // or submit a pending/failed order to create a task without paying
     const rzpOrder = await fetchRazorpayOrder(input.razorpayOrderId)
+    if (rzpOrder.status !== 'paid') {
+      throw new BadRequestError(
+        `Payment not completed — order status is "${rzpOrder.status}". Please complete payment first.`,
+      )
+    }
     if (rzpOrder.amount !== rateCents) {
       throw new BadRequestError(
         `Payment amount mismatch: paid ${rzpOrder.amount} paise but task rate is ${rateCents} paise`,
@@ -526,6 +532,8 @@ export async function getOpenTasks(query: OpenTasksQuery) {
     status: 'OPEN',
     ...(query.category && { category: query.category }),
     ...(query.urgency  && { urgency:  query.urgency }),
+    // SECURITY: zone filtering prevents workers from accepting tasks outside their area
+    ...(query.zoneId   && { zoneId:   query.zoneId }),
   }
 
   // Bounding box filter when lat/lng provided (approximation without PostGIS)

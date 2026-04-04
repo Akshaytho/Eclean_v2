@@ -1,4 +1,5 @@
 import { Readable } from 'stream'
+import crypto from 'crypto'
 import type { UploadApiResponse } from 'cloudinary'
 import { prisma } from '../../lib/prisma'
 import { cloudinary, assertCloudinaryConfigured } from '../../lib/cloudinary'
@@ -210,15 +211,27 @@ function pickVerificationPoints(
   }
 
   // Fallback: random pick 2, preferring non-first/non-last points
+  // SECURITY: use crypto.randomInt() for unpredictable shuffling (Fisher-Yates)
   const middle = points.filter((p) => p.pointIndex !== 1 && p.pointIndex !== points.length)
   if (middle.length >= 2) {
-    const shuffled = middle.sort(() => Math.random() - 0.5)
+    const shuffled = cryptoShuffle(middle)
     return [{ id: shuffled[0].id }, { id: shuffled[1].id }]
   }
 
   // Final fallback: random 2 from all
-  const shuffled = [...points].sort(() => Math.random() - 0.5)
+  const shuffled = cryptoShuffle([...points])
   return [{ id: shuffled[0].id }, { id: shuffled[1].id }]
+}
+
+// ─── Crypto-secure Fisher-Yates shuffle ──────────────────────────────────────
+// SECURITY: Math.random() is predictable — use crypto.randomInt() so workers
+// cannot guess which reference points will be selected for verification.
+function cryptoShuffle<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
 }
 
 // ─── Haversine (meters) ──────────────────────────────────────────────────────

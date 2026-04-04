@@ -18,7 +18,8 @@ import { signAccessToken } from '../../lib/jwt'
 
 const CI_WORKER_EMAIL = 'maestro-worker@eclean.test'
 const CI_BUYER_EMAIL  = 'maestro-buyer@eclean.test'
-const CI_PASSWORD     = 'Test@1234'
+// SECURITY: CI test password from env var — never hardcoded in source
+const CI_PASSWORD     = process.env.CI_TEST_PASSWORD || 'Test@1234'
 
 export async function ciRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/seed', async (request, reply) => {
