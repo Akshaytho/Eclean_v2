@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F172A"
+      "backgroundColor": "#2E8B57"
     },
     "ios": {
       "supportsTablet": false,
@@ -26,7 +26,7 @@
     },
     "android": {
       "package": "com.eclean.app",
-      "versionCode": 1,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A2463"
@@ -86,7 +86,10 @@
         {
           "organization": "eclean",
           "project": "eclean-mobile",
-          "url": "https://sentry.io/"
+          "url": "https://sentry.io/",
+          "release": {
+            "dist": "auto"
+          }
         }
       ],
       [

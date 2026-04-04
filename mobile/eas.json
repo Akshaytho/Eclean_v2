@@ -15,6 +15,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "env": {
+        "SENTRY_AUTH_TOKEN": ""
+      },
       "android": {
         "buildType": "app-bundle"
       },
