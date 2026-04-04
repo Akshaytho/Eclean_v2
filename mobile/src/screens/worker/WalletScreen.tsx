@@ -115,6 +115,11 @@ export function WalletScreen() {
           windowSize={5}
           maxToRenderPerBatch={5}
           removeClippedSubviews={true}
+          getItemLayout={(_data, index) => ({
+            length: 72,
+            offset: (72 + 10) * index,
+            index,
+          })}
           ItemSeparatorComponent={ItemSeparator}
           ListEmptyComponent={
             <View style={styles.empty}>

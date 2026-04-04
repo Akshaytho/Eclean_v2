@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity,
   FlatList, ActivityIndicator,
@@ -79,6 +79,17 @@ export function MyTasksScreen() {
   const tasks = data?.tasks ?? []
   const hasMore = tasks.length === 20 // if we got a full page, there might be more
 
+  const handleTaskPress = useCallback((item: Task) => {
+    if (item.status === 'ACCEPTED' || item.status === 'IN_PROGRESS')
+      navigation.navigate('ActiveTask', { taskId: item.id })
+    else
+      navigation.navigate('TaskDetail', { taskId: item.id })
+  }, [navigation])
+
+  const handleContinue = useCallback((taskId: string) => {
+    navigation.navigate('ActiveTask', { taskId })
+  }, [navigation])
+
   return (
     <View style={styles.container}>
       {/* ── Header ── */}
@@ -111,7 +122,7 @@ export function MyTasksScreen() {
           refreshing={isFetching}
           onEndReached={() => { if (hasMore && !isFetching) setPage(p => p + 1) }}
           onEndReachedThreshold={0.5}
-          windowSize={10}
+          windowSize={5}
           maxToRenderPerBatch={10}
           removeClippedSubviews={true}
           ItemSeparatorComponent={ItemSeparator}
@@ -128,15 +139,10 @@ export function MyTasksScreen() {
           renderItem={({ item }) => (
             <TaskRow
               task={item}
-              onPress={() => {
-                if (item.status === 'ACCEPTED' || item.status === 'IN_PROGRESS')
-                  navigation.navigate('ActiveTask', { taskId: item.id })
-                else
-                  navigation.navigate('TaskDetail', { taskId: item.id })
-              }}
+              onPress={() => handleTaskPress(item)}
               onContinue={
                 (item.status === 'ACCEPTED' || item.status === 'IN_PROGRESS')
-                  ? () => navigation.navigate('ActiveTask', { taskId: item.id })
+                  ? () => handleContinue(item.id)
                   : undefined
               }
             />

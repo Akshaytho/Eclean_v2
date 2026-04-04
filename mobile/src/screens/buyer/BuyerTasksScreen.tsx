@@ -87,7 +87,7 @@ export function BuyerTasksScreen() {
           <FlatList
             data={tasks}
             keyExtractor={t => t.id}
-            windowSize={10}
+            windowSize={5}
             maxToRenderPerBatch={10}
             removeClippedSubviews={true}
             contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 80 }}

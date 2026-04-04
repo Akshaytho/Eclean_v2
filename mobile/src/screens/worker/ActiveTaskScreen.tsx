@@ -76,6 +76,7 @@ export function ActiveTaskScreen() {
   const mapRef       = useRef<MapView>(null)
   const isStarting   = useRef(false)
   const isCancelling = useRef(false)
+  const isUploadingRef = useRef(false)
 
   const [gpsRetrying, setGpsRetrying]   = useState(false)
   const gpsRetryCount                    = useRef(0)
@@ -306,19 +307,22 @@ export function ActiveTaskScreen() {
   }, [])
 
   const onCapture = useCallback(async (result: CaptureResult) => {
-    setCameraState(s => ({ ...s, visible: false }))
     const pointId = activePointRef.current
-    if (!pointId) return
+    if (!pointId) { setCameraState(s => ({ ...s, visible: false })); return }
     const meta = result.photo.metadata ? {
       lat: result.photo.metadata.lat, lng: result.photo.metadata.lng,
       timestamp: result.photo.metadata.timestamp, deviceId: result.photo.metadata.deviceId,
       photoHash: result.photo.metadata.photoHash,
     } : undefined
+    isUploadingRef.current = true
     try {
       await referencePointsApi.submitPoint(taskId, pointId, 'AFTER', result.photo.fullUri, meta)
     } catch {
       Alert.alert('Upload Failed', 'Photo upload failed. Check your connection and try again.')
+    } finally {
+      isUploadingRef.current = false
     }
+    setCameraState(s => ({ ...s, visible: false }))
     qc.invalidateQueries({ queryKey: ['submission-progress', taskId] })
   }, [taskId, qc])
 
@@ -789,7 +793,7 @@ export function ActiveTaskScreen() {
       </ScrollView>
 
       {/* Camera modal */}
-      <Modal visible={cameraState.visible} animationType="slide" statusBarTranslucent>
+      <Modal visible={cameraState.visible} animationType="slide" statusBarTranslucent onRequestClose={() => { if (!isUploadingRef.current) setCameraState(cs => ({ ...cs, visible: false })) }}>
         <CaptureCamera
           taskId={taskId}
           photoType="AFTER"

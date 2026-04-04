@@ -11,7 +11,7 @@
  * - Motion tracking explained honestly, not disguised as a "tip"
  */
 
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, Switch,
@@ -84,11 +84,11 @@ export function WorkerHomeScreen() {
   const inAccount = wallet?.paidOutCents ?? wallet?.availableCents ?? 0
   const comingSoon = (wallet?.pendingCents ?? 0) + (wallet?.processingCents ?? 0)
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(() => {
     meQuery.refetch()
     activeQuery.refetch()
     walletQuery.refetch()
-  }
+  }, [meQuery, activeQuery, walletQuery])
 
   // TODO: Online/Offline toggle is local-only. Needs backend PATCH /worker/availability
   // endpoint to sync with server. Until then, this is cosmetic only.

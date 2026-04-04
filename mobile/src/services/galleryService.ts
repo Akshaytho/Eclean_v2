@@ -18,6 +18,7 @@
  * - Thumbnails: ~5-15KB each — a 100-photo grid loads in <1 second
  * - Full res: ~200-400KB (after compression) — loaded only when needed
  * - FlatList with getItemLayout for instant scroll
+ * - Saves queued one-at-a-time to prevent OOM on budget phones
  */
 
 import * as FileSystem from 'expo-file-system/legacy'
@@ -26,6 +27,11 @@ import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 const GALLERY_DIR = `${FileSystem.documentDirectory}eclean_gallery/`
 const THUMB_SIZE  = 200   // px — thumbnail dimensions for gallery grid
 const MAX_FULL_PX = 1200  // px — max dimension for full-res upload
+const MIN_FREE_BYTES = 50 * 1024 * 1024  // 50 MB — skip gallery save if disk is lower
+
+// ── Concurrency limiter — process gallery saves one at a time ──────────────
+// Prevents 10 parallel manipulateAsync calls from OOM-ing a 3GB phone.
+let saveQueue: Promise<GalleryPhoto | null> = Promise.resolve(null)
 
 export interface GalleryPhoto {
   id:           string        // unique — timestamp + random
@@ -68,13 +74,51 @@ function photoId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 }
 
-// ── Save a photo into the gallery ─────────────────────────────────────────────
-export async function saveToGallery(
+// ── Save a photo into the gallery (queued — one at a time) ────────────────────
+// Public entry: chains onto saveQueue so only one manipulateAsync runs at a time.
+export function saveToGallery(
+  sourceUri:  string,
+  taskId:     string | null,
+  photoType:  GalleryPhoto['photoType'],
+  metadata:   GalleryPhoto['metadata'],
+): Promise<GalleryPhoto | null> {
+  const result = saveQueue
+    .then(() => _saveToGalleryImpl(sourceUri, taskId, photoType, metadata))
+    .catch(() => null)
+  saveQueue = result
+  return result
+}
+
+async function _saveToGalleryImpl(
   sourceUri:  string,
   taskId:     string | null,
   photoType:  GalleryPhoto['photoType'],
   metadata:   GalleryPhoto['metadata'],
 ): Promise<GalleryPhoto> {
+  // ── Disk space check — skip gallery save if storage is critically low ────
+  // Photo is already uploaded to Cloudinary, so skipping gallery save is safe.
+  try {
+    const dirInfo = await FileSystem.getInfoAsync(FileSystem.documentDirectory!)
+    if ((dirInfo as any).freeSpace != null && (dirInfo as any).freeSpace < MIN_FREE_BYTES) {
+      console.warn('[galleryService] Low disk space, skipping gallery save')
+      // Return a minimal photo object so callers don't break
+      const id = photoId()
+      return {
+        id,
+        taskId,
+        photoType,
+        fullUri: sourceUri,
+        thumbUri: sourceUri,
+        uploadedUri: null,
+        metadata,
+        capturedAt: new Date().toISOString(),
+        uploaded: false,
+      }
+    }
+  } catch {
+    // getInfoAsync may not provide freeSpace on all devices — continue with save
+  }
+
   const id        = photoId()
   const folder    = taskId ? `${GALLERY_DIR}${taskId}/` : `${GALLERY_DIR}general/`
   const fullDir   = `${folder}full/`

@@ -1,7 +1,7 @@
 // Onboarding — 4 swipeable slides that sell the eClean vision.
 // Designed to hook workers, buyers, and citizens — role-neutral.
 
-import React, { useRef, useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import {
   View, Text, FlatList, StyleSheet, Dimensions,
   TouchableOpacity, type ListRenderItem,
@@ -57,6 +57,11 @@ export function OnboardingScreen({ navigation }: Props) {
 
   const isLast = activeIndex === SLIDES.length - 1
 
+  const handleMomentumScrollEnd = useCallback((e: any) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / SW)
+    setActiveIndex(idx)
+  }, [])
+
   const renderItem: ListRenderItem<Slide> = ({ item }) => (
     <View style={[s.slide, { backgroundColor: item.bg }]}>
       {/* Glow circle behind icon */}
@@ -91,10 +96,7 @@ export function OnboardingScreen({ navigation }: Props) {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(e) => {
-          const idx = Math.round(e.nativeEvent.contentOffset.x / SW)
-          setActiveIndex(idx)
-        }}
+        onMomentumScrollEnd={handleMomentumScrollEnd}
       />
 
       {/* Footer */}

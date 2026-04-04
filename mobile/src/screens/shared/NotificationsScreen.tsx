@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useCallback } from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Bell, CheckCheck, ChevronRight } from 'lucide-react-native'
 import { useNavigation } from '@react-navigation/native'
 import { ScreenWrapper }       from '../../components/layout/ScreenWrapper'
@@ -9,14 +9,19 @@ import { notificationsApi }    from '../../api/notifications.api'
 import { useAuthStore }        from '../../stores/authStore'
 import { timeAgo }             from '../../utils/timeAgo'
 
+const PAGE_SIZE = 20
+
 export function NotificationsScreen() {
   const navigation = useNavigation()
   const qc = useQueryClient()
   const role = useAuthStore(s => s.user?.role)
 
-  const query = useQuery({
+  const query = useInfiniteQuery({
     queryKey: ['notifications'],
-    queryFn:  () => notificationsApi.list(1),
+    queryFn:  ({ pageParam = 1 }) => notificationsApi.list(pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.notifications.length >= PAGE_SIZE ? allPages.length + 1 : undefined,
     staleTime: 15_000,
   })
 
@@ -30,8 +35,18 @@ export function NotificationsScreen() {
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['notifications'] }),
   })
 
-  const notifications = query.data?.notifications ?? []
-  const unread        = query.data?.unreadCount ?? 0
+  const notifications = query.data?.pages.flatMap(p => p.notifications) ?? []
+  const unread        = query.data?.pages[0]?.unreadCount ?? 0
+
+  const handleEndReached = useCallback(() => {
+    if (query.hasNextPage && !query.isFetchingNextPage) {
+      query.fetchNextPage()
+    }
+  }, [query.hasNextPage, query.isFetchingNextPage, query.fetchNextPage])
+
+  const handleRefresh = useCallback(() => {
+    query.refetch()
+  }, [query.refetch])
 
   return (
     <ScreenWrapper>
@@ -55,13 +70,23 @@ export function NotificationsScreen() {
           <FlatList
             data={notifications}
             keyExtractor={n => n.id}
-            refreshControl={<RefreshControl refreshing={query.isFetching} onRefresh={query.refetch} tintColor={COLORS.brand.primary} />}
+            windowSize={5}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            onEndReached={handleEndReached}
+            onEndReachedThreshold={0.5}
+            refreshControl={<RefreshControl refreshing={query.isFetching && !query.isFetchingNextPage} onRefresh={handleRefresh} tintColor={COLORS.brand.primary} />}
             contentContainerStyle={{ paddingBottom: 80 }}
             ListEmptyComponent={
               <View style={s.empty}>
                 <Bell size={48} color={COLORS.neutral[300]} />
                 <Text style={s.emptyText}>No notifications yet</Text>
               </View>
+            }
+            ListFooterComponent={
+              query.isFetchingNextPage
+                ? <ActivityIndicator color={COLORS.brand.primary} style={{ paddingVertical: 16 }} />
+                : null
             }
             renderItem={({ item: n }) => (
               <TouchableOpacity
