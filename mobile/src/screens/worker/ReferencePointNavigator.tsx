@@ -125,6 +125,7 @@ export function ReferencePointNavigator() {
   }, [])
 
   const onCapture = useCallback(async (result: CaptureResult) => {
+    // Close camera IMMEDIATELY — don't block on upload (was causing 10s freeze)
     setCameraState(s => ({ ...s, visible: false }))
     const { pointId, isVerification } = activePointRef.current
     if (!pointId) return
@@ -137,17 +138,16 @@ export function ReferencePointNavigator() {
       photoHash: result.photo.metadata.photoHash,
     } : undefined
 
-    try {
-      // Upload once as AFTER — backend detects isVerificationPoint and creates
-      // both AFTER + VERIFICATION records from the single upload
-      await referencePointsApi.submitPoint(
-        taskId, pointId, 'AFTER', result.photo.fullUri, meta,
-      )
-    } catch {
-      Alert.alert('Upload Failed', 'Photo upload failed. Check your connection and try again.')
-    }
-
-    qc.invalidateQueries({ queryKey: ['submission-progress', taskId] })
+    // Upload in background — user returns to reference points list instantly
+    referencePointsApi.submitPoint(
+      taskId, pointId, 'AFTER', result.photo.fullUri, meta,
+    )
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ['submission-progress', taskId] })
+      })
+      .catch(() => {
+        Alert.alert('Upload Failed', 'Photo upload failed. Check your connection and try again.')
+      })
   }, [taskId, qc])
 
   if (isLoading || !progress) {

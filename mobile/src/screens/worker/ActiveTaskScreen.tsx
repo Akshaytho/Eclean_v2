@@ -314,16 +314,18 @@ export function ActiveTaskScreen() {
       timestamp: result.photo.metadata.timestamp, deviceId: result.photo.metadata.deviceId,
       photoHash: result.photo.metadata.photoHash,
     } : undefined
-    isUploadingRef.current = true
-    try {
-      await referencePointsApi.submitPoint(taskId, pointId, 'AFTER', result.photo.fullUri, meta)
-    } catch {
-      Alert.alert('Upload Failed', 'Photo upload failed. Check your connection and try again.')
-    } finally {
-      isUploadingRef.current = false
-    }
+
+    // Close camera IMMEDIATELY — don't block on upload
     setCameraState(s => ({ ...s, visible: false }))
-    qc.invalidateQueries({ queryKey: ['submission-progress', taskId] })
+
+    // Upload in background — user sees the reference points list while upload happens
+    referencePointsApi.submitPoint(taskId, pointId, 'AFTER', result.photo.fullUri, meta)
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ['submission-progress', taskId] })
+      })
+      .catch(() => {
+        Alert.alert('Upload Failed', 'Photo upload failed. Check your connection and try again.')
+      })
   }, [taskId, qc])
 
   // ── Loading ───────────────────────────────────────────────────────────────
