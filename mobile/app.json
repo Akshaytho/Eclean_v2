@@ -26,7 +26,7 @@
     },
     "android": {
       "package": "com.eclean.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A2463"
@@ -86,10 +86,7 @@
         {
           "organization": "eclean",
           "project": "eclean-mobile",
-          "url": "https://sentry.io/",
-          "release": {
-            "dist": "auto"
-          }
+          "url": "https://sentry.io/"
         }
       ],
       [
